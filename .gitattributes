@@ -1,0 +1,40 @@
+# Auto-detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Ensure all JS/TS/TSX files are treated as text
+*.js   text diff=javascript
+*.jsx  text diff=javascript
+*.ts   text diff=typescript
+*.tsx  text diff=typescript
+
+# CSS / SCSS / modules
+*.css  text diff=css
+*.scss text diff=css
+
+# JSON / config files
+*.json   text
+*.yml    text
+*.yaml   text
+*.md     text
+*.html   text
+
+# Binary files (no diff, keep as-is)
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.webp binary
+*.mp4  binary
+*.mp3  binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary
+*.eot  binary
+*.zip  binary
+
+# GitHub Linguist overrides (optional, but useful)
+# Ignore generated files from stats
+**/*.module.css.d.ts linguist-generated
+*.tsbuildinfo         linguist-generated
+dist/*                linguist-generated

@@ -1,0 +1,37 @@
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--sp-panel);
+  border-bottom: 1px solid var(--sp-grid);
+
+  .brand {
+    font-weight: bold;
+    font-size: 16px;
+    color: var(--sp-accent);
+    padding: 0 8px;
+  }
+
+  .button {
+    background: var(--sp-grid);
+    color: var(--sp-text);
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .active {
+    outline: 2px solid var(--sp-accent);
+  }
+
+  .spacer {
+    flex: 1;
+  }
+
+  .label {
+    opacity: 0.8;
+    font-size: 13px;
+  }
+}

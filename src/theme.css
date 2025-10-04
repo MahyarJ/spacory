@@ -1,0 +1,38 @@
+:root {
+  --sp-bg: #0f1115;
+  --sp-panel: #171923;
+  --sp-grid: #2b2f3a;
+  --sp-border: #2b2f3a;
+  --sp-text: #cbd5e1;
+  --sp-accent: #7aa2f7;
+  --sp-wall: #cbd5e1;
+  --sp-radius: 12px;
+  --sp-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* reset */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--sp-bg);
+  color: var(--sp-text);
+  font-family: var(--sp-font);
+}
+
+/* optional: light theme toggle via attribute */
+[data-sp-theme="light"] {
+  --sp-bg: #ffffff;
+  --sp-panel: #f6f7f9;
+  --sp-grid: #e5e7eb;
+  --sp-border: #e5e7eb;
+  --sp-text: #0f172a;
+  --sp-accent: #2563eb;
+  --sp-wall: #0f172a;
+}
