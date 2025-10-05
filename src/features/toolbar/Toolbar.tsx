@@ -10,27 +10,26 @@ export function Toolbar() {
   const undo = useApp((s) => s.undo);
   const redo = useApp((s) => s.redo);
 
+  const ToolbarButton = (props: {
+    tool: Parameters<typeof setTool>[0];
+    label: string;
+  }) => (
+    <button
+      className={clsx(styles.button, { [styles.active]: tool === props.tool })}
+      onClick={() => setTool(props.tool)}
+    >
+      {props.label}
+    </button>
+  );
+
   return (
     <div className={styles.toolbar}>
       <h1 className={styles.brand}>Spacory</h1>
-      <button
-        className={clsx(styles.button, { [styles.active]: tool === "wall" })}
-        onClick={() => setTool("wall")}
-      >
-        Wall
-      </button>
-      <button
-        className={clsx(styles.button, { [styles.active]: tool === "select" })}
-        onClick={() => setTool("select")}
-      >
-        Select
-      </button>
-      <button
-        className={clsx(styles.button, { [styles.active]: tool === "pan" })}
-        onClick={() => setTool("pan")}
-      >
-        Pan
-      </button>
+      <ToolbarButton tool="select" label="Select" />
+      <ToolbarButton tool="wall" label="Wall" />
+      <ToolbarButton tool="window" label="Window" />
+      <ToolbarButton tool="door" label="Door" />
+      <ToolbarButton tool="pan" label="Pan" />
       <div className={styles.spacer} />
       <button className={styles.button} onClick={undo}>
         Undo

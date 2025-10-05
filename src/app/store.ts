@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import { createInitialPlan, Plan, Wall } from "./schema";
+import { createInitialPlan, Plan, Wall, Item } from "./schema";
 
-export type Tool = "select" | "wall" | "pan";
+export type Tool = "select" | "wall" | "window" | "door" | "pan";
 
 interface ViewState {
   panX: number;
@@ -16,6 +16,7 @@ interface AppState {
   isPanning: boolean;
   setTool: (t: Tool) => void;
   addWall: (w: Wall) => void;
+  addItem: (i: Item) => void;
   updatePlan: (fn: (p: Plan) => void) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setIsPanning: (p: boolean) => void;
@@ -45,6 +46,15 @@ export const useApp = create<AppState>((set, get) => ({
     const next: Plan = {
       ...get().plan,
       walls: [...get().plan.walls, w],
+      meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+  },
+  addItem: (i) => {
+    const next: Plan = {
+      ...get().plan,
+      items: [...get().plan.items, i],
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);

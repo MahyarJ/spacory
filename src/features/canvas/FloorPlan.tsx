@@ -1,19 +1,30 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "@app/store";
-import type { Point, Wall } from "@app/schema";
+import type { Item, Point, Wall } from "@app/schema";
 import { snapToGrid, applyInverseViewTransform } from "@geometry/snap";
 import { WallsLayer } from "./WallsLayer";
 import { GridLayer } from "./GridLayer";
 
 import styles from "./FloorPlan.module.css";
+import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
+import { ItemsLayer } from "./ItemsLayer";
 
 function uid(prefix = "id") {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
 }
 
+type Opening = {
+  type: "window" | "door";
+  wallId: string;
+  startOffset: number;
+  currentOffset: number;
+  thickness: number;
+};
+
 export function FloorPlan() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const addWall = useApp((s) => s.addWall);
+  const addItem = useApp((s) => s.addItem);
   const plan = useApp((s) => s.plan);
   const tool = useApp((s) => s.tool);
   const view = useApp((s) => s.view);
@@ -21,12 +32,13 @@ export function FloorPlan() {
   const isPanning = useApp((s) => s.isPanning);
   const setIsPanning = useApp((s) => s.setIsPanning);
 
-  const [drawing, setDrawing] = useState<Point | null>(null);
+  const [drawingWall, setDrawingWall] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({
     w: 800,
     h: 600,
   });
+  const [opening, setOpening] = useState<Opening | null>(null);
 
   useEffect(() => {
     const resize = () => {
@@ -53,25 +65,61 @@ export function FloorPlan() {
   const onPointerDown: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
     (e.target as Element).setPointerCapture(e.pointerId);
+
     if (e.button === 2 || tool === "pan") {
       setIsPanning(true);
       return;
     }
+
+    const world = toWorld(e.clientX, e.clientY);
+
     if (tool === "wall") {
-      const world = toWorld(e.clientX, e.clientY);
       const snapped = snapToGrid(world, plan.meta.gridSize);
-      if (!drawing) {
-        setDrawing(snapped);
-      } else {
+      if (!drawingWall) setDrawingWall(snapped);
+      else {
         const w: Wall = {
           id: uid("wall"),
-          a: drawing,
+          a: drawingWall,
           b: snapped,
           thickness: 10,
         };
         addWall(w);
-        setDrawing(null);
+        setDrawingWall(null);
       }
+      return;
+    }
+
+    if (tool === "window" || tool === "door") {
+      const near = findNearestWall(world, plan.walls, 30); // 30 units tolerance
+      if (!near) return; // click ignored if not near any wall
+      const startOffset =
+        Math.round(near.offset / plan.meta.gridSize) * plan.meta.gridSize;
+      const thickness = 10; // default visual thickness (cm)
+      if (!opening) {
+        setOpening({
+          type: tool,
+          wallId: near.wall.id,
+          startOffset,
+          currentOffset: startOffset,
+          thickness,
+        });
+      } else {
+        // finalize
+        if (opening.wallId !== near.wall.id) return; // force same wall for now
+        const endOffset =
+          Math.round(near.offset / plan.meta.gridSize) * plan.meta.gridSize;
+        const offset = Math.min(opening.startOffset, endOffset);
+        const length = Math.max(5, Math.abs(endOffset - opening.startOffset)); // min 5cm width
+        const item: Item = {
+          id: uid(opening.type),
+          type: opening.type,
+          wallAttach: { wallId: opening.wallId, offset, length },
+          thickness: opening.thickness,
+        };
+        addItem(item);
+        setOpening(null);
+      }
+      return;
     }
   };
 
@@ -86,6 +134,15 @@ export function FloorPlan() {
         panX: v.panX + e.movementX,
         panY: v.panY + e.movementY,
       }));
+    }
+
+    // update preview for openings
+    if (opening && (tool === "window" || tool === "door")) {
+      const near = findNearestWall(world, plan.walls, 30);
+      if (!near || near.wall.id !== opening.wallId) return;
+      const next =
+        Math.round(near.offset / plan.meta.gridSize) * plan.meta.gridSize;
+      setOpening({ ...opening, currentOffset: next });
     }
   };
 
@@ -114,15 +171,39 @@ export function FloorPlan() {
 
   const viewTransform = `translate(${view.panX} ${view.panY}) scale(${view.scale})`;
 
-  const preview = (() => {
-    if (tool !== "wall" || !drawing || !cursor) return null;
+  const wallPreview = (() => {
+    if (tool !== "wall" || !drawingWall || !cursor) return null;
     const snapped = snapToGrid(cursor, plan.meta.gridSize);
     return (
       <line
-        x1={drawing.x}
-        y1={drawing.y}
+        x1={drawingWall.x}
+        y1={drawingWall.y}
         x2={snapped.x}
         y2={snapped.y}
+        stroke="var(--sp-accent)"
+        strokeDasharray="6 4"
+        strokeWidth={2}
+      />
+    );
+  })();
+
+  const openingPreview = (() => {
+    if (!opening) return null;
+    const wall = plan.walls.find((w) => w.id === opening.wallId);
+    if (!wall) return null;
+    const a = Math.min(opening.startOffset, opening.currentOffset);
+    const b = Math.max(opening.startOffset, opening.currentOffset);
+    const mid = (a + b) / 2;
+    const c = getPointOnWall(wall, mid);
+    const angle = getWallAngle(wall);
+    return (
+      <rect
+        x={c.x - (b - a) / 2}
+        y={c.y - opening.thickness / 2}
+        width={Math.max(2, b - a)}
+        height={opening.thickness}
+        transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
+        fill="none"
         stroke="var(--sp-accent)"
         strokeDasharray="6 4"
         strokeWidth={2}
@@ -144,7 +225,9 @@ export function FloorPlan() {
         <g transform={viewTransform}>
           <GridLayer width={size.w} height={size.h} />
           <WallsLayer />
-          {preview}
+          <ItemsLayer />
+          {wallPreview}
+          {openingPreview}
         </g>
       </svg>
       <div className={styles.badge}>
