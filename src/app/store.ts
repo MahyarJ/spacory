@@ -20,6 +20,8 @@ interface AppState {
   updatePlan: (fn: (p: Plan) => void) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setIsPanning: (p: boolean) => void;
+  currentWallThickness: number;
+  setCurrentWallThickness: (t: number) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -42,6 +44,8 @@ export const useApp = create<AppState>((set, get) => ({
   view: { panX: 0, panY: 0, scale: 1 },
   isPanning: false,
   setTool: (t) => set({ tool: t }),
+  currentWallThickness: 10, // cm default
+  setCurrentWallThickness: (t) => set({ currentWallThickness: Math.max(1, t) }),
   addWall: (w) => {
     const next: Plan = {
       ...get().plan,

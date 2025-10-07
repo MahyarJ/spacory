@@ -17,7 +17,7 @@ export function ItemsLayer() {
 
         const offsetA = item.wallAttach.offset;
         const length = item.wallAttach.length;
-        const thickness = item.thickness;
+        const thickness = wall.thickness;
 
         // Opening center (midpoint along wall)
         const centerOffset = offsetA + length / 2;
@@ -36,7 +36,16 @@ export function ItemsLayer() {
                 width={length}
                 height={thickness}
                 transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
-                fill="none"
+                fill="var(--sp-bg)"
+                stroke="var(--sp-wall)"
+                vectorEffect="non-scaling-stroke"
+              />
+              <line
+                x1={c.x - length / 2}
+                y1={c.y}
+                x2={c.x + length / 2}
+                y2={c.y}
+                transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
                 stroke="var(--sp-wall)"
                 vectorEffect="non-scaling-stroke"
               />
@@ -102,7 +111,7 @@ export function ItemsLayer() {
             <circle
               cx={hinge.x}
               cy={hinge.y}
-              r={1.5}
+              r={3}
               fill="var(--sp-wall)"
               vectorEffect="non-scaling-stroke"
             />

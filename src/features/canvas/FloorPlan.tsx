@@ -81,7 +81,7 @@ export function FloorPlan() {
           id: uid("wall"),
           a: drawingWall,
           b: snapped,
-          thickness: 10,
+          thickness: useApp.getState().currentWallThickness,
         };
         addWall(w);
         setDrawingWall(null);
@@ -94,14 +94,13 @@ export function FloorPlan() {
       if (!near) return; // click ignored if not near any wall
       const startOffset =
         Math.round(near.offset / plan.meta.gridSize) * plan.meta.gridSize;
-      const thickness = 10; // default visual thickness (cm)
       if (!opening) {
         setOpening({
           type: tool,
           wallId: near.wall.id,
           startOffset,
           currentOffset: startOffset,
-          thickness,
+          thickness: near.wall.thickness + 8, // +8cm for visual thickness
         });
       } else {
         // finalize

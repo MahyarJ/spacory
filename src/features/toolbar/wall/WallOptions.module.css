@@ -1,0 +1,29 @@
+.wallOptions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-right: 2px;
+}
+
+.presets {
+  display: flex;
+  gap: 6px;
+}
+
+.pill {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: none;
+  background: var(--sp-panel);
+  color: var(--sp-text);
+  cursor: pointer;
+}
+
+.active {
+  outline: 2px solid var(--sp-accent);
+}
