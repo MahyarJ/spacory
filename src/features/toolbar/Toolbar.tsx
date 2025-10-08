@@ -4,6 +4,7 @@ import clsx from "clsx";
 
 import styles from "./Toolbar.module.css";
 import { WallOptions } from "./wall/WallOptions";
+import { HintBar } from "./HintBar";
 
 export function Toolbar() {
   const tool = useApp((s) => s.tool);
@@ -48,6 +49,7 @@ export function Toolbar() {
           <WallOptions />
         </div>
       )}
+      <HintBar />
     </>
   );
 }

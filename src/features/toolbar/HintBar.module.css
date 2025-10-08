@@ -1,0 +1,21 @@
+.hintbar {
+  background: var(--sp-panel);
+  border-top: 1px solid var(--sp-bg);
+  font-size: 12px;
+  color: var(--sp-text);
+  opacity: 0.9;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  kbd {
+    background: var(--sp-accent);
+    border-radius: 4px;
+    color: var(--sp-panel);
+    padding: 1px 4px;
+    font-family: monospace;
+    font-size: 11px;
+    box-shadow: inset 0 -1px 0 var(--sp-border);
+  }
+}

@@ -8,6 +8,8 @@ import { GridLayer } from "./GridLayer";
 import styles from "./FloorPlan.module.css";
 import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
 import { ItemsLayer } from "./ItemsLayer";
+import { hitItem, hitWall } from "@geometry/hit";
+import { SelectionLayer } from "./SelectionLayer";
 
 function uid(prefix = "id") {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
@@ -31,6 +33,9 @@ export function FloorPlan() {
   const setView = useApp((s) => s.setView);
   const isPanning = useApp((s) => s.isPanning);
   const setIsPanning = useApp((s) => s.setIsPanning);
+  const selectWall = useApp((s) => s.selectWall);
+  const selectItem = useApp((s) => s.selectItem);
+  const selectNone = useApp((s) => s.selectNone);
 
   const [drawingWall, setDrawingWall] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -49,6 +54,22 @@ export function FloorPlan() {
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  useEffect(() => {
+    const del = useApp.getState().deleteSelected;
+    const nudge = useApp.getState().nudgeSelectedWallThickness;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Delete" || e.key === "Backspace") {
+        del();
+      } else if (e.key === "[") {
+        nudge(-1);
+      } else if (e.key === "]") {
+        nudge(+1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   const toWorld = (clientX: number, clientY: number) => {
@@ -72,6 +93,30 @@ export function FloorPlan() {
     }
 
     const world = toWorld(e.clientX, e.clientY);
+    const additive = e.shiftKey;
+
+    if (tool === "select") {
+      // test items first
+      const hitI = [...plan.items].findLast((i) => {
+        const w = plan.walls.find((w) => w.id === i.wallAttach.wallId);
+        return w ? hitItem(world, i, w, 6) : false;
+      });
+      if (hitI) {
+        selectItem(hitI.id, additive);
+        return;
+      }
+
+      // then walls
+      const hitW = [...plan.walls].findLast((w) => hitWall(world, w, 6));
+      if (hitW) {
+        selectWall(hitW.id, additive);
+        return;
+      }
+
+      // empty: clear if not additive
+      if (!additive) selectNone();
+      return;
+    }
 
     if (tool === "wall") {
       const snapped = snapToGrid(world, plan.meta.gridSize);
@@ -225,6 +270,7 @@ export function FloorPlan() {
           <GridLayer width={size.w} height={size.h} />
           <WallsLayer />
           <ItemsLayer />
+          <SelectionLayer />
           {wallPreview}
           {openingPreview}
         </g>

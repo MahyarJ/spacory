@@ -22,6 +22,13 @@ interface AppState {
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
   setCurrentWallThickness: (t: number) => void;
+  selectedWalls: Set<string>;
+  selectedItems: Set<string>;
+  selectNone: () => void;
+  selectWall: (id: string, additive?: boolean) => void;
+  selectItem: (id: string, additive?: boolean) => void;
+  deleteSelected: () => void;
+  nudgeSelectedWallThickness: (delta: number) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -46,6 +53,8 @@ export const useApp = create<AppState>((set, get) => ({
   setTool: (t) => set({ tool: t }),
   currentWallThickness: 10, // cm default
   setCurrentWallThickness: (t) => set({ currentWallThickness: Math.max(1, t) }),
+  selectedWalls: new Set(),
+  selectedItems: new Set(),
   addWall: (w) => {
     const next: Plan = {
       ...get().plan,
@@ -73,6 +82,59 @@ export const useApp = create<AppState>((set, get) => ({
   },
   setView: (fn) => set(({ view }) => ({ view: fn(view) })),
   setIsPanning: (p) => set({ isPanning: p }),
+  selectNone: () => set({ selectedWalls: new Set(), selectedItems: new Set() }),
+  selectWall: (id, additive) =>
+    set((s) => {
+      const ws = additive ? new Set(s.selectedWalls) : new Set<string>();
+      ws.add(id);
+      return {
+        selectedWalls: ws,
+        selectedItems: additive ? s.selectedItems : new Set(),
+      };
+    }),
+  selectItem: (id, additive) =>
+    set((s) => {
+      const is = additive ? new Set(s.selectedItems) : new Set<string>();
+      is.add(id);
+      return {
+        selectedItems: is,
+        selectedWalls: additive ? s.selectedWalls : new Set(),
+      };
+    }),
+  deleteSelected: () => {
+    const { selectedWalls, selectedItems, plan } = get();
+    if (selectedWalls.size === 0 && selectedItems.size === 0) return;
+    const next: Plan = {
+      ...plan,
+      walls: plan.walls.filter((w) => !selectedWalls.has(w.id)),
+      items: plan.items.filter((i) => !selectedItems.has(i.id)),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({
+      plan: history.present,
+      selectedWalls: new Set(),
+      selectedItems: new Set(),
+    });
+  },
+  nudgeSelectedWallThickness: (delta) => {
+    const { selectedWalls, plan } = get();
+    if (!selectedWalls.size) return;
+    const next: Plan = {
+      ...plan,
+      walls: plan.walls.map((w) =>
+        selectedWalls.has(w.id)
+          ? {
+              ...w,
+              thickness: Math.max(1, Math.round((w.thickness ?? 10) + delta)),
+            }
+          : w
+      ),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+  },
   undo: () => {
     if (!history.past.length) return;
     history.future.push(history.present);
