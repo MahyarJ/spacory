@@ -55,25 +55,28 @@ export function ItemsLayer() {
 
         // Default -> door
         // Hinge at the "end" edge midpoint (to switch hinge sides, swap dir sign)
+        const hingeEdge = item.props.hingeEdge === "start" ? -1 : +1;
         const hinge = {
-          x: c.x + dir.x * (length / 2),
-          y: c.y + dir.y * (length / 2),
+          x: c.x + hingeEdge * dir.x * (length / 2),
+          y: c.y + hingeEdge * dir.y * (length / 2),
         };
 
         // Closed leaf tip (along wall direction) (to switch hinge sides, swap dir sign also here)
         const tipClosed = {
-          x: hinge.x - dir.x * length,
-          y: hinge.y - dir.y * length,
+          x: hinge.x - hingeEdge * dir.x * length,
+          y: hinge.y - hingeEdge * dir.y * length,
         };
 
-        const side = -1; // +1 = +normal(inside), -1 = -normal(outside)
+        // side -> +1 = +normal(inside), -1 = -normal(outside)
+        const side = item.props.swingSide === "inside" ? +1 : -1;
         const tipOpen = {
           x: hinge.x + side * n.x * length,
           y: hinge.y + side * n.y * length,
         };
 
-        // sweepFlag depends on direction: use 1 for +n, 0 for -n (empirically correct in SVG's Y-down coords).
-        const sweepFlag = side > 0 ? 0 : 1;
+        // sweepFlag depends on direction and hinge side
+        const sweepFlag = hingeEdge * side > 0 ? 0 : 1;
+
         // SVG arc from closed tip to open tip around the hinge, 90° sweep
         // We want a 90° (small) arc, so largeArcFlag = 0.
         const arcPath = `M ${tipClosed.x} ${tipClosed.y} A ${length} ${length} 0 0 ${sweepFlag} ${tipOpen.x} ${tipOpen.y}`;

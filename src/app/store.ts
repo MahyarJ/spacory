@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { createInitialPlan, Plan, Wall, Item } from "./schema";
+import { createInitialPlan, Plan, Wall, Item, isDoor } from "./schema";
 
 export type Tool = "select" | "wall" | "window" | "door" | "pan";
 
@@ -29,6 +29,8 @@ interface AppState {
   selectItem: (id: string, additive?: boolean) => void;
   deleteSelected: () => void;
   nudgeSelectedWallThickness: (delta: number) => void;
+  toggleSelectedDoorHingeEdge: () => void;
+  toggleSelectedDoorSwingSide: () => void;
   undo: () => void;
   redo: () => void;
 }
@@ -135,6 +137,51 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     set({ plan: history.present });
   },
+  toggleSelectedDoorHingeEdge: () => {
+    const { plan, selectedItems } = get();
+    const next: Plan = {
+      ...plan,
+      items: plan.items.map((i) => {
+        if (isDoor(i) && selectedItems.has(i.id)) {
+          const cur = i.props ?? { hingeEdge: "start", swingSide: "outside" };
+          return {
+            ...i,
+            props: {
+              ...cur,
+              hingeEdge: cur.hingeEdge === "start" ? "end" : "start",
+            },
+          };
+        }
+        return i;
+      }),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+  },
+  toggleSelectedDoorSwingSide: () => {
+    const { plan, selectedItems } = get();
+    const next: Plan = {
+      ...plan,
+      items: plan.items.map((i) => {
+        if (isDoor(i) && selectedItems.has(i.id)) {
+          const cur = i.props ?? { hingeEdge: "start", swingSide: "outside" };
+          return {
+            ...i,
+            props: {
+              ...cur,
+              swingSide: cur.swingSide === "inside" ? "outside" : "inside",
+            },
+          };
+        }
+        return i;
+      }),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+  },
+
   undo: () => {
     if (!history.past.length) return;
     history.future.push(history.present);

@@ -12,8 +12,6 @@ export interface Wall {
   thickness: number;
 }
 
-export type ItemType = "window" | "door";
-
 export interface WallAttachment {
   wallId: string;
   /** absolute distance from wall.a in same units as coordinates (e.g., cm) */
@@ -22,16 +20,37 @@ export interface WallAttachment {
   length: number;
 }
 
-export interface Item {
+interface ItemBase {
   id: string;
-  type: ItemType;
   wallAttach: WallAttachment;
   /** visual thickness perpendicular to wall for drawing (e.g., 10cm) */
   thickness: number;
 }
 
+// ---- Item types ----
+export interface DoorProps {
+  hingeEdge: "start" | "end";
+  swingSide: "inside" | "outside";
+}
+
+export interface WindowProps {
+  // add later: mullions, sill depth, etc.
+}
+
+export interface DoorItem extends ItemBase {
+  type: "door";
+  props: DoorProps;
+}
+
+export interface WindowItem extends ItemBase {
+  type: "window";
+  props: WindowProps;
+}
+
+export type Item = DoorItem | WindowItem;
+
 export interface Plan {
-  version: "1.1.0";
+  version: "1.2.0";
   meta: {
     name: string;
     createdAt: string;
@@ -44,7 +63,7 @@ export interface Plan {
 }
 
 export const createInitialPlan = (): Plan => ({
-  version: "1.1.0",
+  version: "1.2.0",
   meta: {
     name: "Untitled",
     createdAt: new Date().toISOString(),
@@ -55,3 +74,10 @@ export const createInitialPlan = (): Plan => ({
   walls: [],
   items: [],
 });
+
+export const isDoor = (i: Item): i is DoorItem => i.type === "door";
+export const isWindow = (i: Item): i is WindowItem => i.type === "window";
+
+export function assertNever(x: never): never {
+  throw new Error(`Unhandled case: ${String(x)}`);
+}

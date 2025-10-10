@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "@app/store";
-import type { Item, Point, Wall } from "@app/schema";
+import { assertNever, type Point, type Wall } from "@app/schema";
 import { snapToGrid, applyInverseViewTransform } from "@geometry/snap";
 import { WallsLayer } from "./WallsLayer";
 import { GridLayer } from "./GridLayer";
@@ -59,13 +59,27 @@ export function FloorPlan() {
   useEffect(() => {
     const del = useApp.getState().deleteSelected;
     const nudge = useApp.getState().nudgeSelectedWallThickness;
+    const toggleHinge = useApp.getState().toggleSelectedDoorHingeEdge;
+    const toggleSwing = useApp.getState().toggleSelectedDoorSwingSide;
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") {
-        del();
-      } else if (e.key === "[") {
-        nudge(-1);
-      } else if (e.key === "]") {
-        nudge(+1);
+      switch (e.key.toLocaleLowerCase()) {
+        case "delete":
+        case "backspace":
+          del();
+          break;
+        case "[":
+          nudge(-1);
+          break;
+        case "]":
+          nudge(+1);
+          break;
+        case "h":
+          toggleHinge();
+          break;
+        case "s":
+          toggleSwing();
+          break;
       }
     };
     window.addEventListener("keydown", onKey);
@@ -154,13 +168,28 @@ export function FloorPlan() {
           Math.round(near.offset / plan.meta.gridSize) * plan.meta.gridSize;
         const offset = Math.min(opening.startOffset, endOffset);
         const length = Math.max(5, Math.abs(endOffset - opening.startOffset)); // min 5cm width
-        const item: Item = {
-          id: uid(opening.type),
-          type: opening.type,
-          wallAttach: { wallId: opening.wallId, offset, length },
-          thickness: opening.thickness,
-        };
-        addItem(item);
+        switch (opening.type) {
+          case "window":
+            addItem({
+              id: uid(opening.type),
+              type: opening.type,
+              wallAttach: { wallId: opening.wallId, offset, length },
+              thickness: opening.thickness,
+              props: {},
+            });
+            break;
+          case "door":
+            addItem({
+              id: uid(opening.type),
+              type: opening.type,
+              wallAttach: { wallId: opening.wallId, offset, length },
+              thickness: opening.thickness,
+              props: { hingeEdge: "start", swingSide: "outside" },
+            });
+            break;
+          default:
+            assertNever(opening as never); // TS forces to handle new kinds later
+        }
         setOpening(null);
       }
       return;
