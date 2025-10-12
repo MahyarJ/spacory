@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createInitialPlan, Plan, Wall, Item, isDoor } from "./schema";
+import { applyThemeAttr, initialTheme, THEME_KEY, ThemeMode } from "./theming";
 
 export type Tool = "select" | "wall" | "window" | "door" | "pan";
 
@@ -31,6 +32,8 @@ interface AppState {
   nudgeSelectedWallThickness: (delta: number) => void;
   toggleSelectedDoorHingeEdge: () => void;
   toggleSelectedDoorSwingSide: () => void;
+  themeMode: ThemeMode;
+  setThemeMode: (m: ThemeMode) => void;
   undo: () => void;
   redo: () => void;
 }
@@ -181,7 +184,12 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     set({ plan: history.present });
   },
-
+  themeMode: initialTheme,
+  setThemeMode: (m) => {
+    localStorage.setItem(THEME_KEY, m);
+    applyThemeAttr(m);
+    set({ themeMode: m });
+  },
   undo: () => {
     if (!history.past.length) return;
     history.future.push(history.present);

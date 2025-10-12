@@ -1,0 +1,23 @@
+.themeSwitch {
+  display: inline-flex;
+  gap: 4px;
+  padding: 2px;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-muted);
+  border-radius: 999px;
+}
+
+.btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--sp-text);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.active {
+  background: color-mix(in srgb, var(--sp-accent) 14%, transparent);
+  border: 1px solid var(--sp-accent);
+}

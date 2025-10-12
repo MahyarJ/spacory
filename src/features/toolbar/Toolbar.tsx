@@ -5,6 +5,7 @@ import clsx from "clsx";
 import styles from "./Toolbar.module.css";
 import { WallOptions } from "./wall/WallOptions";
 import { HintBar } from "./HintBar";
+import { ThemeSwitch } from "./ThemeSwitch";
 
 export function Toolbar() {
   const tool = useApp((s) => s.tool);
@@ -34,6 +35,7 @@ export function Toolbar() {
         <ToolbarButton tool="door" label="Door" />
         <ToolbarButton tool="pan" label="Pan" />
         <div className={styles.spacer} />
+        <ThemeSwitch />
         <button className={styles.button} onClick={undo}>
           Undo
         </button>
