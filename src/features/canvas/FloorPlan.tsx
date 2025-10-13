@@ -10,6 +10,7 @@ import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
 import { ItemsLayer } from "./ItemsLayer";
 import { hitItem, hitWall } from "@geometry/hit";
 import { SelectionLayer } from "./SelectionLayer";
+import { NodeCapsLayer } from "./NodeCapsLayer";
 
 function uid(prefix = "id") {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
@@ -298,6 +299,7 @@ export function FloorPlan() {
         <g transform={viewTransform}>
           <GridLayer width={size.w} height={size.h} />
           <WallsLayer />
+          <NodeCapsLayer />
           <ItemsLayer />
           <SelectionLayer />
           {wallPreview}
