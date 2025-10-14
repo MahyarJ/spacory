@@ -36,6 +36,8 @@ interface AppState {
   setThemeMode: (m: ThemeMode) => void;
   undo: () => void;
   redo: () => void;
+  marquee?: { x0: number; y0: number; x1: number; y1: number } | null;
+  setMarquee: (m: AppState["marquee"]) => void;
 }
 
 const history: { past: Plan[]; present: Plan; future: Plan[] } = {
@@ -204,4 +206,6 @@ export const useApp = create<AppState>((set, get) => ({
     history.present = next;
     set({ plan: history.present });
   },
+  marquee: null,
+  setMarquee: (m) => set({ marquee: m }),
 }));

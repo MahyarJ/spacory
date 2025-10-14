@@ -2,15 +2,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { useApp } from "@app/store";
 import { assertNever, type Point, type Wall } from "@app/schema";
 import { snapToGrid, applyInverseViewTransform } from "@geometry/snap";
+import { hitItem, hitWall } from "@geometry/hit";
+import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
+import { rectFrom, pointInRect, segmentIntersectsRect } from "@geometry/rect";
 import { WallsLayer } from "./WallsLayer";
 import { GridLayer } from "./GridLayer";
-
-import styles from "./FloorPlan.module.css";
-import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
 import { ItemsLayer } from "./ItemsLayer";
-import { hitItem, hitWall } from "@geometry/hit";
 import { SelectionLayer } from "./SelectionLayer";
 import { NodeCapsLayer } from "./NodeCapsLayer";
+import { MarqueeLayer } from "./MarqueeLayer";
+import styles from "./FloorPlan.module.css";
 
 function uid(prefix = "id") {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
@@ -37,6 +38,8 @@ export function FloorPlan() {
   const selectWall = useApp((s) => s.selectWall);
   const selectItem = useApp((s) => s.selectItem);
   const selectNone = useApp((s) => s.selectNone);
+  const marquee = useApp((s) => s.marquee);
+  const setMarquee = useApp((s) => s.setMarquee);
 
   const [drawingWall, setDrawingWall] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -128,6 +131,9 @@ export function FloorPlan() {
         return;
       }
 
+      // Start marquee if clicking on empty space
+      setMarquee({ x0: world.x, y0: world.y, x1: world.x, y1: world.y });
+
       // empty: clear if not additive
       if (!additive) selectNone();
       return;
@@ -201,7 +207,10 @@ export function FloorPlan() {
     if (!svgRef.current) return;
     const world = toWorld(e.clientX, e.clientY);
     setCursor(world);
-
+    if (marquee) {
+      setMarquee({ ...marquee, x1: world.x, y1: world.y });
+      return;
+    }
     if (isPanning) {
       setView((v) => ({
         ...v,
@@ -224,6 +233,30 @@ export function FloorPlan() {
     if (!svgRef.current) return;
     (e.target as Element).releasePointerCapture(e.pointerId);
     if (isPanning) setIsPanning(false);
+    if (marquee) {
+      const r = rectFrom(marquee.x0, marquee.y0, marquee.x1, marquee.y1);
+      // select items
+      for (const item of plan.items) {
+        const wall = plan.walls.find((w) => w.id === item.wallAttach.wallId);
+        if (!wall) continue;
+        const mid = item.wallAttach.offset + item.wallAttach.length / 2;
+        const cx =
+          wall.a.x +
+          (wall.b.x - wall.a.x) *
+            (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
+        const cy =
+          wall.a.y +
+          (wall.b.y - wall.a.y) *
+            (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
+        if (pointInRect({ x: cx, y: cy }, r)) selectItem(item.id, true);
+      }
+      // select walls
+      for (const wall of plan.walls) {
+        if (segmentIntersectsRect(wall.a, wall.b, r)) selectWall(wall.id, true);
+      }
+      setMarquee(null);
+      return;
+    }
   };
 
   const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
@@ -302,6 +335,7 @@ export function FloorPlan() {
           <NodeCapsLayer />
           <ItemsLayer />
           <SelectionLayer />
+          <MarqueeLayer />
           {wallPreview}
           {openingPreview}
         </g>
