@@ -48,6 +48,7 @@ export function FloorPlan() {
     h: 600,
   });
   const [opening, setOpening] = useState<Opening | null>(null);
+  const [dragging, setDragging] = useState<boolean>(false);
 
   useEffect(() => {
     const resize = () => {
@@ -68,6 +69,11 @@ export function FloorPlan() {
 
     const onKey = (e: KeyboardEvent) => {
       switch (e.key.toLocaleLowerCase()) {
+        case "escape":
+          setDrawingWall(null);
+          setOpening(null);
+          setDragging(false);
+          break;
         case "delete":
         case "backspace":
           del();
@@ -141,8 +147,7 @@ export function FloorPlan() {
 
     if (tool === "wall") {
       const snapped = snapToGrid(world, plan.meta.gridSize);
-      if (!drawingWall) setDrawingWall(snapped);
-      else {
+      if (drawingWall) {
         const w: Wall = {
           id: uid("wall"),
           a: drawingWall,
@@ -150,8 +155,9 @@ export function FloorPlan() {
           thickness: useApp.getState().currentWallThickness,
         };
         addWall(w);
-        setDrawingWall(null);
       }
+      // chain wall drawing
+      setDrawingWall(snapped);
       return;
     }
 
@@ -219,6 +225,11 @@ export function FloorPlan() {
       }));
     }
 
+    // start dragging wall
+    if (e.buttons === 1 && tool === "wall") {
+      setDragging(true);
+    }
+
     // update preview for openings
     if (opening && (tool === "window" || tool === "door")) {
       const near = findNearestWall(world, plan.walls, 30);
@@ -233,6 +244,19 @@ export function FloorPlan() {
     if (!svgRef.current) return;
     (e.target as Element).releasePointerCapture(e.pointerId);
     if (isPanning) setIsPanning(false);
+    if (dragging && drawingWall && tool === "wall") {
+      const world = toWorld(e.clientX, e.clientY);
+      const snapped = snapToGrid(world, plan.meta.gridSize);
+      const w: Wall = {
+        id: uid("wall"),
+        a: drawingWall,
+        b: snapped,
+        thickness: useApp.getState().currentWallThickness,
+      };
+      addWall(w);
+      setDrawingWall(null);
+      setDragging(false);
+    }
     if (marquee) {
       const r = rectFrom(marquee.x0, marquee.y0, marquee.x1, marquee.y1);
       // select items
