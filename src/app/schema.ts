@@ -69,7 +69,7 @@ export const createInitialPlan = (): Plan => ({
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     units: "cm",
-    gridSize: 25,
+    gridSize: 20,
   },
   walls: [],
   items: [],

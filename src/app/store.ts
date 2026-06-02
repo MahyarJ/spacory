@@ -38,6 +38,7 @@ interface AppState {
   redo: () => void;
   marquee?: { x0: number; y0: number; x1: number; y1: number } | null;
   setMarquee: (m: AppState["marquee"]) => void;
+  translateSelectedWalls: (dx: number, dy: number) => void;
 }
 
 const history: { past: Plan[]; present: Plan; future: Plan[] } = {
@@ -50,6 +51,14 @@ function commit(next: Plan) {
   history.past.push(history.present);
   history.present = next;
   history.future = [];
+}
+
+function translateWall(w: Wall, dx: number, dy: number): Wall {
+  return {
+    ...w,
+    a: { x: w.a.x + dx, y: w.a.y + dy },
+    b: { x: w.b.x + dx, y: w.b.y + dy },
+  };
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -208,4 +217,18 @@ export const useApp = create<AppState>((set, get) => ({
   },
   marquee: null,
   setMarquee: (m) => set({ marquee: m }),
+  translateSelectedWalls: (dx, dy) => {
+    const { plan, selectedWalls } = get();
+    if (selectedWalls.size === 0) return;
+    const next: Plan = {
+      ...plan,
+      walls: plan.walls.map((wall) => {
+        return selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall;
+      }),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+    // (later) also slide attached items with their wall if needed
+  },
 }));

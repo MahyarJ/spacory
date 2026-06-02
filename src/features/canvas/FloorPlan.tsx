@@ -12,6 +12,7 @@ import { SelectionLayer } from "./SelectionLayer";
 import { NodeCapsLayer } from "./NodeCapsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
 import styles from "./FloorPlan.module.css";
+import clsx from "clsx";
 
 function uid(prefix = "id") {
   return prefix + "_" + Math.random().toString(36).slice(2, 9);
@@ -35,6 +36,7 @@ export function FloorPlan() {
   const setView = useApp((s) => s.setView);
   const isPanning = useApp((s) => s.isPanning);
   const setIsPanning = useApp((s) => s.setIsPanning);
+  const selectedWalls = useApp((s) => s.selectedWalls);
   const selectWall = useApp((s) => s.selectWall);
   const selectItem = useApp((s) => s.selectItem);
   const selectNone = useApp((s) => s.selectNone);
@@ -49,6 +51,11 @@ export function FloorPlan() {
   });
   const [opening, setOpening] = useState<Opening | null>(null);
   const [dragging, setDragging] = useState<boolean>(false);
+  const [moving, setMoving] = useState<null | {
+    start: Point; // where drag began
+    last: Point; // last applied position
+    snap: boolean; // snap-to-grid on this drag
+  }>(null);
 
   useEffect(() => {
     const resize = () => {
@@ -67,12 +74,20 @@ export function FloorPlan() {
     const toggleHinge = useApp.getState().toggleSelectedDoorHingeEdge;
     const toggleSwing = useApp.getState().toggleSelectedDoorSwingSide;
 
+    const nudgeWalls = useApp.getState().translateSelectedWalls;
+    const grid = useApp.getState().plan.meta.gridSize;
+
     const onKey = (e: KeyboardEvent) => {
+      const base = e.shiftKey ? 10 : 1;
+      const step = e.altKey ? 1 : grid; // Alt = raw 1 unit, else snap to grid
+      let dx = 0;
+      let dy = 0;
       switch (e.key.toLocaleLowerCase()) {
         case "escape":
           setDrawingWall(null);
           setOpening(null);
           setDragging(false);
+          setMoving(null);
           break;
         case "delete":
         case "backspace":
@@ -90,7 +105,21 @@ export function FloorPlan() {
         case "s":
           toggleSwing();
           break;
+        case "arrowup":
+          dy = -base * step;
+          break;
+        case "arrowdown":
+          dy = base * step;
+          break;
+        case "arrowleft":
+          dx = -base * step;
+          break;
+        case "arrowright":
+          dx = base * step;
+          break;
       }
+      e.preventDefault();
+      nudgeWalls(dx, dy);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -103,7 +132,7 @@ export function FloorPlan() {
       svgRef.current!,
       view.panX,
       view.panY,
-      view.scale
+      view.scale,
     );
   };
 
@@ -133,7 +162,12 @@ export function FloorPlan() {
       // then walls
       const hitW = [...plan.walls].findLast((w) => hitWall(world, w, 6));
       if (hitW) {
-        selectWall(hitW.id, additive);
+        setMoving({
+          start: world,
+          last: world,
+          snap: !e.altKey,
+        });
+        if (!selectedWalls.has(hitW.id)) selectWall(hitW.id, additive);
         return;
       }
 
@@ -230,6 +264,40 @@ export function FloorPlan() {
       setDragging(true);
     }
 
+    // start moving wall
+    if (e.buttons === 1 && tool === "select" && moving) {
+      const world = toWorld(e.clientX, e.clientY);
+      const dx = world.x - moving.last.x;
+      const dy = world.y - moving.last.y;
+
+      if (dx !== 0 || dy !== 0) {
+        let tdx = dx,
+          tdy = dy;
+
+        if (moving.snap) {
+          const grid = plan.meta.gridSize || 25;
+          // accumulate drag in world, then snap delta in grid quanta
+          // We snap relative to start to prevent drift
+          const totalDx = world.x - moving.start.x;
+          const totalDy = world.y - moving.start.y;
+          const snappedDx = Math.round(totalDx / grid) * grid;
+          const snappedDy = Math.round(totalDy / grid) * grid;
+          tdx = snappedDx - (moving.last.x - moving.start.x);
+          tdy = snappedDy - (moving.last.y - moving.start.y);
+        }
+
+        useApp.getState().translateSelectedWalls(tdx, tdy);
+        setMoving({
+          ...moving,
+          last: {
+            x: moving.last.x + tdx,
+            y: moving.last.y + tdy,
+          },
+        });
+      }
+      return;
+    }
+
     // update preview for openings
     if (opening && (tool === "window" || tool === "door")) {
       const near = findNearestWall(world, plan.walls, 30);
@@ -279,6 +347,10 @@ export function FloorPlan() {
         if (segmentIntersectsRect(wall.a, wall.b, r)) selectWall(wall.id, true);
       }
       setMarquee(null);
+      return;
+    }
+    if (moving) {
+      setMoving(null);
       return;
     }
   };
@@ -345,7 +417,11 @@ export function FloorPlan() {
   return (
     <>
       <svg
-        className={styles.floorplan}
+        className={clsx(
+          styles.floorplan,
+          moving && styles.moving,
+          tool === "select" && !moving && styles.select,
+        )}
         ref={svgRef}
         onContextMenu={(e) => e.preventDefault()}
         onPointerDown={onPointerDown}
