@@ -38,6 +38,8 @@ interface AppState {
   redo: () => void;
   marquee?: { x0: number; y0: number; x1: number; y1: number } | null;
   setMarquee: (m: AppState["marquee"]) => void;
+  /** Replace the whole plan (e.g. on import); resets undo history and selection. */
+  loadPlan: (p: Plan) => void;
   translateSelectedWalls: (dx: number, dy: number) => void;
   /** Move selected walls without writing to history (live drag preview). */
   translateSelectedWallsLive: (dx: number, dy: number) => void;
@@ -221,6 +223,18 @@ export const useApp = create<AppState>((set, get) => ({
   },
   marquee: null,
   setMarquee: (m) => set({ marquee: m }),
+  loadPlan: (p) => {
+    // Loading a document starts a fresh undo timeline.
+    history.past = [];
+    history.present = p;
+    history.future = [];
+    set({
+      plan: history.present,
+      selectedWalls: new Set(),
+      selectedItems: new Set(),
+      marquee: null,
+    });
+  },
   translateSelectedWalls: (dx, dy) => {
     const { plan, selectedWalls } = get();
     if (selectedWalls.size === 0) return;

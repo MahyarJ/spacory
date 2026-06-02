@@ -6,6 +6,7 @@ import styles from "./Toolbar.module.css";
 import { WallOptions } from "./wall/WallOptions";
 import { HintBar } from "./HintBar";
 import { ThemeSwitch } from "./ThemeSwitch";
+import { ProjectActions } from "./ProjectActions";
 
 export function Toolbar() {
   const tool = useApp((s) => s.tool);
@@ -35,6 +36,7 @@ export function Toolbar() {
         <ToolbarButton tool="door" label="Door" />
         <ToolbarButton tool="pan" label="Pan" />
         <div className={styles.spacer} />
+        <ProjectActions />
         <ThemeSwitch />
         <button className={styles.button} onClick={undo}>
           Undo
