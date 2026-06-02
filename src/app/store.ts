@@ -39,6 +39,10 @@ interface AppState {
   marquee?: { x0: number; y0: number; x1: number; y1: number } | null;
   setMarquee: (m: AppState["marquee"]) => void;
   translateSelectedWalls: (dx: number, dy: number) => void;
+  /** Move selected walls without writing to history (live drag preview). */
+  translateSelectedWallsLive: (dx: number, dy: number) => void;
+  /** Push the current plan onto the undo stack as a single history entry. */
+  commitPlan: () => void;
 }
 
 const history: { past: Plan[]; present: Plan; future: Plan[] } = {
@@ -230,5 +234,25 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     set({ plan: history.present });
     // (later) also slide attached items with their wall if needed
+  },
+  translateSelectedWallsLive: (dx, dy) => {
+    const { plan, selectedWalls } = get();
+    if (selectedWalls.size === 0) return;
+    set({
+      plan: {
+        ...plan,
+        walls: plan.walls.map((wall) =>
+          selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall
+        ),
+      },
+    });
+  },
+  commitPlan: () => {
+    const next: Plan = {
+      ...get().plan,
+      meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
   },
 }));

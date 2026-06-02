@@ -26,7 +26,8 @@ body,
   font-family: var(--sp-font);
 }
 
-/* optional: light theme toggle via attribute */
+/* Light palette, applied by explicit choice. (:root above is the dark /
+   default palette; "System" mode is handled by the media query below.) */
 [data-sp-theme="light"] {
   --sp-bg: #ffffff;
   --sp-panel: #f6f7f9;
@@ -35,4 +36,16 @@ body,
   --sp-text: #0f172a;
   --sp-accent: #2563eb;
   --sp-wall: #0f172a;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-sp-theme="system"] {
+    --sp-bg: #ffffff;
+    --sp-panel: #f6f7f9;
+    --sp-grid: #e5e7eb;
+    --sp-border: #e5e7eb;
+    --sp-text: #0f172a;
+    --sp-accent: #2563eb;
+    --sp-wall: #0f172a;
+  }
 }

@@ -75,14 +75,24 @@ export function FloorPlan() {
     const toggleSwing = useApp.getState().toggleSelectedDoorSwingSide;
 
     const nudgeWalls = useApp.getState().translateSelectedWalls;
-    const grid = useApp.getState().plan.meta.gridSize;
 
     const onKey = (e: KeyboardEvent) => {
+      // Don't hijack keys while typing into a form field.
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+
+      // Read grid size lazily so it stays current if the plan changes.
+      const grid = useApp.getState().plan.meta.gridSize;
       const base = e.shiftKey ? 10 : 1;
       const step = e.altKey ? 1 : grid; // Alt = raw 1 unit, else snap to grid
-      let dx = 0;
-      let dy = 0;
-      switch (e.key.toLocaleLowerCase()) {
+
+      switch (e.key.toLowerCase()) {
         case "escape":
           setDrawingWall(null);
           setOpening(null);
@@ -106,20 +116,21 @@ export function FloorPlan() {
           toggleSwing();
           break;
         case "arrowup":
-          dy = -base * step;
+          nudgeWalls(0, -base * step);
           break;
         case "arrowdown":
-          dy = base * step;
+          nudgeWalls(0, base * step);
           break;
         case "arrowleft":
-          dx = -base * step;
+          nudgeWalls(-base * step, 0);
           break;
         case "arrowright":
-          dx = base * step;
+          nudgeWalls(base * step, 0);
           break;
+        default:
+          return;
       }
       e.preventDefault();
-      nudgeWalls(dx, dy);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -286,7 +297,7 @@ export function FloorPlan() {
           tdy = snappedDy - (moving.last.y - moving.start.y);
         }
 
-        useApp.getState().translateSelectedWalls(tdx, tdy);
+        useApp.getState().translateSelectedWallsLive(tdx, tdy);
         setMoving({
           ...moving,
           last: {
@@ -350,6 +361,11 @@ export function FloorPlan() {
       return;
     }
     if (moving) {
+      // The drag updated the plan live (no history writes); commit it as a
+      // single undo step, but only if the walls actually moved.
+      const moved =
+        moving.last.x !== moving.start.x || moving.last.y !== moving.start.y;
+      if (moved) useApp.getState().commitPlan();
       setMoving(null);
       return;
     }

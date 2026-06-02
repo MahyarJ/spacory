@@ -25,5 +25,8 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 
+# agent / AI notes
+.agent/
+
 # generated CSS modules typings (if using typed-css-modules plugin)
 **/*.module.css.d.ts
