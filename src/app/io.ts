@@ -117,7 +117,15 @@ export function parsePlan(text: string): Plan {
   } catch {
     throw new PlanParseError("File is not valid JSON.");
   }
+  return coercePlan(raw);
+}
 
+/**
+ * Validate an already-parsed value into a Plan. Same rules as parsePlan but
+ * operates on a JS value rather than JSON text — used when a plan is nested in
+ * a larger payload (e.g. the persisted undo history). Throws PlanParseError.
+ */
+export function coercePlan(raw: unknown): Plan {
   if (!isObject(raw)) throw new PlanParseError("Plan must be a JSON object.");
   if (!Array.isArray(raw.walls)) {
     throw new PlanParseError('Plan is missing a "walls" array.');

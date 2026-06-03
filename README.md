@@ -12,6 +12,7 @@ It’s designed to make creating, editing, and visualizing 2D spaces intuitive a
 - 🔄 Undo and redo support
 - 🎨 Themeable interface using CSS variables
 - 💾 Import / export project data as JSON
+- ♻️ Autosave to the browser (localStorage) — your work survives a refresh
 - ⚡ Built with Vite + React + TypeScript for blazing-fast dev experience
 - 🖼️ Export layouts as SVG or PNG images (not yet)
 - 🧩 Modular architecture for easy extension and customization

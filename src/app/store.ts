@@ -1,5 +1,13 @@
 import { create } from "zustand";
 import {
+  commit as commitHistory,
+  createHistory,
+  type History,
+  redo as redoHistory,
+  undo as undoHistory,
+} from "./history";
+import { loadPersistedHistory, savePersistedHistory } from "./persistence";
+import {
   createInitialPlan,
   type Item,
   isDoor,
@@ -58,16 +66,19 @@ interface AppState {
   commitPlan: () => void;
 }
 
-const history: { past: Plan[]; present: Plan; future: Plan[] } = {
-  past: [],
-  present: createInitialPlan(),
-  future: [],
-};
+// Diff-based undo history (see history.ts). Rehydrate the autosaved history on
+// startup; else start fresh. Reassigned wholesale on each mutation.
+let history: History =
+  loadPersistedHistory() ?? createHistory(createInitialPlan());
+
+/** Autosave the whole undo/redo history after every history mutation. */
+function persist() {
+  savePersistedHistory(history);
+}
 
 function commit(next: Plan) {
-  history.past.push(history.present);
-  history.present = next;
-  history.future = [];
+  history = commitHistory(history, next);
+  persist();
 }
 
 function translateWall(w: Wall, dx: number, dy: number): Wall {
@@ -220,25 +231,22 @@ export const useApp = create<AppState>((set, get) => ({
   },
   undo: () => {
     if (!history.past.length) return;
-    history.future.push(history.present);
-    const prev = history.past.pop()!;
-    history.present = prev;
+    history = undoHistory(history);
+    persist();
     set({ plan: history.present });
   },
   redo: () => {
     if (!history.future.length) return;
-    history.past.push(history.present);
-    const next = history.future.pop()!;
-    history.present = next;
+    history = redoHistory(history);
+    persist();
     set({ plan: history.present });
   },
   marquee: null,
   setMarquee: (m) => set({ marquee: m }),
   loadPlan: (p) => {
     // Loading a document starts a fresh undo timeline.
-    history.past = [];
-    history.present = p;
-    history.future = [];
+    history = createHistory(p);
+    persist();
     set({
       plan: history.present,
       selectedWalls: new Set(),
