@@ -3,7 +3,7 @@ import { useApp } from "@app/store";
 function wallPolygonPoints(
   a: { x: number; y: number },
   b: { x: number; y: number },
-  thickness: number
+  thickness: number,
 ) {
   const dx = b.x - a.x,
     dy = b.y - a.y;
@@ -30,14 +30,14 @@ export function SelectionLayer() {
         (w) =>
           selW.has(w.id) && (
             <polygon
-              key={"sw-" + w.id}
+              key={`sw-${w.id}`}
               points={wallPolygonPoints(w.a, w.b, w.thickness)}
               fill="none"
               stroke="var(--sp-accent)"
               strokeWidth={4}
               vectorEffect="non-scaling-stroke"
             />
-          )
+          ),
       )}
       {plan.items.map((i) => {
         // Selected items highlight
@@ -56,7 +56,7 @@ export function SelectionLayer() {
             (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
         return (
           <rect
-            key={"si-" + i.id}
+            key={`si-${i.id}`}
             x={cx - i.wallAttach.length / 2}
             y={cy - i.thickness / 2}
             width={i.wallAttach.length}

@@ -1,10 +1,13 @@
-import { useRef } from "react";
-import { useApp } from "@app/store";
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
+import { useApp } from "@app/store";
+import { useRef } from "react";
 import styles from "./Toolbar.module.css";
 
 function sanitizeFilename(name: string): string {
-  const cleaned = name.trim().replace(/[^a-z0-9-_ ]/gi, "").replace(/\s+/g, "-");
+  const cleaned = name
+    .trim()
+    .replace(/[^a-z0-9-_ ]/gi, "")
+    .replace(/\s+/g, "-");
   return cleaned || "spacory-plan";
 }
 
@@ -26,7 +29,9 @@ export function ProjectActions() {
 
   const onImportClick = () => fileInputRef.current?.click();
 
-  const onFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+  const onFileChange: React.ChangeEventHandler<HTMLInputElement> = async (
+    e,
+  ) => {
     const file = e.target.files?.[0];
     // Reset so picking the same file again still fires onChange.
     e.target.value = "";
@@ -46,10 +51,10 @@ export function ProjectActions() {
 
   return (
     <>
-      <button className={styles.button} onClick={onImportClick}>
+      <button type="button" className={styles.button} onClick={onImportClick}>
         Import
       </button>
-      <button className={styles.button} onClick={onExport}>
+      <button type="button" className={styles.button} onClick={onExport}>
         Export
       </button>
       <input

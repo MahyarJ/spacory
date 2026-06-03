@@ -1,6 +1,17 @@
 import { create } from "zustand";
-import { createInitialPlan, Plan, Wall, Item, isDoor } from "./schema";
-import { applyThemeAttr, initialTheme, THEME_KEY, ThemeMode } from "./theming";
+import {
+  createInitialPlan,
+  type Item,
+  isDoor,
+  type Plan,
+  type Wall,
+} from "./schema";
+import {
+  applyThemeAttr,
+  initialTheme,
+  THEME_KEY,
+  type ThemeMode,
+} from "./theming";
 
 export type Tool = "select" | "wall" | "window" | "door" | "pan";
 
@@ -150,7 +161,7 @@ export const useApp = create<AppState>((set, get) => ({
               ...w,
               thickness: Math.max(1, Math.round((w.thickness ?? 10) + delta)),
             }
-          : w
+          : w,
       ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
@@ -256,7 +267,7 @@ export const useApp = create<AppState>((set, get) => ({
       plan: {
         ...plan,
         walls: plan.walls.map((wall) =>
-          selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall
+          selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall,
         ),
       },
     });

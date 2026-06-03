@@ -33,6 +33,7 @@ export interface DoorProps {
   swingSide: "inside" | "outside";
 }
 
+// biome-ignore lint/suspicious/noEmptyInterface: placeholder kept as a named type for forthcoming window props (mullions, sill depth, etc.).
 export interface WindowProps {
   // add later: mullions, sill depth, etc.
 }

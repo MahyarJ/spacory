@@ -1,12 +1,11 @@
 import { useApp } from "@app/store";
 
 import clsx from "clsx";
-
+import { HintBar } from "./HintBar";
+import { ProjectActions } from "./ProjectActions";
+import { ThemeSwitch } from "./ThemeSwitch";
 import styles from "./Toolbar.module.css";
 import { WallOptions } from "./wall/WallOptions";
-import { HintBar } from "./HintBar";
-import { ThemeSwitch } from "./ThemeSwitch";
-import { ProjectActions } from "./ProjectActions";
 
 export function Toolbar() {
   const tool = useApp((s) => s.tool);
@@ -19,6 +18,7 @@ export function Toolbar() {
     label: string;
   }) => (
     <button
+      type="button"
       className={clsx(styles.button, { [styles.active]: tool === props.tool })}
       onClick={() => setTool(props.tool)}
     >
@@ -38,10 +38,10 @@ export function Toolbar() {
         <div className={styles.spacer} />
         <ProjectActions />
         <ThemeSwitch />
-        <button className={styles.button} onClick={undo}>
+        <button type="button" className={styles.button} onClick={undo}>
           Undo
         </button>
-        <button className={styles.button} onClick={redo}>
+        <button type="button" className={styles.button} onClick={redo}>
           Redo
         </button>
         <span className={styles.label}>

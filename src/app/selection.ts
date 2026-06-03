@@ -11,6 +11,6 @@ export function hasSelectedWalls(selWalls: Set<string>) {
 export function hasSelectedDoor(plan: Plan, selItems: Set<string>) {
   if (selItems.size === 0) return false;
   return plan.items.some(
-    (item) => selItems.has(item.id) && item.type === "door"
+    (item) => selItems.has(item.id) && item.type === "door",
   );
 }

@@ -1,5 +1,5 @@
-import { useMemo } from "react";
 import { useApp } from "@app/store";
+import { useMemo } from "react";
 
 export function GridLayer({
   width,
@@ -35,7 +35,7 @@ export function GridLayer({
     <g data-layer="grid">
       {lines.cols.map((x) => (
         <line
-          key={"vx" + x}
+          key={`vx${x}`}
           x1={x}
           y1={-1e5}
           x2={x}
@@ -46,7 +46,7 @@ export function GridLayer({
       ))}
       {lines.rows.map((y) => (
         <line
-          key={"hz" + y}
+          key={`hz${y}`}
           x1={-1e5}
           y1={y}
           x2={1e5}

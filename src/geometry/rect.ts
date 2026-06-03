@@ -1,4 +1,4 @@
-import { Point } from "@app/schema";
+import type { Point } from "@app/schema";
 
 const cross = (p: Point, q: Point, rp: Point) =>
   (q.x - p.x) * (rp.y - p.y) - (q.y - p.y) * (rp.x - p.x);
@@ -36,14 +36,14 @@ export const rectFrom = (x0: number, y0: number, x1: number, y1: number) => ({
 
 export const pointInRect = (
   p: Point,
-  r: { x: number; y: number; w: number; h: number }
+  r: { x: number; y: number; w: number; h: number },
 ) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
 // segment/rect intersection (coarse but effective for walls)
 export function segmentIntersectsRect(
   a: Point,
   b: Point,
-  r: { x: number; y: number; w: number; h: number }
+  r: { x: number; y: number; w: number; h: number },
 ) {
   // quick reject
   if (

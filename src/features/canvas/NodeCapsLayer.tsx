@@ -1,8 +1,7 @@
-import { useMemo } from "react";
 import { useApp } from "@app/store";
 import { computeJunctionPivot } from "@geometry/joint";
+import { useMemo } from "react";
 
-type Direction = -1 | 0 | 1;
 type Key = string;
 const keyOf = (x: number, y: number, tol = 1e-3): Key =>
   `${Math.round(x / tol)}:${Math.round(y / tol)}`;
@@ -50,11 +49,12 @@ export function NodeCapsLayer() {
 
     caps.push(
       <polygon
+        // biome-ignore lint/suspicious/noArrayIndexKey: `key` is a stable Map key (node coordinate hash), not an array index.
         key={key}
         points={`${pivot1?.x},${pivot1?.y} ${pivot3?.x},${pivot3?.y} ${pivot2?.x},${pivot2?.y} ${pivot4?.x},${pivot4?.y}`}
         fill="var(--sp-wall)"
         vectorEffect="non-scaling-stroke"
-      />
+      />,
     );
   });
 

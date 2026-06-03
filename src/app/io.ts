@@ -1,11 +1,11 @@
 import {
-  Item,
-  Plan,
-  Point,
-  Units,
-  Wall,
-  WallAttachment,
   createInitialPlan,
+  type Item,
+  type Plan,
+  type Point,
+  type Units,
+  type Wall,
+  type WallAttachment,
 } from "./schema";
 
 /** Current schema version written by exports. */

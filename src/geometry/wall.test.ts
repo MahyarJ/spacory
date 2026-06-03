@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { Wall } from "@app/schema";
+import { describe, expect, it } from "vitest";
 import {
   findNearestWall,
   getPointOnWall,
@@ -15,7 +15,7 @@ const wall = (
   bx: number,
   by: number,
   thickness = 10,
-  id = "w"
+  id = "w",
 ): Wall => ({ id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness });
 
 describe("getWallLength", () => {

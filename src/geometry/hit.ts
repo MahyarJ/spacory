@@ -1,5 +1,5 @@
-import type { Point, Wall, Item } from "@app/schema";
-import { getWallDirection, getPointOnWall, getWallAngle } from "./wall";
+import type { Item, Point, Wall } from "@app/schema";
+import { getPointOnWall, getWallAngle } from "./wall";
 
 export function distToSegment(p: Point, a: Point, b: Point) {
   const vx = b.x - a.x,
@@ -23,7 +23,6 @@ export function hitWall(p: Point, wall: Wall, tolerance = 6) {
 
 export function hitItem(p: Point, item: Item, wall: Wall, tolerance = 6) {
   // Transform point to the wall’s local space: X along wall, Y across wall
-  const dir = getWallDirection(wall);
   const angle = getWallAngle(wall);
   const cos = Math.cos(-angle),
     sin = Math.sin(-angle);

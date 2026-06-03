@@ -1,21 +1,22 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useApp } from "@app/store";
 import { assertNever, type Point, type Wall } from "@app/schema";
-import { snapToGrid, applyInverseViewTransform } from "@geometry/snap";
+import { useApp } from "@app/store";
 import { hitItem, hitWall } from "@geometry/hit";
+import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
+import { applyInverseViewTransform, snapToGrid } from "@geometry/snap";
 import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
-import { rectFrom, pointInRect, segmentIntersectsRect } from "@geometry/rect";
-import { WallsLayer } from "./WallsLayer";
+import clsx from "clsx";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
+import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
-import { SelectionLayer } from "./SelectionLayer";
-import { NodeCapsLayer } from "./NodeCapsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
-import styles from "./FloorPlan.module.css";
-import clsx from "clsx";
+import { NodeCapsLayer } from "./NodeCapsLayer";
+import { SelectionLayer } from "./SelectionLayer";
+import { WallsLayer } from "./WallsLayer";
 
 function uid(prefix = "id") {
-  return prefix + "_" + Math.random().toString(36).slice(2, 9);
+  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 type Opening = {
@@ -445,6 +446,7 @@ export function FloorPlan() {
         onPointerUp={onPointerUp}
         onWheel={onWheel}
       >
+        <title>Floor plan canvas</title>
         <g transform={viewTransform}>
           <GridLayer width={size.w} height={size.h} />
           <WallsLayer />

@@ -1,4 +1,4 @@
-import { Point, Wall } from "@app/schema";
+import type { Point, Wall } from "@app/schema";
 
 const sub = (p: Point, q: Point): Point => ({
   x: p.x - q.x,
@@ -26,7 +26,7 @@ const intersectRays = (
   dP: Point,
   Q: Point,
   dQ: Point,
-  eps = 1e-6
+  eps = 1e-6,
 ): Point | null => {
   const det = dP.x * dQ.y - dP.y * dQ.x;
   if (Math.abs(det) < eps) return null; // parallel
@@ -47,7 +47,7 @@ export const computeJunctionPivot = (
   end1: "A" | "B",
   w2: Wall,
   end2: "A" | "B",
-  n: Point
+  n: Point,
 ): Point | null => {
   // Wall 1: tangent pointing AWAY from the node, then its outward normal
   const centerlineDir1 = end1 === "A" ? sub(w1.b, w1.a) : sub(w1.a, w1.b); // A->B or B->A
@@ -71,7 +71,7 @@ export const computeJunctionPivot = (
     innerEdgeStart1,
     tangentAwayFromNode1,
     innerEdgeStart2,
-    tangentAwayFromNode2
+    tangentAwayFromNode2,
   );
 
   return pivot;

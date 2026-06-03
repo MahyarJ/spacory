@@ -1,11 +1,11 @@
-import { useApp } from "@app/store";
-import styles from "./HintBar.module.css";
-import { useMemo } from "react";
 import {
   anySelection,
   hasSelectedDoor,
   hasSelectedWalls,
 } from "@app/selection";
+import { useApp } from "@app/store";
+import { useMemo } from "react";
+import styles from "./HintBar.module.css";
 
 export function HintBar() {
   const tool = useApp((s) => s.tool);

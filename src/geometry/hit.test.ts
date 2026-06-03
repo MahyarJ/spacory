@@ -1,5 +1,5 @@
+import type { Wall, WindowItem } from "@app/schema";
 import { describe, expect, it } from "vitest";
-import type { WindowItem, Wall } from "@app/schema";
 import { distToSegment, hitItem, hitWall } from "./hit";
 
 const wall = (
@@ -7,7 +7,7 @@ const wall = (
   ay: number,
   bx: number,
   by: number,
-  thickness = 10
+  thickness = 10,
 ): Wall => ({ id: "w", a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness });
 
 describe("distToSegment", () => {

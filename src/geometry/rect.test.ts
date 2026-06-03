@@ -27,19 +27,23 @@ describe("segmentIntersectsRect", () => {
   const r = { x: 0, y: 0, w: 10, h: 10 };
 
   it("is true when the segment crosses the rect", () => {
-    expect(segmentIntersectsRect({ x: -5, y: 5 }, { x: 15, y: 5 }, r)).toBe(true);
+    expect(segmentIntersectsRect({ x: -5, y: 5 }, { x: 15, y: 5 }, r)).toBe(
+      true,
+    );
   });
   it("is true when an endpoint is inside", () => {
-    expect(segmentIntersectsRect({ x: 5, y: 5 }, { x: 50, y: 50 }, r)).toBe(true);
+    expect(segmentIntersectsRect({ x: 5, y: 5 }, { x: 50, y: 50 }, r)).toBe(
+      true,
+    );
   });
   it("is false when fully outside (quick reject)", () => {
     expect(segmentIntersectsRect({ x: -5, y: -5 }, { x: -1, y: 20 }, r)).toBe(
-      false
+      false,
     );
   });
   it("is false when near but not touching", () => {
     expect(segmentIntersectsRect({ x: 11, y: 0 }, { x: 11, y: 10 }, r)).toBe(
-      false
+      false,
     );
   });
 });

@@ -1,5 +1,5 @@
+import path from "node:path";
 import { defineConfig } from "vitest/config";
-import path from "path";
 
 // Dedicated test config: mirrors the path aliases from vite.config.ts but
 // skips the React / CSS-modules plugins, which the (currently pure) unit tests
