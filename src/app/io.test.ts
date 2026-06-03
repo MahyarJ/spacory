@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { PLAN_VERSION, PlanParseError, parsePlan, serializePlan } from "./io";
-import { DoorItem, Plan, WindowItem, createInitialPlan } from "./schema";
+import {
+  createInitialPlan,
+  type DoorItem,
+  type Plan,
+  type WindowItem,
+} from "./schema";
 
 const base = createInitialPlan();
 const door: DoorItem = {

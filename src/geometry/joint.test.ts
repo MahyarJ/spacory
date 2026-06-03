@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { Wall } from "@app/schema";
+import { describe, expect, it } from "vitest";
 import { computeJunctionPivot } from "./joint";
 
 const wall = (
@@ -8,7 +8,7 @@ const wall = (
   bx: number,
   by: number,
   thickness: number,
-  id = "w"
+  id = "w",
 ): Wall => ({ id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness });
 
 describe("computeJunctionPivot", () => {

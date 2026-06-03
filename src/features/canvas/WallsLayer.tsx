@@ -1,8 +1,8 @@
-import { useApp } from "@app/store";
 import type { Point, Wall } from "@app/schema";
+import { useApp } from "@app/store";
 
 const wallPolygonPoints = (
-  w: Wall
+  w: Wall,
 ): {
   p1: Point;
   p2: Point;

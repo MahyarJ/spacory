@@ -1,6 +1,6 @@
 import { useApp } from "@app/store";
-import styles from "./ThemeSwitch.module.css";
 import clsx from "clsx";
+import styles from "./ThemeSwitch.module.css";
 
 const options = [
   { value: "dark", label: "Dark" },
@@ -17,6 +17,7 @@ export function ThemeSwitch() {
       {options.map(({ value, label }) => (
         <button
           key={value}
+          type="button"
           role="tab"
           aria-selected={mode === value}
           className={clsx(styles.btn, mode === value && styles.active)}

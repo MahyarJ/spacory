@@ -9,16 +9,17 @@ export function WallOptions() {
   const setThickness = useApp((s) => s.setCurrentWallThickness);
 
   return (
-    <div className={styles.wallOptions} aria-label="Wall options">
+    <div className={styles.wallOptions}>
       <span className={styles.label}>Thickness</span>
 
       <div className={styles.presets}>
         {PRESETS.map((p) => (
           <button
             key={p}
+            type="button"
             className={clsx(
               styles.pill,
-              currentWallThickness === p && styles.active
+              currentWallThickness === p && styles.active,
             )}
             onClick={() => setThickness(p)}
             title={`${p} cm`}

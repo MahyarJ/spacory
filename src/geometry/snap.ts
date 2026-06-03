@@ -10,7 +10,7 @@ export function applyInverseViewTransform(
   svg: SVGSVGElement,
   panX: number,
   panY: number,
-  scale: number
+  scale: number,
 ): { x: number; y: number } {
   const rect = svg.getBoundingClientRect();
   const x = (clientX - rect.left - panX) / scale;

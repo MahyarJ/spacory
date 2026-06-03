@@ -1,5 +1,5 @@
-import { Toolbar } from "@features/toolbar/Toolbar";
 import { FloorPlan } from "@features/canvas/FloorPlan";
+import { Toolbar } from "@features/toolbar/Toolbar";
 
 import styles from "./App.module.css";
 
