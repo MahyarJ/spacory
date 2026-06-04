@@ -1,44 +1,34 @@
 import { useApp } from "@app/store";
-
-function wallPolygonPoints(
-  a: { x: number; y: number },
-  b: { x: number; y: number },
-  thickness: number,
-) {
-  const dx = b.x - a.x,
-    dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len,
-    ny = dx / len;
-  const h = thickness / 2;
-  const p1 = { x: a.x + nx * h, y: a.y + ny * h };
-  const p2 = { x: b.x + nx * h, y: b.y + ny * h };
-  const p3 = { x: b.x - nx * h, y: b.y - ny * h };
-  const p4 = { x: a.x - nx * h, y: a.y - ny * h };
-  return `${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y} ${p4.x},${p4.y}`;
-}
+import { computeWallGeometry, polygonToPoints } from "@geometry/junction";
+import { useMemo } from "react";
 
 export function SelectionLayer() {
   const plan = useApp((s) => s.plan);
   const selW = useApp((s) => s.selectedWalls);
   const selI = useApp((s) => s.selectedItems);
+  const { walls: polygons } = useMemo(
+    () => computeWallGeometry(plan.walls),
+    [plan.walls],
+  );
 
   return (
     <g data-layer="selection">
-      {plan.walls.map(
-        // Selected walls highlight
-        (w) =>
-          selW.has(w.id) && (
-            <polygon
-              key={`sw-${w.id}`}
-              points={wallPolygonPoints(w.a, w.b, w.thickness)}
-              fill="none"
-              stroke="var(--sp-accent)"
-              strokeWidth={4}
-              vectorEffect="non-scaling-stroke"
-            />
-          ),
-      )}
+      {plan.walls.map((w) => {
+        // Selected walls highlight, using the same mitered outline as the fill.
+        if (!selW.has(w.id)) return null;
+        const quad = polygons.get(w.id);
+        if (!quad) return null;
+        return (
+          <polygon
+            key={`sw-${w.id}`}
+            points={polygonToPoints(quad)}
+            fill="none"
+            stroke="var(--sp-accent)"
+            strokeWidth={4}
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
       {plan.items.map((i) => {
         // Selected items highlight
         if (!selI.has(i.id)) return null;

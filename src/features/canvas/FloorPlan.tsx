@@ -11,7 +11,6 @@ import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
-import { NodeCapsLayer } from "./NodeCapsLayer";
 import { SelectionLayer } from "./SelectionLayer";
 import { WallsLayer } from "./WallsLayer";
 
@@ -450,7 +449,6 @@ export function FloorPlan() {
         <g transform={viewTransform}>
           <GridLayer width={size.w} height={size.h} />
           <WallsLayer />
-          <NodeCapsLayer />
           <ItemsLayer />
           <SelectionLayer />
           <MarqueeLayer />
