@@ -149,7 +149,9 @@ export function FloorPlan() {
 
   const onPointerDown: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
-    (e.target as Element).setPointerCapture(e.pointerId);
+    // Capture on the <svg> itself (currentTarget), not e.target — a clicked
+    // child (e.g. a wall <polygon>) can re-render mid-drag and drop the capture.
+    e.currentTarget.setPointerCapture(e.pointerId);
 
     if (e.button === 2 || tool === "pan") {
       setIsPanning(true);
@@ -321,7 +323,9 @@ export function FloorPlan() {
 
   const onPointerUp: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
-    (e.target as Element).releasePointerCapture(e.pointerId);
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     if (isPanning) setIsPanning(false);
     if (dragging && drawingWall && tool === "wall") {
       const world = toWorld(e.clientX, e.clientY);
