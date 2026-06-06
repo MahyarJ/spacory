@@ -37,7 +37,6 @@ interface AppState {
   setTool: (t: Tool) => void;
   addWall: (w: Wall) => void;
   addItem: (i: Item) => void;
-  updatePlan: (fn: (p: Plan) => void) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
@@ -117,13 +116,6 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     set({ plan: history.present });
   },
-  updatePlan: (fn) => {
-    const clone: Plan = JSON.parse(JSON.stringify(get().plan));
-    fn(clone);
-    clone.meta.updatedAt = new Date().toISOString();
-    commit(clone);
-    set({ plan: history.present });
-  },
   setView: (fn) => set(({ view }) => ({ view: fn(view) })),
   setIsPanning: (p) => set({ isPanning: p }),
   selectNone: () => set({ selectedWalls: new Set(), selectedItems: new Set() }),
@@ -170,7 +162,7 @@ export const useApp = create<AppState>((set, get) => ({
         selectedWalls.has(w.id)
           ? {
               ...w,
-              thickness: Math.max(1, Math.round((w.thickness ?? 10) + delta)),
+              thickness: Math.max(1, Math.round(w.thickness + delta)),
             }
           : w,
       ),

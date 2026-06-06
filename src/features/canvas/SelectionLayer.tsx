@@ -1,5 +1,6 @@
 import { useApp } from "@app/store";
 import { computeWallGeometry, polygonToPoints } from "@geometry/junction";
+import { getPointOnWall, getWallAngle } from "@geometry/wall";
 import { useMemo } from "react";
 
 export function SelectionLayer() {
@@ -34,24 +35,17 @@ export function SelectionLayer() {
         if (!selI.has(i.id)) return null;
         const wall = plan.walls.find((w) => w.id === i.wallAttach.wallId);
         if (!wall) return null;
-        const angle = Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x);
+        const angle = getWallAngle(wall);
         const mid = i.wallAttach.offset + i.wallAttach.length / 2;
-        const cx =
-          wall.a.x +
-          (wall.b.x - wall.a.x) *
-            (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
-        const cy =
-          wall.a.y +
-          (wall.b.y - wall.a.y) *
-            (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
+        const c = getPointOnWall(wall, mid);
         return (
           <rect
             key={`si-${i.id}`}
-            x={cx - i.wallAttach.length / 2}
-            y={cy - i.thickness / 2}
+            x={c.x - i.wallAttach.length / 2}
+            y={c.y - i.thickness / 2}
             width={i.wallAttach.length}
             height={i.thickness}
-            transform={`rotate(${(angle * 180) / Math.PI}, ${cx}, ${cy})`}
+            transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
             fill="none"
             stroke="var(--sp-accent)"
             strokeWidth={4}

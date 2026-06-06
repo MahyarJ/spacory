@@ -288,7 +288,7 @@ export function FloorPlan() {
           tdy = dy;
 
         if (moving.snap) {
-          const grid = plan.meta.gridSize || 25;
+          const grid = plan.meta.gridSize;
           // accumulate drag in world, then snap delta in grid quanta
           // We snap relative to start to prevent drift
           const totalDx = world.x - moving.start.x;
@@ -347,15 +347,8 @@ export function FloorPlan() {
         const wall = plan.walls.find((w) => w.id === item.wallAttach.wallId);
         if (!wall) continue;
         const mid = item.wallAttach.offset + item.wallAttach.length / 2;
-        const cx =
-          wall.a.x +
-          (wall.b.x - wall.a.x) *
-            (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
-        const cy =
-          wall.a.y +
-          (wall.b.y - wall.a.y) *
-            (mid / Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y));
-        if (pointInRect({ x: cx, y: cy }, r)) selectItem(item.id, true);
+        const center = getPointOnWall(wall, mid);
+        if (pointInRect(center, r)) selectItem(item.id, true);
       }
       // select walls
       for (const wall of plan.walls) {
