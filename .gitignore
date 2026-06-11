@@ -25,8 +25,8 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 
-# agent / AI notes
-.agent/
+# agent secrets (Telegram, etc.) — .env.example is committed, real .env is not
+.agents/.env
 
 # generated CSS modules typings (if using typed-css-modules plugin)
 **/*.module.css.d.ts

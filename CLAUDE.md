@@ -62,6 +62,7 @@ Do **not** add AI/Claude attribution to commits or PRs:
 
 ## Notes
 
-- `.agent/` (gitignored) may hold local working notes — reviews, scratch. Not
-  required; `docs/` is the shared source of truth.
+- `docs/` is the shared source of truth for architecture and decisions.
+- The two-agent (Product / Engineer) workflow lives in `.agents/`; its living
+  institutional memory is `project-memory.md` in the repo root.
 - Generated `*.module.css.d.ts` are gitignored.
