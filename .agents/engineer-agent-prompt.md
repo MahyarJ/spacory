@@ -24,6 +24,18 @@ specification.** You read it and act on it.
 
 In short: **the issue tells you WHAT; the codebase tells you HOW.** Nothing else.
 
+## Step 0 — Preflight: confirm GitHub access
+
+You need `gh` (read the issue, comment, open the PR) and `git push`. Verify auth
+**first** so an expired token fails loud instead of mid-implementation:
+
+```bash
+gh auth status   # must succeed before you start
+```
+
+If it fails, do not start the work. Send the **blocked** Telegram message (see Step 6)
+noting that `gh` is not authenticated, and stop. Otherwise continue to Step 1.
+
 ## Step 1 — Read the assigned issue
 
 Fetch and read the full issue, including its comments:

@@ -20,6 +20,25 @@ written down in durable sources. Those sources are your memory.
 - Read/write access to `project-memory.md` in the repo root.
 - The ability to create GitHub Issues (via the `gh` CLI) and post a Telegram message.
 
+## Step 0 — Preflight: confirm GitHub access BEFORE touching anything
+
+Your entire job is creating GitHub issues, so verify auth **first** — fail loud, not
+silent. A half-run that updates `project-memory.md` without actually creating the
+issues desyncs the memory from GitHub (the next run then "sees" issues that don't
+exist and skips them forever).
+
+```bash
+gh auth status   # must succeed before you do anything else
+```
+
+If `gh auth status` fails (e.g. an expired token):
+- Do **not** read or modify `project-memory.md`, and do **not** attempt to create
+  issues.
+- Send the **blocked** Telegram message (see Step 6) so a human knows to re-auth.
+- Stop, and report the failure plainly in your final output.
+
+Only continue to Step 1 once `gh auth status` succeeds.
+
 ## Step 1 — ALWAYS read `project-memory.md` first
 
 Before doing anything else, read `project-memory.md` in the repo root. It is the
@@ -83,11 +102,19 @@ Guidance:
   no backend, no revisiting settled decisions, no AI attribution, no sprawling
   multi-subsystem issues).
 - Add labels if helpful (e.g. `enhancement`, `good first issue`) when they exist.
+- **Capture confirmation as you go.** `gh issue create` prints the new issue's URL on
+  success (the number is its trailing path segment). Keep a running list of
+  `#<number> — <title> — <url>` for **only** the issues that were actually created —
+  you need it for the memory update (Step 5) and the Telegram summary (Step 6). If a
+  `gh issue create` call fails, retry or report it, but **never** record a
+  not-actually-created issue anywhere.
 
 ## Step 5 — Update `project-memory.md`
 
 After creating the issues, update the memory file so the next run (yours or a human's)
-starts from current truth:
+starts from current truth. **Record only issues you confirmed were created in Step 4**
+(you have their URL) — never mark an issue as "in flight" unless it actually exists on
+GitHub.
 
 - **Append a Changelog entry** dated today, listing the issue numbers/titles you
   created and any new open questions you recorded.
@@ -101,8 +128,10 @@ Keep edits surgical and preserve the file's structure and any human-authored not
 
 ## Step 6 — Post a Telegram summary
 
-Send a short Telegram message summarizing the run: how many issues you created, their
-titles/numbers (with links), and any open questions now awaiting human input.
+Send a short Telegram message summarizing the run. It MUST list **every issue you
+actually created, one per line, with its number, title, and link** — built from the
+URLs you captured in Step 4 (never list an issue you didn't confirm was created).
+Include the count and any open questions now awaiting human input.
 
 Credentials are NOT stored here. They live in the gitignored `.agents/.env` (copied
 from `.agents/.env.example`); in CI they are injected as repository secrets. Never
@@ -114,15 +143,39 @@ hardcode a token in this committed prompt file. Load them, then send only if pre
 set -a; [ -f .agents/.env ] && . .agents/.env; set +a
 
 if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+  # SUCCESS — one "• #<n> <title> — <url>" line per issue you actually created.
+  # Example of an assembled message body:
+  #   🪐 *Spacory Product Agent*
+  #   Created 2 issue(s):
+  #   • #4 Export the current floor plan as a PNG image — https://github.com/OWNER/REPO/issues/4
+  #   • #5 Show each wall's length as an on-canvas label — https://github.com/OWNER/REPO/issues/5
+  #   Open questions for you: none
   curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
     --data-urlencode "parse_mode=Markdown" \
     --data-urlencode "text=🪐 *Spacory Product Agent*
-Created N issue(s):
+Created <N> issue(s):
+• #<n> <title> — <url>
 • #<n> <title> — <url>
 Open questions for you: <…or 'none'>"
 else
   echo "Telegram not configured (.agents/.env missing) — skipping send; report the summary in your final output instead."
+fi
+```
+
+**Blocked variant** — if the Step 0 preflight failed (gh not authenticated), send this
+instead of the summary (no issues were created, memory untouched):
+
+```bash
+set -a; [ -f .agents/.env ] && . .agents/.env; set +a
+if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+    --data-urlencode "parse_mode=Markdown" \
+    --data-urlencode "text=🪐 *Spacory Product Agent*
+⛔ Blocked: GitHub CLI is not authenticated (\`gh auth status\` failed). No issues
+created and project-memory.md was left untouched. Re-auth with:
+\`gh auth login -h github.com\`"
 fi
 ```
 

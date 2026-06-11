@@ -28,6 +28,7 @@
       "Bash(git ls-remote:*)",
       "Bash(gh pr:*)",
       "Bash(gh run:*)",
+      "Bash(gh issue:*)",
       "Bash(gh repo view:*)"
     ],
     "deny": [

@@ -49,21 +49,25 @@ of truth and all edits flow through one `commit()` chokepoint. Pure logic
 
 From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 
-- **No raster/vector image export** — only JSON import/export exists; no PNG or SVG
-  export of the plan.
+- **PNG image export — in flight (#4).** Raster export of the plan; SVG (vector)
+  export deliberately deferred to a follow-up.
+- **No SVG/vector image export** — follow-up to PNG export (#4); not yet scoped.
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
-- **Viewport is not persisted** — pan/zoom resets on refresh (plan + history do
-  persist, but `view` does not).
+- **Viewport persistence — in flight (#2).** Pan/zoom currently resets on refresh
+  (plan + history persist, but `view` does not); #2 persists it separately.
 - **No miter limit / bevel fallback** — very acute wall angles produce long
   spike-like miters; a miter limit is noted as a possible future tweak.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
-  no notion of an enclosed room, area measurement, or labels.
-- **No measurements / dimensions UI** — coordinates are cm internally but there is no
-  on-canvas dimension display or unit switching surfaced to the user.
+  no notion of an enclosed room, area measurement, or labels. (Needs human product
+  input before scoping — see open questions.)
+- **On-canvas wall-length labels — in flight (#5).** Display-only; *editable*
+  lengths (type to resize) and a unit-switching UI remain open follow-ups.
+- **No editable dimensions / unit switching** — follow-up to #5; type-to-resize and
+  changing `plan.meta.units` from the UI are not yet scoped.
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
-- **Undo/redo is toolbar-only** — there is no `Cmd/Ctrl+Z` (or `Shift` redo)
-  keyboard binding in `src/features/canvas/FloorPlan.tsx`.
+- **Undo/redo keyboard shortcuts — in flight (#3).** Was toolbar-only; #3 adds
+  `Cmd/Ctrl+Z` / `Shift`-redo / `Ctrl+Y` in `src/features/canvas/FloorPlan.tsx`.
 - **Selection is not part of the history snapshot** — after undo/redo, a stored
   `selectedWalls`/`selectedItems` can reference walls/items that no longer exist (or
   reappear); delete-then-undo leaves a stale selection.
@@ -101,17 +105,22 @@ vs. rooms vs. measurements, and any accessibility/i18n requirements.
 
 ## What the Product Agent should focus on next
 
-Assessment of highest-value issue areas (verify priority with the human before
-committing a large batch):
+The first issue batch (#2–#5) is now in flight, covering the top thin/shippable
+items: viewport persistence (#2), undo/redo keyboard shortcuts (#3), PNG export (#4),
+and on-canvas wall-length labels (#5). Do **not** re-propose these. Once they land,
+the next high-value, well-scoped follow-ups (in rough priority order) are:
 
-1. **Image export (PNG/SVG)** — frequently the #1 ask for a floor-plan tool; users
-   want to share or print. Self-contained, builds on existing render layers.
-2. **On-canvas measurements / dimensions** — show wall lengths and let users type an
-   exact length; high utility, leans on the already-pure geometry layer.
-3. **Persist the viewport** — small, clearly-scoped polish that removes a real
-   annoyance; complements the existing history persistence.
-4. **Rooms / enclosed areas** — bigger feature (area calc, labels). Worth an issue to
-   scope/spike, but likely needs human product input first.
+1. **SVG (vector) export** — follow-up to #4; clean once the PNG content-SVG +
+   bounding-box helper exists (reuse that pure helper). Thin and shippable.
+2. **Editable wall lengths** — follow-up to #5; let the user type an exact length to
+   resize a wall. Higher effort (resize semantics, which endpoint moves), leans on
+   pure geometry — good candidate but define the interaction carefully.
+3. **"Fit to content / reset view" button** — pairs naturally with the #2 bounding
+   box / viewport work; small polish.
+4. **Selection not in history snapshot** — bug-ish gap: undo/redo can leave a stale
+   selection. Small, testable, leans on `history.ts` + store.
+5. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs human
+   product input before scoping (see open questions); defer until answered.
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
 pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
@@ -141,3 +150,9 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
   JSON import/export, theming), known gaps (no image export, no mid-span split, no
   viewport persistence, no rooms/measurements/furniture, no miter limit), and the
   proposed focus order (export → measurements → viewport persistence → rooms).
+- 2026-06-10 — First Product Agent run. Created the opening issue batch on GitHub:
+  #2 persist viewport, #3 undo/redo keyboard shortcuts, #4 PNG export, #5 on-canvas
+  wall-length labels. Updated "Known gaps" to mark these in flight and recorded the
+  next follow-ups (SVG export, editable lengths, fit-to-content, selection-in-history,
+  rooms) in "focus next". (This entry was reconstructed after the file was briefly
+  reverted during debugging — the issues themselves were created successfully.)

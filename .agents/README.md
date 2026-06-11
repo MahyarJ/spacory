@@ -36,6 +36,32 @@ each other being "live," and are each spun up fresh per run.
 
 ## How to invoke
 
+### Quickest: the wrapper scripts
+
+```bash
+.agents/run-product.sh                 # run a product cycle (create/refine issues)
+.agents/run-product.sh "focus on export"   # optional extra steer for this run
+
+.agents/run-engineer.sh 2              # implement issue #2 (opens a PR)
+.agents/run-engineer.sh '#2' "note"    # leading # tolerated; optional extra note
+```
+
+Each script launches a **fresh, headless** `claude` session (`-p`) with the matching
+prompt appended as the system prompt, runs from the repo root, and validates its
+input. Useful env overrides:
+
+- `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
+  fully unattended run in a trusted environment.
+- `CLAUDE_MODEL` — pin a specific model; defaults to the session default.
+
+> **Permissions:** headless runs only execute commands the permission mode/allowlist
+> permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, and `gh run`,
+> but the agents also use **`gh issue`** (Product creates issues; Engineer reads/comments
+> on them). Add `Bash(gh issue:*)` to the allowlist, or run with
+> `CLAUDE_PERMISSION_MODE=bypassPermissions`, so a headless run doesn't stall.
+
+### Manual: feed the prompt yourself
+
 These prompts are system prompts — feed the file's contents as the agent's system
 prompt, then give it the run-specific input below.
 
