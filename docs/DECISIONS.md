@@ -84,3 +84,17 @@ on Node 24.
 
 **Why.** The previous v4 actions ran on Node 20, which GitHub deprecated. The v6
 majors run on Node 24, clearing the deprecation warnings.
+
+## Wall length labels: counter-scaled text, short-wall threshold
+
+**Decision.** `DimensionsLayer` draws each wall's length near its midpoint. The
+label is counter-scaled by `1/view.scale` (one inner unit becomes one screen
+pixel), so font size and offset stay constant on screen at any zoom. Walls
+shorter than 24px on screen get no label. Labels are `pointer-events: none`.
+
+**Why.** Everything inside the canvas `<g>` is scaled by `view.scale`, so plain
+`<text>` would shrink/grow into illegibility; counter-scaling keeps it readable
+without a separate screen-space pass. Hiding labels on tiny walls avoids text
+overflowing the wall it describes. Non-interactive labels never interfere with
+the geometry-based hit-testing for drawing/selecting/moving. The cm → unit
+formatting is a pure, tested function (`src/app/format.ts`).

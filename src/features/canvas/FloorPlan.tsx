@@ -7,6 +7,7 @@ import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { DimensionsLayer } from "./DimensionsLayer";
 import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
@@ -447,6 +448,7 @@ export function FloorPlan() {
           <GridLayer width={size.w} height={size.h} />
           <WallsLayer />
           <ItemsLayer />
+          <DimensionsLayer />
           <SelectionLayer />
           <MarqueeLayer />
           {wallPreview}
