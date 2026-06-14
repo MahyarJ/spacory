@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { throttle } from "../util/throttle";
 import {
   commit as commitHistory,
   createHistory,
@@ -20,7 +21,6 @@ import {
   THEME_KEY,
   type ThemeMode,
 } from "./theming";
-import { throttle } from "./throttle";
 import {
   DEFAULT_VIEW,
   loadPersistedView,

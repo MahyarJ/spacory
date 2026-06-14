@@ -9,7 +9,7 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 **Decision.** The viewport (pan/zoom) is persisted to its own `localStorage`
 key (separate from the Plan/undo history) via a 200ms **leading + trailing
-throttle** — a small in-house helper (`src/app/throttle.ts`).
+throttle** — a small in-house helper (`src/util/throttle.ts`).
 
 **Why.** *Throttle, not debounce:* debounce only writes after movement stops, so
 a gesture ending in a tab close/crash is lost; throttle also writes mid-gesture,
