@@ -29,7 +29,8 @@
       "Bash(gh pr:*)",
       "Bash(gh run:*)",
       "Bash(gh issue:*)",
-      "Bash(gh repo view:*)"
+      "Bash(gh repo view:*)",
+      "Bash(.agents/notify.sh:*)"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -41,5 +42,10 @@
       "Bash(git filter-branch:*)",
       "Bash(rm -rf:*)"
     ]
+  },
+  "sandbox": {
+    "network": {
+      "allowedDomains": ["api.telegram.org"]
+    }
   }
 }

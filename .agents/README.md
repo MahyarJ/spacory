@@ -55,10 +55,10 @@ input. Useful env overrides:
 - `CLAUDE_MODEL` — pin a specific model; defaults to the session default.
 
 > **Permissions:** headless runs only execute commands the permission mode/allowlist
-> permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, and `gh run`,
-> but the agents also use **`gh issue`** (Product creates issues; Engineer reads/comments
-> on them). Add `Bash(gh issue:*)` to the allowlist, or run with
-> `CLAUDE_PERMISSION_MODE=bypassPermissions`, so a headless run doesn't stall.
+> permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, `gh run`,
+> `gh issue` (Product creates issues; Engineer reads/comments on them), and
+> `.agents/notify.sh` (the Telegram helper). Otherwise run with
+> `CLAUDE_PERMISSION_MODE=bypassPermissions` so a headless run doesn't stall.
 
 ### Manual: feed the prompt yourself
 
@@ -120,9 +120,22 @@ itself, since the issue is its only spec.
 
 ## Telegram setup
 
-Both prompts post a Telegram message at the end via the Bot API. **Credentials are
-never stored in the committed prompt files** — they live in a gitignored env file (or,
-in CI, repository secrets). To enable notifications:
+Both agents post a Telegram message at the end through one committed helper,
+[`notify.sh`](notify.sh) (`.agents/notify.sh "<message>"`). The helper loads
+credentials, sends via the Bot API, and exits cleanly if Telegram isn't configured —
+so the prompts never embed a token and headless runs need just one permission rule
+(`Bash(.agents/notify.sh:*)`, already in `.claude/settings.json`).
+
+> **Sandbox & network:** Claude Code's Bash sandbox blocks outbound network by default,
+> *independently of* the permission allowlist — so allowing the command is not enough.
+> `.claude/settings.json` therefore also opens `api.telegram.org` via
+> `sandbox.network.allowedDomains`. Permissions gate *what runs* (the helper); the
+> sandbox gates *what it can reach* (only Telegram). `bypassPermissions` skips prompts
+> but does **not** lift the network sandbox, so the domain allowlist is required either
+> way.
+
+**Credentials are never stored in the committed prompt files** — they live in a
+gitignored env file (or, in CI, repository secrets). To enable notifications:
 
 1. **Create a bot** — message [@BotFather](https://t.me/BotFather) on Telegram, send
    `/newbot`, and copy the **bot token** it gives you.

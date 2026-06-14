@@ -121,38 +121,27 @@ Constraints:
 ## Step 6 — Post a Telegram message (done or blocked)
 
 When you finish — whether you shipped a PR or got blocked on a clarification — send a
-short Telegram message.
+short Telegram message via the repo's notify helper, `.agents/notify.sh`. It loads
+credentials from the gitignored `.agents/.env` (or CI-exported `TELEGRAM_BOT_TOKEN` /
+`TELEGRAM_CHAT_ID`) and, if neither is present, prints a notice and exits cleanly — so
+it is always safe to call and never hardcodes a token in this committed prompt.
 
-Credentials are NOT stored here. They live in the gitignored `.agents/.env` (copied
-from `.agents/.env.example`); in CI they are injected as repository secrets. Never
-hardcode a token in this committed prompt file. Load them, then send only if present:
+Send ONE message — the done message, or the blocked message if you stopped for
+clarification:
 
 ```bash
-# Load credentials from the gitignored .agents/.env if it exists; otherwise rely on
-# the environment (e.g. CI secrets already exported as TELEGRAM_BOT_TOKEN/CHAT_ID).
-set -a; [ -f .agents/.env ] && . .agents/.env; set +a
-
-if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-  echo "Telegram not configured (.agents/.env missing) — skipping send; state the outcome in your final output instead."
-else
-  # Send ONE of these — the done message, or the blocked message if you stopped for clarification.
-
-  # Done:
-  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "parse_mode=Markdown" \
-    --data-urlencode "text=🛠️ *Spacory Engineer Agent*
+# Done:
+.agents/notify.sh "🛠️ *Spacory Engineer Agent*
 ✅ Issue #<n> implemented — PR: <pr-url>
 Checks: check + tsc + tests passing."
 
-  # Blocked:
-  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "parse_mode=Markdown" \
-    --data-urlencode "text=🛠️ *Spacory Engineer Agent*
+# Blocked (send this INSTEAD if you stopped for clarification):
+.agents/notify.sh "🛠️ *Spacory Engineer Agent*
 ⛔ Issue #<n> blocked — needs clarification (commented on the issue)."
-fi
 ```
+
+If the helper reports Telegram isn't configured, just state the outcome in your final
+output instead.
 
 ## Operating principles
 
