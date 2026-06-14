@@ -89,12 +89,26 @@ majors run on Node 24, clearing the deprecation warnings.
 
 **Decision.** `DimensionsLayer` draws each wall's length near its midpoint. The
 label is counter-scaled by `1/view.scale` (one inner unit becomes one screen
-pixel), so font size and offset stay constant on screen at any zoom. Walls
+pixel), so the **font stays a constant size on screen at any zoom**. Walls
 shorter than 24px on screen get no label. Labels are `pointer-events: none`.
 
-**Why.** Everything inside the canvas `<g>` is scaled by `view.scale`, so plain
-`<text>` would shrink/grow into illegibility; counter-scaling keeps it readable
-without a separate screen-space pass. Hiding labels on tiny walls avoids text
-overflowing the wall it describes. Non-interactive labels never interfere with
-the geometry-based hit-testing for drawing/selecting/moving. The cm → unit
-formatting is a pure, tested function (`src/app/format.ts`).
+**Why constant size.** Everything inside the canvas `<g>` is scaled by
+`view.scale`, so plain `<text>` would shrink/grow into illegibility;
+counter-scaling keeps it readable without a separate screen-space pass. This is
+the same constant-size labelling that Figma, CAD tools, and map UIs use — a
+label is an annotation about the wall, not part of it, so it shouldn't grow with
+the wall. (A label can therefore look small against a wall zoomed to fill the
+viewport; that is the intended trade-off, not a bug.) Hiding labels on tiny
+walls avoids text overflowing the wall it describes. Non-interactive labels
+never interfere with the geometry-based hit-testing for
+drawing/selecting/moving. The cm → unit formatting is a pure, tested function
+(`src/app/format.ts`).
+
+**Why a thickness-aware offset.** The font is screen-constant, but a wall's
+`thickness` lives in world units, so its on-screen half-thickness
+(`thickness/2 * scale`) grows as you zoom in. A label offset by a constant from
+the *centreline* would be swallowed by the thickening wall — overlap that worsens
+the more you zoom. So the perpendicular offset is `thickness/2 * scale +
+LABEL_GAP_PX`: it clears the wall's *drawn edge* by a constant `LABEL_GAP_PX`
+(8px) at every zoom. (Inner units are screen pixels because the net scale inside
+the counter-scaled group is 1.)

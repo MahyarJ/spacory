@@ -4,8 +4,12 @@ import { getPointOnWall, getWallAngle, getWallLength } from "@geometry/wall";
 
 /** On-screen font size (px) for length labels — constant regardless of zoom. */
 const FONT_PX = 12;
-/** Perpendicular offset (px) lifting the label just off the wall centreline. */
-const LABEL_OFFSET_PX = 8;
+/**
+ * Constant on-screen gap (px) between the wall's drawn edge and the label. The
+ * label clears the wall by this much at every zoom — see the thickness-aware
+ * offset below.
+ */
+const LABEL_GAP_PX = 8;
 /**
  * Walls shorter than this on screen (px) get no label: there isn't room for it
  * to read cleanly, so we hide it rather than let it overflow the wall.
@@ -17,8 +21,15 @@ const MIN_ON_SCREEN_PX = 24;
  *
  * Legibility approach: the label is **counter-scaled** by `1/view.scale`. The
  * enclosing canvas `<g>` scales everything by `view.scale`, so a `scale(1/s)`
- * here makes one inner unit equal one screen pixel — `FONT_PX` and
- * `LABEL_OFFSET_PX` stay constant on screen at any zoom.
+ * here makes one inner unit equal one screen pixel — `FONT_PX` stays a constant
+ * size on screen at any zoom, and inner `y` values are read straight as screen
+ * pixels.
+ *
+ * Clearing the wall: the wall's thickness lives in world units, so its
+ * on-screen half-thickness (`thickness/2 * scale`) grows as you zoom in.
+ * Offsetting the label by a constant from the *centreline* would let the
+ * thickening wall swallow it, so the offset is **thickness-aware**: it lifts the
+ * label off the wall's drawn edge by a constant `LABEL_GAP_PX` at every zoom.
  *
  * The layer reads `plan.walls` from the store, so it re-renders live as walls
  * are drawn, moved (including mid-drag), and deleted. It is non-interactive
@@ -42,6 +53,11 @@ export function DimensionsLayer() {
         // label lands on the wall's other side, which stays readable.
         if (angleDeg > 90 || angleDeg < -90) angleDeg += 180;
 
+        // Lift the label off the wall's drawn edge (not its centreline) by a
+        // constant on-screen gap. Inner units are screen px (net scale is 1),
+        // and the wall's on-screen half-thickness is `thickness/2 * scale`.
+        const offsetPx = (w.thickness / 2) * scale + LABEL_GAP_PX;
+
         return (
           <g
             key={w.id}
@@ -49,7 +65,7 @@ export function DimensionsLayer() {
           >
             <text
               x={0}
-              y={-LABEL_OFFSET_PX}
+              y={-offsetPx}
               textAnchor="middle"
               fontSize={FONT_PX}
               fontFamily="var(--sp-font)"
