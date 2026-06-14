@@ -20,14 +20,14 @@ import {
   THEME_KEY,
   type ThemeMode,
 } from "./theming";
+import {
+  DEFAULT_VIEW,
+  loadPersistedView,
+  savePersistedView,
+  type ViewState,
+} from "./viewport";
 
 export type Tool = "select" | "wall" | "window" | "door" | "pan";
-
-interface ViewState {
-  panX: number;
-  panY: number;
-  scale: number;
-}
 
 interface AppState {
   plan: Plan;
@@ -80,6 +80,36 @@ function commit(next: Plan) {
   persist();
 }
 
+/**
+ * Trailing throttle for viewport autosave: writes at most once per `delayMs`
+ * so continuous wheel/drag stays smooth, while still persisting the final
+ * resting position. Separate from the history autosave above — the viewport is
+ * not part of the Plan or the undo history.
+ */
+function throttleSaveView(delayMs: number) {
+  let lastSave = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: ViewState | null = null;
+  const flush = () => {
+    timer = null;
+    if (!pending) return;
+    savePersistedView(pending);
+    pending = null;
+    lastSave = Date.now();
+  };
+  return (view: ViewState) => {
+    pending = view;
+    const wait = delayMs - (Date.now() - lastSave);
+    if (wait <= 0) {
+      flush();
+    } else if (timer === null) {
+      timer = setTimeout(flush, wait);
+    }
+  };
+}
+
+const saveView = throttleSaveView(200);
+
 function translateWall(w: Wall, dx: number, dy: number): Wall {
   return {
     ...w,
@@ -91,7 +121,7 @@ function translateWall(w: Wall, dx: number, dy: number): Wall {
 export const useApp = create<AppState>((set, get) => ({
   plan: history.present,
   tool: "wall",
-  view: { panX: 0, panY: 0, scale: 1 },
+  view: loadPersistedView() ?? DEFAULT_VIEW,
   isPanning: false,
   setTool: (t) => set({ tool: t }),
   currentWallThickness: 10, // cm default
@@ -116,7 +146,12 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     set({ plan: history.present });
   },
-  setView: (fn) => set(({ view }) => ({ view: fn(view) })),
+  setView: (fn) =>
+    set(({ view }) => {
+      const next = fn(view);
+      saveView(next);
+      return { view: next };
+    }),
   setIsPanning: (p) => set({ isPanning: p }),
   selectNone: () => set({ selectedWalls: new Set(), selectedItems: new Set() }),
   selectWall: (id, additive) =>
