@@ -20,6 +20,7 @@ import {
   THEME_KEY,
   type ThemeMode,
 } from "./theming";
+import { throttle } from "./throttle";
 import {
   DEFAULT_VIEW,
   loadPersistedView,
@@ -80,35 +81,10 @@ function commit(next: Plan) {
   persist();
 }
 
-/**
- * Trailing throttle for viewport autosave: writes at most once per `delayMs`
- * so continuous wheel/drag stays smooth, while still persisting the final
- * resting position. Separate from the history autosave above — the viewport is
- * not part of the Plan or the undo history.
- */
-function throttleSaveView(delayMs: number) {
-  let lastSave = 0;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let pending: ViewState | null = null;
-  const flush = () => {
-    timer = null;
-    if (!pending) return;
-    savePersistedView(pending);
-    pending = null;
-    lastSave = Date.now();
-  };
-  return (view: ViewState) => {
-    pending = view;
-    const wait = delayMs - (Date.now() - lastSave);
-    if (wait <= 0) {
-      flush();
-    } else if (timer === null) {
-      timer = setTimeout(flush, wait);
-    }
-  };
-}
-
-const saveView = throttleSaveView(200);
+// Throttle viewport autosave so continuous wheel/drag stays smooth while still
+// persisting the resting position. Separate from the history autosave above —
+// the viewport is not part of the Plan or the undo history.
+const saveView = throttle(savePersistedView, 200);
 
 function translateWall(w: Wall, dx: number, dy: number): Wall {
   return {
