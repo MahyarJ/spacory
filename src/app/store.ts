@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { throttle } from "../util/throttle";
 import {
   commit as commitHistory,
   createHistory,
@@ -20,14 +21,14 @@ import {
   THEME_KEY,
   type ThemeMode,
 } from "./theming";
+import {
+  DEFAULT_VIEW,
+  loadPersistedView,
+  savePersistedView,
+  type ViewState,
+} from "./viewport";
 
 export type Tool = "select" | "wall" | "window" | "door" | "pan";
-
-interface ViewState {
-  panX: number;
-  panY: number;
-  scale: number;
-}
 
 interface AppState {
   plan: Plan;
@@ -80,6 +81,11 @@ function commit(next: Plan) {
   persist();
 }
 
+// Throttle viewport autosave so continuous wheel/drag stays smooth while still
+// persisting the resting position. Separate from the history autosave above —
+// the viewport is not part of the Plan or the undo history.
+const saveView = throttle(savePersistedView, 200);
+
 function translateWall(w: Wall, dx: number, dy: number): Wall {
   return {
     ...w,
@@ -91,7 +97,7 @@ function translateWall(w: Wall, dx: number, dy: number): Wall {
 export const useApp = create<AppState>((set, get) => ({
   plan: history.present,
   tool: "wall",
-  view: { panX: 0, panY: 0, scale: 1 },
+  view: loadPersistedView() ?? DEFAULT_VIEW,
   isPanning: false,
   setTool: (t) => set({ tool: t }),
   currentWallThickness: 10, // cm default
@@ -116,7 +122,12 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     set({ plan: history.present });
   },
-  setView: (fn) => set(({ view }) => ({ view: fn(view) })),
+  setView: (fn) =>
+    set(({ view }) => {
+      const next = fn(view);
+      saveView(next);
+      return { view: next };
+    }),
   setIsPanning: (p) => set({ isPanning: p }),
   selectNone: () => set({ selectedWalls: new Set(), selectedItems: new Set() }),
   selectWall: (id, additive) =>

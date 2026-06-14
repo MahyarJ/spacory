@@ -1,5 +1,6 @@
 import { assertNever, type Point, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
+import { clampScale } from "@app/viewport";
 import { hitItem, hitWall } from "@geometry/hit";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
 import { applyInverseViewTransform, snapToGrid } from "@geometry/snap";
@@ -374,7 +375,7 @@ export function FloorPlan() {
     const factor = Math.exp(delta * 0.001);
     const worldBefore = toWorld(e.clientX, e.clientY);
     setView((v) => {
-      const newScale = Math.min(8, Math.max(0.2, v.scale * factor));
+      const newScale = clampScale(v.scale * factor);
       const rect = svgRef.current!.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
