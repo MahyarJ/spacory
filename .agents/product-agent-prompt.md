@@ -133,51 +133,38 @@ actually created, one per line, with its number, title, and link** — built fro
 URLs you captured in Step 4 (never list an issue you didn't confirm was created).
 Include the count and any open questions now awaiting human input.
 
-Credentials are NOT stored here. They live in the gitignored `.agents/.env` (copied
-from `.agents/.env.example`); in CI they are injected as repository secrets. Never
-hardcode a token in this committed prompt file. Load them, then send only if present:
+Send the message via the repo's notify helper, `.agents/notify.sh`. It loads
+credentials from the gitignored `.agents/.env` (or CI-exported `TELEGRAM_BOT_TOKEN` /
+`TELEGRAM_CHAT_ID`) and, if neither is present, prints a notice and exits cleanly — so
+it is always safe to call and never hardcodes a token in this committed prompt.
 
 ```bash
-# Load credentials from the gitignored .agents/.env if it exists; otherwise rely on
-# the environment (e.g. CI secrets already exported as TELEGRAM_BOT_TOKEN/CHAT_ID).
-set -a; [ -f .agents/.env ] && . .agents/.env; set +a
-
-if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-  # SUCCESS — one "• #<n> <title> — <url>" line per issue you actually created.
-  # Example of an assembled message body:
-  #   🪐 *Spacory Product Agent*
-  #   Created 2 issue(s):
-  #   • #4 Export the current floor plan as a PNG image — https://github.com/OWNER/REPO/issues/4
-  #   • #5 Show each wall's length as an on-canvas label — https://github.com/OWNER/REPO/issues/5
-  #   Open questions for you: none
-  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "parse_mode=Markdown" \
-    --data-urlencode "text=🪐 *Spacory Product Agent*
+# SUCCESS — one "• #<n> <title> — <url>" line per issue you actually created, built
+# from the URLs you captured in Step 4. Example assembled body:
+#   🪐 *Spacory Product Agent*
+#   Created 2 issue(s):
+#   • #4 Export the current floor plan as a PNG image — https://github.com/OWNER/REPO/issues/4
+#   • #5 Show each wall's length as an on-canvas label — https://github.com/OWNER/REPO/issues/5
+#   Open questions for you: none
+.agents/notify.sh "🪐 *Spacory Product Agent*
 Created <N> issue(s):
 • #<n> <title> — <url>
 • #<n> <title> — <url>
 Open questions for you: <…or 'none'>"
-else
-  echo "Telegram not configured (.agents/.env missing) — skipping send; report the summary in your final output instead."
-fi
 ```
 
 **Blocked variant** — if the Step 0 preflight failed (gh not authenticated), send this
 instead of the summary (no issues were created, memory untouched):
 
 ```bash
-set -a; [ -f .agents/.env ] && . .agents/.env; set +a
-if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "parse_mode=Markdown" \
-    --data-urlencode "text=🪐 *Spacory Product Agent*
+.agents/notify.sh "🪐 *Spacory Product Agent*
 ⛔ Blocked: GitHub CLI is not authenticated (\`gh auth status\` failed). No issues
 created and project-memory.md was left untouched. Re-auth with:
 \`gh auth login -h github.com\`"
-fi
 ```
+
+If the helper reports Telegram isn't configured, just report the summary in your final
+output instead.
 
 ## Operating principles
 
