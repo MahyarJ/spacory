@@ -116,8 +116,10 @@ starts from current truth. **Record only issues you confirmed were created in St
 (you have their URL) — never mark an issue as "in flight" unless it actually exists on
 GitHub.
 
-- **Append a Changelog entry** dated today, listing the issue numbers/titles you
-  created and any new open questions you recorded.
+- **Prepend a Changelog entry** dated today at the **top** of the Changelog list
+  (the Changelog is newest-first / reverse-chronological — never append at the
+  bottom). List the issue numbers/titles you created and any new open questions you
+  recorded.
 - **Update "Current state"** if your reading revealed it had drifted from reality.
 - **Update "Known gaps & open questions"** — remove gaps now covered by an issue (note
   the issue number), and add any new gaps or questions you discovered.
