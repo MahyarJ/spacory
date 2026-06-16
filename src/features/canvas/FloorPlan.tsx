@@ -89,6 +89,26 @@ export function FloorPlan() {
         return;
       }
 
+      // Platform-aware undo/redo. Treat Cmd (macOS) or Ctrl (Win/Linux) as the
+      // trigger modifier. Any other modifier+key combo returns early so the
+      // single-letter cases below (h, s, [, ], arrows) don't fire while a
+      // modifier is held (e.g. Cmd+S must not toggle a door swing).
+      if (e.metaKey || e.ctrlKey) {
+        const key = e.key.toLowerCase();
+        if (key === "z") {
+          if (e.shiftKey) {
+            useApp.getState().redo();
+          } else {
+            useApp.getState().undo();
+          }
+          e.preventDefault();
+        } else if (key === "y") {
+          useApp.getState().redo();
+          e.preventDefault();
+        }
+        return;
+      }
+
       // Read grid size lazily so it stays current if the plan changes.
       const grid = useApp.getState().plan.meta.gridSize;
       const base = e.shiftKey ? 10 : 1;
