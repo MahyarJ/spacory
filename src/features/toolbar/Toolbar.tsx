@@ -12,6 +12,11 @@ export function Toolbar() {
   const setTool = useApp((s) => s.setTool);
   const undo = useApp((s) => s.undo);
   const redo = useApp((s) => s.redo);
+  const selectedWalls = useApp((s) => s.selectedWalls);
+
+  // The wall options row carries the new-wall thickness presets (wall tool) and
+  // the length editor for a single selected wall — show it when either applies.
+  const showWallOptions = tool === "wall" || selectedWalls.size === 1;
 
   const ToolbarButton = (props: {
     tool: Parameters<typeof setTool>[0];
@@ -48,7 +53,7 @@ export function Toolbar() {
           Tip: Right-drag to pan, Wheel to zoom
         </span>
       </div>
-      {tool === "wall" && (
+      {showWallOptions && (
         <div className={styles.toolbar}>
           <WallOptions />
         </div>

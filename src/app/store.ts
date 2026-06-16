@@ -1,3 +1,4 @@
+import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
 import {
@@ -49,6 +50,12 @@ interface AppState {
   selectItem: (id: string, additive?: boolean) => void;
   deleteSelected: () => void;
   nudgeSelectedWallThickness: (delta: number) => void;
+  /**
+   * Resize the single selected wall to an exact length (cm), anchoring `a` and
+   * moving `b` along the wall's direction. No-ops unless exactly one wall is
+   * selected and `length` is a finite value ≥ MIN_WALL_LENGTH.
+   */
+  setSelectedWallLength: (length: number) => void;
   toggleSelectedDoorHingeEdge: () => void;
   toggleSelectedDoorSwingSide: () => void;
   themeMode: ThemeMode;
@@ -177,6 +184,24 @@ export const useApp = create<AppState>((set, get) => ({
             }
           : w,
       ),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+  },
+  setSelectedWallLength: (length) => {
+    const { selectedWalls, plan } = get();
+    if (selectedWalls.size !== 1) return;
+    if (!Number.isFinite(length) || length < MIN_WALL_LENGTH) return;
+    const [id] = selectedWalls;
+    const wall = plan.walls.find((w) => w.id === id);
+    if (!wall) return;
+    const resized = resizeWallToLength(wall, length);
+    // Skip a no-op resize so we don't push an empty undo step.
+    if (resized.b.x === wall.b.x && resized.b.y === wall.b.y) return;
+    const next: Plan = {
+      ...plan,
+      walls: plan.walls.map((w) => (w.id === id ? resized : w)),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);

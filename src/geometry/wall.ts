@@ -15,6 +15,27 @@ export function getWallDirection(w: Wall): Point {
   return { x: (w.b.x - w.a.x) / len, y: (w.b.y - w.a.y) / len };
 }
 
+/** Smallest length (cm) a wall may be resized to. */
+export const MIN_WALL_LENGTH = 1;
+
+/**
+ * Resize a wall to an exact length, keeping endpoint `a` fixed and moving `b`
+ * along the wall's current direction so that `|a→b|` equals `targetLength`. The
+ * wall's angle is preserved. A degenerate zero-length wall (`a === b`) has no
+ * direction, so it is returned unchanged.
+ */
+export function resizeWallToLength(w: Wall, targetLength: number): Wall {
+  if (getWallLength(w) === 0) return w;
+  const dir = getWallDirection(w);
+  return {
+    ...w,
+    b: {
+      x: w.a.x + dir.x * targetLength,
+      y: w.a.y + dir.y * targetLength,
+    },
+  };
+}
+
 export function getPointOnWall(w: Wall, offset: number): Point {
   const dir = getWallDirection(w);
   return {

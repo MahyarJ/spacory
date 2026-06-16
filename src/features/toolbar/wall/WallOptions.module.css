@@ -27,3 +27,23 @@
 .active {
   outline: 2px solid var(--sp-accent);
 }
+
+.lengthField {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lengthInput {
+  width: 72px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--sp-panel);
+  background: var(--sp-panel);
+  color: var(--sp-text);
+}
+
+.unit {
+  font-size: 12px;
+  opacity: 0.8;
+}
