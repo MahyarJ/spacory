@@ -15,10 +15,12 @@ export function WallOptions() {
   const walls = useApp((s) => s.plan.walls);
   const units = useApp((s) => s.plan.meta.units);
 
-  // Length editing is a single-wall affair (see issue scope): only surface the
-  // field when exactly one wall is selected.
+  // Length editing is a single-wall affair (see issue scope) and walls are only
+  // selectable with the select tool. Gate on that tool too: a selection
+  // persists across tool switches, so without it the field would leak into the
+  // window/door/pan toolbars.
   const selectedWall =
-    selectedWalls.size === 1
+    tool === "select" && selectedWalls.size === 1
       ? walls.find((w) => selectedWalls.has(w.id))
       : undefined;
 
