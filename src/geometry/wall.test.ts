@@ -7,6 +7,7 @@ import {
   getWallDirection,
   getWallLength,
   projectPointToWall,
+  resizeWallToLength,
 } from "./wall";
 
 const wall = (
@@ -46,6 +47,43 @@ describe("getWallDirection", () => {
     const d = getWallDirection(wall(2, 2, 2, 2));
     expect(Number.isFinite(d.x)).toBe(true);
     expect(Number.isFinite(d.y)).toBe(true);
+  });
+});
+
+describe("resizeWallToLength", () => {
+  it("resizes a horizontal wall, keeping a fixed and angle unchanged", () => {
+    const r = resizeWallToLength(wall(10, 5, 60, 5), 200);
+    expect(r.a).toEqual({ x: 10, y: 5 });
+    expect(r.b).toEqual({ x: 210, y: 5 });
+    expect(getWallLength(r)).toBeCloseTo(200);
+  });
+
+  it("resizes a vertical wall, keeping a fixed and angle unchanged", () => {
+    const r = resizeWallToLength(wall(5, 10, 5, 60), 200);
+    expect(r.a).toEqual({ x: 5, y: 10 });
+    expect(r.b).toEqual({ x: 5, y: 210 });
+    expect(getWallLength(r)).toBeCloseTo(200);
+  });
+
+  it("resizes a diagonal wall, preserving its angle", () => {
+    const original = wall(0, 0, 3, 4); // length 5, angle atan2(4,3)
+    const r = resizeWallToLength(original, 10);
+    expect(getWallLength(r)).toBeCloseTo(10);
+    expect(getWallAngle(r)).toBeCloseTo(getWallAngle(original));
+    expect(r.b.x).toBeCloseTo(6);
+    expect(r.b.y).toBeCloseTo(8);
+  });
+
+  it("preserves other wall fields (id, thickness)", () => {
+    const r = resizeWallToLength(wall(0, 0, 10, 0, 15, "wx"), 50);
+    expect(r.id).toBe("wx");
+    expect(r.thickness).toBe(15);
+  });
+
+  it("leaves a degenerate zero-length wall unchanged", () => {
+    const degenerate = wall(7, 7, 7, 7);
+    const r = resizeWallToLength(degenerate, 100);
+    expect(r).toEqual(degenerate);
   });
 });
 
