@@ -5,19 +5,12 @@ import { HintBar } from "./HintBar";
 import { ProjectActions } from "./ProjectActions";
 import { ThemeSwitch } from "./ThemeSwitch";
 import styles from "./Toolbar.module.css";
-import { WallOptions } from "./wall/WallOptions";
 
 export function Toolbar() {
   const tool = useApp((s) => s.tool);
   const setTool = useApp((s) => s.setTool);
   const undo = useApp((s) => s.undo);
   const redo = useApp((s) => s.redo);
-  const selectedWalls = useApp((s) => s.selectedWalls);
-
-  // The wall options row carries the new-wall thickness presets (wall tool) and
-  // the length editor for a single selected wall — show it when either applies.
-  const showWallOptions =
-    tool === "wall" || (tool === "select" && selectedWalls.size === 1);
 
   const ToolbarButton = (props: {
     tool: Parameters<typeof setTool>[0];
@@ -54,11 +47,6 @@ export function Toolbar() {
           Tip: Right-drag to pan, Wheel to zoom
         </span>
       </div>
-      {showWallOptions && (
-        <div className={styles.toolbar}>
-          <WallOptions />
-        </div>
-      )}
       <HintBar />
     </>
   );

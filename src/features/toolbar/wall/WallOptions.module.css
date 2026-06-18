@@ -1,3 +1,19 @@
+/* Floating overlay anchored to the top-left of the canvas. Positioned (rather
+   than a toolbar row) so it never reflows the canvas when it toggles. */
+.bar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-grid);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
 .wallOptions {
   display: flex;
   align-items: center;
