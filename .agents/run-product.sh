@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# Run the Spacory **Product Agent** in a fresh, headless Claude session.
+# Run the Spacory **Product Agent** in a fresh, headless Claude session in ONE of
+# its two modes. The Product Agent is one role (product) in two capacities —
+# see .agents/product-agent-prompt.md for the full contract.
 #
-# It reads project-memory.md, surveys open/closed GitHub issues, creates new
-# well-specified issues, updates project-memory.md, and (optionally) posts a
-# Telegram summary. See .agents/product-agent-prompt.md for the full role.
+#   cycle       read project-memory.md + issues → create/refine issues (default)
+#   acceptance  judge a PR vs the issue's criteria → posts an acceptance comment
 #
 # Usage:
-#   .agents/run-product.sh
-#   .agents/run-product.sh "focus on PNG/SVG export this cycle"   # extra steer
+#   .agents/run-product.sh                                  # run a product cycle
+#   .agents/run-product.sh "focus on PNG/SVG export"        # cycle + extra steer
+#   .agents/run-product.sh acceptance 14                    # acceptance-test PR #14
+#   .agents/run-product.sh acceptance 14 "watch mobile UX"  # acceptance + extra note
 #
 # Env overrides:
 #   CLAUDE_PERMISSION_MODE   default: acceptEdits
@@ -17,8 +20,8 @@
 #
 # Note: for an unattended headless run to not stall, the GitHub commands the
 # agent uses must be permitted. This repo's .claude/settings.json allows git and
-# `gh pr/run`, but you likely also need `Bash(gh issue:*)` (the Product Agent
-# creates issues). Either add that to the allowlist, or run with
+# `gh pr/run`; cycle mode also needs `Bash(gh issue:*)` (it creates issues).
+# Either add that to the allowlist, or run with
 # CLAUDE_PERMISSION_MODE=bypassPermissions in a trusted environment.
 set -euo pipefail
 
@@ -30,13 +33,34 @@ command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PA
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
 PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
+
+MODE="cycle"
+if [ "${1:-}" = "acceptance" ]; then
+  MODE="acceptance"
+  shift
+  PR="${1:-}"
+  PR="${PR#\#}"   # tolerate a leading '#'
+  case "$PR" in
+    ''|*[!0-9]*)
+      echo "usage: $(basename "$0") acceptance <pr-number> [extra instruction]" >&2
+      exit 2
+      ;;
+  esac
+  shift
+fi
 EXTRA="${*:-}"
 
-TASK="Run a product cycle for this repo."
-[ -n "$EXTRA" ] && TASK="$TASK Additional focus for this run: $EXTRA"
+if [ "$MODE" = "acceptance" ]; then
+  TASK="Acceptance-test pull request #$PR (Product Agent acceptance mode): verify it against the linked issue's acceptance criteria and user value, leave a comment, and make no code changes or project-memory.md edits."
+  [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
+  echo "→ Product Agent  [acceptance] #$PR  (permission-mode: $PERMISSION_MODE)" >&2
+else
+  TASK="Run a product cycle for this repo."
+  [ -n "$EXTRA" ] && TASK="$TASK Additional focus for this run: $EXTRA"
+  echo "→ Product Agent  [cycle]  (permission-mode: $PERMISSION_MODE)" >&2
+fi
 
 cd "$REPO_ROOT"
-echo "→ Product Agent  (permission-mode: $PERMISSION_MODE)" >&2
 
 args=( -p "$TASK"
        --append-system-prompt-file "$PROMPT"
