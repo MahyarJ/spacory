@@ -1,8 +1,15 @@
 # Spacory Agents
 
 A lightweight **two-agent development workflow**. Two agents collaborate
-asynchronously through **GitHub Issues** — they never share a session, never depend on
-each other being "live," and are each spun up fresh per run.
+asynchronously through **GitHub** (Issues and PR comments) — they never share a session,
+never depend on each other being "live," and are each spun up fresh per run.
+
+There are exactly **two roles**, each exercised in more than one *capacity*. A PR
+reviewer who leaves comments is the **Engineer Agent** (review capacity); the one who
+addresses those comments is the **Engineer Agent** (resolve capacity); the one who
+acceptance-tests in the product voice is the **Product Agent** (acceptance capacity). No
+new agent "types" are invented — same two roles, different modes, each a fresh headless
+run coordinating through GitHub.
 
 ```
                  reads/writes
@@ -29,21 +36,64 @@ each other being "live," and are each spun up fresh per run.
 |---|---|---|
 | **Role** | Senior PM / analyst — the "what & why" | Senior engineer — the "how" |
 | **Prompt** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
-| **Input** | repo path | a single GitHub Issue number |
-| **Reads** | `project-memory.md` (first), then the repo selectively, plus existing issues | **only** the assigned issue (+ its comments); the source code to implement it |
-| **Writes** | GitHub Issues; updates `project-memory.md`; Telegram summary | a branch + PR referencing the issue; Telegram done/blocked |
-| **Never** | writes app code; revisits settled architecture | reads `project-memory.md` or other product context; guesses on ambiguity |
+| **Modes** | `cycle` · `acceptance` | `implement` · `review` · `resolve` |
+| **Never** | writes app code; revisits settled architecture; merges | reads `project-memory.md` or other product context; guesses on ambiguity; merges |
+
+Each prompt is **mode-aware**: the task it's given selects the mode, and it runs only
+that mode per run.
+
+### Engineer Agent modes
+
+| Mode | Input | Reads | Writes |
+|---|---|---|---|
+| `implement` | an Issue # | **only** that issue + the source code | a branch + PR referencing the issue |
+| `review` | a PR # | the PR diff + its linked issue (read-only on code) | a code-review **comment** on the PR |
+| `resolve` | a PR # | the PR's comments + diff | new commits pushed to the PR's branch |
+
+### Product Agent modes
+
+| Mode | Input | Reads | Writes |
+|---|---|---|---|
+| `cycle` | repo | `project-memory.md` (first), repo selectively, existing issues | GitHub Issues; updates `project-memory.md`; Telegram |
+| `acceptance` | a PR # | the PR diff + the linked issue's acceptance criteria (may read memory, never writes it) | an acceptance **comment** on the PR |
+
+### Reviewing a PR: fan out, then resolve manually
+
+When a PR is open, fan out the two **independent, read-only** review passes — they share
+nothing and post separate PR comments, so run them in parallel:
+
+```bash
+.agents/run-engineer.sh review 14 &     # Engineer: code review comment
+.agents/run-product.sh  acceptance 14 &  # Product: acceptance comment
+wait
+```
+
+Then **you** read the comments and, if there's anything to fix, re-run the Engineer
+Agent in resolve mode on that PR — a fresh, stateless run whose spec is the PR's
+comments:
+
+```bash
+.agents/run-engineer.sh resolve 14       # addresses the comments, pushes to the branch
+```
+
+There is intentionally **no coordinating/orchestration script** — every step is a fresh
+headless run that coordinates only through GitHub. Merging stays a human action.
 
 ## How to invoke
 
 ### Quickest: the wrapper scripts
 
 ```bash
+# Product Agent
 .agents/run-product.sh                 # run a product cycle (create/refine issues)
 .agents/run-product.sh "focus on export"   # optional extra steer for this run
+.agents/run-product.sh acceptance 14   # acceptance-test PR #14 (posts a comment)
 
-.agents/run-engineer.sh 2              # implement issue #2 (opens a PR)
+# Engineer Agent
+.agents/run-engineer.sh 2              # implement issue #2 (opens a PR) — default mode
 .agents/run-engineer.sh '#2' "note"    # leading # tolerated; optional extra note
+.agents/run-engineer.sh review 14      # review PR #14 (posts a comment, no code changes)
+.agents/run-engineer.sh resolve 14     # resolve PR #14's review comments (pushes fixes)
 ```
 
 Each script launches a **fresh, headless** `claude` session (`-p`) with the matching
@@ -63,29 +113,35 @@ input. Useful env overrides:
 ### Manual: feed the prompt yourself
 
 These prompts are system prompts — feed the file's contents as the agent's system
-prompt, then give it the run-specific input below.
+prompt, then give it the run-specific input below. **The task selects the mode** (the
+prompt branches on it), so the task wording matters.
 
-**Product Agent** — pass the repository path:
+**Product Agent** — the task picks `cycle` or `acceptance`:
 
 ```
 System prompt: contents of .agents/product-agent-prompt.md
-Task:          "Run a product cycle for the repo at /path/to/spacory."
+Task (cycle):       "Run a product cycle for the repo at /path/to/spacory."
+Task (acceptance):  "Acceptance-test pull request #14."
 ```
 
-It reads `project-memory.md`, checks open/closed issues, creates new issues, updates
-`project-memory.md`, and posts a Telegram summary.
+In `cycle` it reads `project-memory.md`, surveys issues, creates new issues, updates
+`project-memory.md`, and posts a Telegram summary. In `acceptance` it judges PR #14
+against the linked issue's acceptance criteria and posts a PR comment (no memory edits).
 
-**Engineer Agent** — pass the issue number:
+**Engineer Agent** — the task picks `implement`, `review`, or `resolve`:
 
 ```
 System prompt: contents of .agents/engineer-agent-prompt.md
-Task:          "Implement GitHub issue #42."
+Task (implement):  "Implement GitHub issue #42."
+Task (review):     "Review pull request #14."
+Task (resolve):    "Resolve the review comments on pull request #14."
 ```
 
-It reads only that issue, implements it on a branch, runs the project's checks
-(`npm run check && npx tsc -b && npm test`), opens a PR that references the issue, and
-posts a Telegram done/blocked message. If the issue is ambiguous it comments on the
-issue asking for clarification and stops instead of guessing.
+In `implement` it reads only that issue, implements it on a branch, runs the project's
+checks (`npm run check && npx tsc -b && npm test`), opens a PR referencing the issue, and
+posts a Telegram done/blocked message — asking on the issue and stopping if it's
+ambiguous. In `review` it posts a code-review comment without touching code. In `resolve`
+it addresses the PR's comments and pushes to the branch.
 
 > Both agents use the `gh` CLI for GitHub. Make sure `gh auth status` is logged in to
 > an account with access to the repo before running.
