@@ -44,13 +44,10 @@ export function FloorPlan() {
   const selectNone = useApp((s) => s.selectNone);
   const marquee = useApp((s) => s.marquee);
   const setMarquee = useApp((s) => s.setMarquee);
+  const canvasSize = useApp((s) => s.canvasSize);
 
   const [drawingWall, setDrawingWall] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
-  const [size, setSize] = useState<{ w: number; h: number }>({
-    w: 800,
-    h: 600,
-  });
   const [opening, setOpening] = useState<Opening | null>(null);
   const [dragging, setDragging] = useState<boolean>(false);
   const [moving, setMoving] = useState<null | {
@@ -63,7 +60,10 @@ export function FloorPlan() {
     const resize = () => {
       const el = svgRef.current;
       if (!el) return;
-      setSize({ w: el.clientWidth, h: el.clientHeight });
+      useApp.getState().setCanvasSize({
+        width: el.clientWidth,
+        height: el.clientHeight,
+      });
     };
     resize();
     window.addEventListener("resize", resize);
@@ -466,7 +466,7 @@ export function FloorPlan() {
       >
         <title>Floor plan canvas</title>
         <g transform={viewTransform}>
-          <GridLayer width={size.w} height={size.h} />
+          <GridLayer width={canvasSize.width} height={canvasSize.height} />
           <WallsLayer />
           <ItemsLayer />
           <DimensionsLayer />
