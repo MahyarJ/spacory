@@ -36,14 +36,16 @@ export function getPlanBounds(plan: Plan): Bounds | null {
     has = true;
   };
 
+  const wallsById = new Map<string, (typeof plan.walls)[number]>();
   for (const w of plan.walls) {
+    wallsById.set(w.id, w);
     const pad = w.thickness / 2;
     include(w.a.x, w.a.y, pad);
     include(w.b.x, w.b.y, pad);
   }
 
   for (const item of plan.items) {
-    const wall = plan.walls.find((w) => w.id === item.wallAttach.wallId);
+    const wall = wallsById.get(item.wallAttach.wallId);
     if (!wall) continue;
     const pad = item.thickness / 2;
     const start = getPointOnWall(wall, item.wallAttach.offset);

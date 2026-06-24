@@ -147,7 +147,12 @@ export const useApp = create<AppState>((set, get) => ({
       saveView(next);
       return { view: next };
     }),
-  setCanvasSize: (size) => set({ canvasSize: size }),
+  setCanvasSize: (size) =>
+    set(({ canvasSize }) =>
+      size.width === canvasSize.width && size.height === canvasSize.height
+        ? {}
+        : { canvasSize: size },
+    ),
   fitView: () => {
     const { plan, canvasSize, setView } = get();
     const next = computeFitView(getPlanBounds(plan), canvasSize);
