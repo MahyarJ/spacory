@@ -60,8 +60,9 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).** Pan/zoom now persists across reloads
   via a separate `view` autosave (`src/app/viewport.ts`).
-- **No "fit to content / reset view" — in flight (#9).** Pairs with #2; frames the
-  whole plan in one click. Needs a pure plan-bounds helper + framed-viewport math.
+- **No "fit to content" — in flight (#9).** Pairs with #2; frames the
+  whole plan in one click. Pure plan-bounds helper (`src/geometry/bounds.ts`) and
+  framed-viewport math (`src/app/viewport.ts`) are implemented;
 - **No miter limit / bevel fallback** — very acute wall angles produce long
   spike-like miters; a miter limit is noted as a possible future tweak.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
