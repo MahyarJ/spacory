@@ -6,12 +6,14 @@
 #
 #   cycle       read project-memory.md + issues → create/refine issues (default)
 #   acceptance  judge a PR vs the issue's criteria → posts an acceptance comment
+#   clarify     answer product questions on an issue/PR → posts a reply comment
 #
 # Usage:
 #   .agents/run-product.sh                                  # run a product cycle
 #   .agents/run-product.sh "focus on PNG/SVG export"        # cycle + extra steer
 #   .agents/run-product.sh acceptance 14                    # acceptance-test PR #14
 #   .agents/run-product.sh acceptance 14 "watch mobile UX"  # acceptance + extra note
+#   .agents/run-product.sh clarify 9                        # answer product Qs on #9
 #
 # Env overrides:
 #   CLAUDE_PERMISSION_MODE   default: acceptEdits
@@ -34,31 +36,42 @@ command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PA
 
 PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
 
+# acceptance and clarify both take a number; cycle is the default and takes none.
 MODE="cycle"
-if [ "${1:-}" = "acceptance" ]; then
-  MODE="acceptance"
-  shift
-  PR="${1:-}"
-  PR="${PR#\#}"   # tolerate a leading '#'
-  case "$PR" in
-    ''|*[!0-9]*)
-      echo "usage: $(basename "$0") acceptance <pr-number> [extra instruction]" >&2
-      exit 2
-      ;;
-  esac
-  shift
-fi
+case "${1:-}" in
+  acceptance|clarify)
+    MODE="$1"
+    shift
+    NUM="${1:-}"
+    NUM="${NUM#\#}"   # tolerate a leading '#'
+    case "$NUM" in
+      ''|*[!0-9]*)
+        echo "usage: $(basename "$0") $MODE <number> [extra instruction]" >&2
+        exit 2
+        ;;
+    esac
+    shift
+    ;;
+esac
 EXTRA="${*:-}"
 
-if [ "$MODE" = "acceptance" ]; then
-  TASK="Acceptance-test pull request #$PR (Product Agent acceptance mode): verify it against the linked issue's acceptance criteria and user value, leave a comment, and make no code changes or project-memory.md edits."
-  [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
-  echo "→ Product Agent  [acceptance] #$PR  (permission-mode: $PERMISSION_MODE)" >&2
-else
-  TASK="Run a product cycle for this repo."
-  [ -n "$EXTRA" ] && TASK="$TASK Additional focus for this run: $EXTRA"
-  echo "→ Product Agent  [cycle]  (permission-mode: $PERMISSION_MODE)" >&2
-fi
+case "$MODE" in
+  acceptance)
+    TASK="Acceptance-test pull request #$NUM (Product Agent acceptance mode): verify it against the linked issue's acceptance criteria and user value, leave a comment, and make no code changes or project-memory.md edits."
+    [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
+    echo "→ Product Agent  [acceptance] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
+    ;;
+  clarify)
+    TASK="Answer the product questions on #$NUM (Product Agent clarify mode): reply on the thread with product decisions, defer any technical questions to the Engineer Agent, update the issue/project-memory.md only if an answer changes the spec, and make no code changes."
+    [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
+    echo "→ Product Agent  [clarify] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
+    ;;
+  *)
+    TASK="Run a product cycle for this repo."
+    [ -n "$EXTRA" ] && TASK="$TASK Additional focus for this run: $EXTRA"
+    echo "→ Product Agent  [cycle]  (permission-mode: $PERMISSION_MODE)" >&2
+    ;;
+esac
 
 cd "$REPO_ROOT"
 

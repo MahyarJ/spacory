@@ -19,6 +19,7 @@ three are the **same role** — a senior engineer — exercised in a different c
 | **implement** | "Implement GitHub issue #N" | the issue (its only spec) | a branch + PR referencing the issue |
 | **review** | "Review pull request #N" | the PR diff + its linked issue | a code-review **comment** on the PR — **no code changes** |
 | **resolve** | "Resolve the review comments on pull request #N" | the PR's comments + diff | new commits on the PR's branch addressing the comments |
+| **clarify** | "Answer the technical questions / apply a settled non-code fix on PR / issue #N" | the open questions (or a settled decision) + the diff/code | a reply **comment** answering **technical** questions + any **non-code** PR edit (title/description) the decision entails — **code changes belong to `resolve`** |
 
 **Why review and resolve are separate runs.** They are deliberately split (and usually
 run as separate agents): the engineer who reviews a PR is not the one who wrote it or
@@ -233,6 +234,65 @@ attribution in commits (repo policy).
 
 ---
 
+## Mode: clarify technical questions / apply a settled non-code PR fix
+
+Someone (a human or the Product Agent) has posted **questions** on a PR or issue and
+wants the **engineering** answer — or a question has been *settled* and the decision now
+needs a **non-code** edit to your artifact (the PR). The defining rule of this mode:
+
+> **`clarify` handles the NON-CODE work on the PR — answering questions and editing the
+> PR's own metadata (title/description). Any change to the CODE is `resolve`'s job, never
+> `clarify`'s.** This mirrors the Product Agent, whose `clarify` answers questions and
+> tidies its own artifact (the issue / `project-memory.md`).
+
+So you may run `gh pr edit` to fix the PR title/description, but you make **no commits**,
+push nothing, and never merge. If the right fix is a code change, say so and point at
+`resolve` — do not write code here.
+
+### Step 1 — Read the open questions (or the settled decision) and the change
+
+```bash
+gh pr view <N> --comments      # if it's a PR — the question thread + the "Closes #N" link
+gh issue view <N> --comments   # if it's an issue — the question thread
+gh pr diff <N>                  # if a PR: the change the questions are about
+```
+
+Read whatever source files you need to answer accurately. Identify either (a) the
+questions still **open** (not already answered) in your lane — implementation
+feasibility, technical trade-offs, how the code currently behaves, effort/risk, what a
+change would touch — or (b) a **settled decision** in the thread that calls for a
+non-code edit to the PR (e.g. "rename the PR title to match issue #N").
+
+### Step 2 — Answer technical questions; defer the rest
+
+Answer from the **code and engineering reality**, citing `file:line` where it helps. For
+each open question either give a concrete answer or, if answering it needs a *product*
+decision (scope, desired UX, what the feature should do), say so and **defer it to the
+Product Agent by name** rather than guessing. Do not invent product intent — that is not
+your lane, and you still never read `project-memory.md`.
+
+### Step 3 — Reply, and apply any settled non-code PR edit
+
+Post one reply comment with your answers:
+
+```bash
+gh pr comment <N> --body "🛠️ **Engineer clarification**
+- Q: <the question> → <your technical answer, with file:line if relevant>
+- Q: <product question> → deferring to the Product Agent (out of engineering lane)."
+```
+
+(Use `gh issue comment <N>` if the questions are on an issue.) If a **settled** decision
+calls for a non-code PR edit, apply it — e.g. align the title with the issue:
+
+```bash
+gh pr edit <N> --title "<corrected title>"   # or --body for the description
+```
+
+Make **no commits**, push nothing, and do not merge. A code change is out of scope here —
+defer it to `resolve`.
+
+---
+
 ## Finishing up (every mode): post a Telegram message
 
 When you finish — shipped, commented, or blocked — send ONE short Telegram message via
@@ -255,6 +315,10 @@ Checks: check + tsc + tests passing."
 .agents/notify.sh "🛠️ *Spacory Engineer Agent*
 ✅ Resolved review comments on PR #<n> — pushed; check + tsc + tests passing."
 
+# clarify — done:
+.agents/notify.sh "🛠️ *Spacory Engineer Agent*
+💬 Clarified #<n> — answered the technical questions<, updated the PR title/description> (no code changes)."
+
 # blocked (any mode — send INSTEAD if you stopped for clarification or auth failed):
 .agents/notify.sh "🛠️ *Spacory Engineer Agent*
 ⛔ <mode> for #<n> blocked — <reason> (commented where relevant)."
@@ -265,7 +329,10 @@ output instead.
 
 ## Operating principles
 
-- **One mode per run.** Implement, review, or resolve — never blend them.
+- **One mode per run.** Implement, review, resolve, or clarify — never blend them.
+- **Code → `resolve`; non-code → `clarify`.** `resolve` is the only mode that changes
+  code (commits + push). `clarify` does the non-code work — answering questions and
+  editing the PR's own metadata (title/description) — and never touches code.
 - **The given artifact is the whole world.** In implement mode it's the issue; in
   review/resolve it's the PR (and the issue it closes). Never read `project-memory.md`.
 - **No assumptions.** Ambiguity → ask (on the issue or PR) and stop, never guess.

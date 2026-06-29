@@ -36,7 +36,7 @@ run coordinating through GitHub.
 |---|---|---|
 | **Role** | Senior PM / analyst — the "what & why" | Senior engineer — the "how" |
 | **Prompt** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
-| **Modes** | `cycle` · `acceptance` | `implement` · `review` · `resolve` |
+| **Modes** | `cycle` · `acceptance` · `clarify` | `implement` · `review` · `resolve` · `clarify` |
 | **Never** | writes app code; revisits settled architecture; merges | reads `project-memory.md` or other product context; guesses on ambiguity; merges |
 
 Each prompt is **mode-aware**: the task it's given selects the mode, and it runs only
@@ -49,6 +49,7 @@ that mode per run.
 | `implement` | an Issue # | **only** that issue + the source code | a branch + PR referencing the issue |
 | `review` | a PR # | the PR diff + its linked issue (read-only on code) | a code-review **comment** on the PR |
 | `resolve` | a PR # | the PR's comments + diff | new commits pushed to the PR's branch |
+| `clarify` | a PR/Issue # | the open questions (or a settled decision) + diff/code | a reply **comment** answering **technical** questions + any **non-code** PR edit (title/description); **code → `resolve`** |
 
 ### Product Agent modes
 
@@ -56,6 +57,7 @@ that mode per run.
 |---|---|---|---|
 | `cycle` | repo | `project-memory.md` (first), repo selectively, existing issues | GitHub Issues; updates `project-memory.md`; Telegram |
 | `acceptance` | a PR # | the PR diff + the linked issue's acceptance criteria (may read memory, never writes it) | an acceptance **comment** on the PR |
+| `clarify` | an Issue/PR # | the open question comments + `project-memory.md` | a reply **comment** answering the **product** questions; surgical spec/memory edits only if the answer changes the spec |
 
 ### Reviewing a PR: fan out, then resolve manually
 
@@ -88,13 +90,37 @@ headless run that coordinates only through GitHub. Merging stays a human action.
 .agents/run-product.sh                 # run a product cycle (create/refine issues)
 .agents/run-product.sh "focus on export"   # optional extra steer for this run
 .agents/run-product.sh acceptance 14   # acceptance-test PR #14 (posts a comment)
+.agents/run-product.sh clarify 9       # answer product/scope questions on #9 (posts a reply)
 
 # Engineer Agent
 .agents/run-engineer.sh 2              # implement issue #2 (opens a PR) — default mode
 .agents/run-engineer.sh '#2' "note"    # leading # tolerated; optional extra note
 .agents/run-engineer.sh review 14      # review PR #14 (posts a comment, no code changes)
 .agents/run-engineer.sh resolve 14     # resolve PR #14's review comments (pushes fixes)
+.agents/run-engineer.sh clarify 14     # answer technical questions on #14 (posts a reply)
 ```
+
+### Answering a question: route it to the right lane
+
+When a thread on an issue/PR has open **questions** (yours or another agent's), dispatch
+the agent whose lane they fall in — there's no parsing or `@mention` convention: each
+agent answers the questions in its lane and explicitly **defers the rest** to the other
+by name. Technical questions (feasibility, how the code behaves, effort) go to the
+Engineer; product questions (scope, desired behavior, which design is right) go to
+Product. A mixed thread is just two runs:
+
+```bash
+.agents/run-engineer.sh clarify 17 &   # answers the technical questions
+.agents/run-product.sh  clarify 17 &   # answers the product questions
+wait
+```
+
+The dividing line is **code vs. non-code, on the artifact you own**: `clarify` does the
+**non-code** work — it answers questions and, when an answer settles the spec, makes the
+non-code edit to its own artifact (Product → the issue / `project-memory.md`; Engineer →
+the PR title/description). **Code** changes are only ever Engineer `resolve` (commits +
+push). Product therefore has no `resolve` — it has no code job. Merging stays a human
+action, as does trivial metadata hygiene if you'd rather not spin an agent for it.
 
 Each script launches a **fresh, headless** `claude` session (`-p`) with the matching
 prompt appended as the system prompt, runs from the repo root, and validates its
@@ -122,6 +148,7 @@ prompt branches on it), so the task wording matters.
 System prompt: contents of .agents/product-agent-prompt.md
 Task (cycle):       "Run a product cycle for the repo at /path/to/spacory."
 Task (acceptance):  "Acceptance-test pull request #14."
+Task (clarify):     "Answer the product questions on issue #9."
 ```
 
 In `cycle` it reads `project-memory.md`, surveys issues, creates new issues, updates
@@ -135,6 +162,7 @@ System prompt: contents of .agents/engineer-agent-prompt.md
 Task (implement):  "Implement GitHub issue #42."
 Task (review):     "Review pull request #14."
 Task (resolve):    "Resolve the review comments on pull request #14."
+Task (clarify):    "Answer the technical questions on pull request #14."
 ```
 
 In `implement` it reads only that issue, implements it on a branch, runs the project's
