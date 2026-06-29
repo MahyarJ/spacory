@@ -11,6 +11,7 @@ export function Toolbar() {
   const setTool = useApp((s) => s.setTool);
   const undo = useApp((s) => s.undo);
   const redo = useApp((s) => s.redo);
+  const fitView = useApp((s) => s.fitView);
 
   const ToolbarButton = (props: {
     tool: Parameters<typeof setTool>[0];
@@ -34,6 +35,14 @@ export function Toolbar() {
         <ToolbarButton tool="window" label="Window" />
         <ToolbarButton tool="door" label="Door" />
         <ToolbarButton tool="pan" label="Pan" />
+        <button
+          type="button"
+          className={styles.button}
+          onClick={fitView}
+          title="Frame the whole plan in view"
+        >
+          Fit
+        </button>
         <div className={styles.spacer} />
         <ProjectActions />
         <ThemeSwitch />

@@ -1,3 +1,4 @@
+import { getPlanBounds } from "@geometry/bounds";
 import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
@@ -23,6 +24,7 @@ import {
   type ThemeMode,
 } from "./theming";
 import {
+  computeFitView,
   DEFAULT_VIEW,
   loadPersistedView,
   savePersistedView,
@@ -35,11 +37,20 @@ interface AppState {
   plan: Plan;
   tool: Tool;
   view: ViewState;
+  /** Canvas size in CSS pixels, mirrored from the SVG element (FloorPlan). */
+  canvasSize: { width: number; height: number };
   isPanning: boolean;
   setTool: (t: Tool) => void;
   addWall: (w: Wall) => void;
   addItem: (i: Item) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
+  setCanvasSize: (size: { width: number; height: number }) => void;
+  /**
+   * Frame the whole plan in the canvas (centered, with a small margin and the
+   * zoom clamped to the scale bounds), or reset to DEFAULT_VIEW when the plan is
+   * empty. Routed through `setView` so the result autosaves like any pan/zoom.
+   */
+  fitView: () => void;
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
   setCurrentWallThickness: (t: number) => void;
@@ -105,6 +116,7 @@ export const useApp = create<AppState>((set, get) => ({
   plan: history.present,
   tool: "wall",
   view: loadPersistedView() ?? DEFAULT_VIEW,
+  canvasSize: { width: 800, height: 600 },
   isPanning: false,
   setTool: (t) => set({ tool: t }),
   currentWallThickness: 10, // cm default
@@ -135,6 +147,17 @@ export const useApp = create<AppState>((set, get) => ({
       saveView(next);
       return { view: next };
     }),
+  setCanvasSize: (size) =>
+    set(({ canvasSize }) =>
+      size.width === canvasSize.width && size.height === canvasSize.height
+        ? {}
+        : { canvasSize: size },
+    ),
+  fitView: () => {
+    const { plan, canvasSize, setView } = get();
+    const next = computeFitView(getPlanBounds(plan), canvasSize);
+    setView(() => next);
+  },
   setIsPanning: (p) => set({ isPanning: p }),
   selectNone: () => set({ selectedWalls: new Set(), selectedItems: new Set() }),
   selectWall: (id, additive) =>
