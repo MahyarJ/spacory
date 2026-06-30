@@ -31,7 +31,8 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
 - **Selection & editing** — click / shift-multi-select / marquee-select; move walls
   by drag or arrow keys (Shift = ×10, Alt = raw unit); delete.
 - **Undo / redo** — diff-based history (JSON Patch via `fast-json-patch`) in
-  `src/app/history.ts`; survives a page refresh.
+  `src/app/history.ts`; survives a page refresh. Keyboard shortcuts `Cmd/Ctrl+Z` /
+  `Shift+Z`-redo / `Ctrl+Y` shipped (#3, merged).
 - **Autosave** — whole undo history persisted to `localStorage` on each commit
   (`src/app/persistence.ts`); rehydrated on startup.
 - **Import / export** — save/load a plan as JSON through a single validated boundary
@@ -40,7 +41,14 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   (pan/zoom) persists across reloads, autosaved separately from the plan
   (`src/app/viewport.ts`).
 - **Dimensions** — each wall shows its length as an on-canvas label
-  (`src/features/canvas/DimensionsLayer.tsx`); display-only for now.
+  (`src/features/canvas/DimensionsLayer.tsx`); display-only.
+- **Editable wall lengths** — select a wall and type an exact length to resize it
+  (anchor endpoint `a`, move endpoint `b`; angle preserved) (#11, merged).
+- **Fit to content** — toolbar "Fit" button frames the whole plan in one click,
+  using `computeFitView` in `src/app/viewport.ts` and `getPlanBounds` in
+  `src/geometry/bounds.ts` (#9, merged).
+- **Floating wall options bar** — thickness controls float over the canvas and no
+  longer shift the layout when they appear/disappear (#14, merged).
 - **Theming** — dark / light / system via CSS variables (`src/app/theming.ts`,
   `src/theme.css`).
 
@@ -56,37 +64,38 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **PNG image export — in flight (#4).** Raster export of the plan; SVG (vector)
   export deliberately deferred to a follow-up.
 - **No SVG/vector image export** — follow-up to PNG export (#4); not yet scoped.
+  Blocked until #4 merges (reuses #4's content-SVG + bounds helper).
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
-- **Viewport persistence — done (#2, merged).** Pan/zoom now persists across reloads
-  via a separate `view` autosave (`src/app/viewport.ts`).
-- **No "fit to content" — in flight (#9).** Pairs with #2; frames the
-  whole plan in one click. Pure plan-bounds helper (`src/geometry/bounds.ts`) and
-  framed-viewport math (`src/app/viewport.ts`) are implemented;
+- **Viewport persistence — done (#2, merged).**
+- **Fit to content button — done (#9, merged).**
+- **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
+  Keyboard shortcut wires `fitView()`; also "zoom to selection" when walls are
+  selected. Reuses `computeFitView` from `src/app/viewport.ts`.
 - **No miter limit / bevel fallback** — very acute wall angles produce long
   spike-like miters; a miter limit is noted as a possible future tweak.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
-- **On-canvas wall-length labels — done (#5, merged).** Display-only labels shipped.
-- **Editable wall lengths — in flight (#11).** Type an exact length to resize the
-  selected wall (anchor `a`, move `b`; angle preserved). Connected-wall follow and
-  unit switching remain out of scope / open follow-ups.
+- **On-canvas wall-length labels — done (#5, merged).**
+- **Editable wall lengths — done (#11, merged).** Type to resize; angle preserved.
+- **Auto-follow connected walls on move/resize — in flight (#19).** When a wall's
+  endpoint moves, walls sharing that exact endpoint coordinate should follow.
+  Requires a pure connectivity helper in `src/geometry/` or `src/app/`.
 - **No editable units / unit switching** — changing `plan.meta.units` from the UI is
   not yet scoped (explicitly out of scope of #11).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
-- **Undo/redo keyboard shortcuts — in flight (#3).** Was toolbar-only; #3 adds
-  `Cmd/Ctrl+Z` / `Shift`-redo / `Ctrl+Y` in `src/features/canvas/FloorPlan.tsx`.
+- **Undo/redo keyboard shortcuts — done (#3, merged).**
 - **Selection not pruned after undo/redo — in flight (#10).** A stored
   `selectedWalls`/`selectedItems` can reference walls/items that no longer exist
   after undo/redo; #10 prunes the selection to ids present in the new plan. (Full
   selection-in-history timeline remains explicitly out of scope.)
-- **No error boundaries** — an unexpected render error takes down the whole app
-  rather than being contained.
+- **No error boundaries — in flight (#21).** An unexpected render error takes down
+  the whole app rather than being contained; #21 adds a React error boundary.
 
-Open questions for the human (see "Report back" — confirm before generating issues
-that depend on these): target users' top unmet need, whether to prioritize export
-vs. rooms vs. measurements, and any accessibility/i18n requirements.
+Open questions for the human (confirm before generating issues that depend on
+these): target users' top unmet need, whether to prioritize export vs. rooms vs.
+measurements, and any accessibility/i18n requirements.
 
 ## Architecture decisions
 
@@ -115,24 +124,19 @@ vs. rooms vs. measurements, and any accessibility/i18n requirements.
 
 ## What the Product Agent should focus on next
 
-Status of the work so far: #2 (viewport persistence) and #5 (wall-length labels)
-have **merged**; #3 (undo/redo keyboard shortcuts) and #4 (PNG export) are still
-**open / in flight**. The second batch (#9–#11) is now in flight: fit-to-content
-(#9), prune-stale-selection (#10), and editable wall lengths (#11). Do **not**
-re-propose any of #2–#5 or #9–#11. The next high-value, well-scoped follow-ups (in
+Current open issues (as of 2026-06-30): #4 (PNG export), #10 (prune stale
+selection), #19 (auto-follow connected walls), #20 (fit shortcut/zoom to
+selection), #21 (error boundary). Do **not** re-propose any of these.
+
+The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
 
-1. **SVG (vector) export** — follow-up to #4; clean once the PNG content-SVG +
-   bounding-box helper exists (reuse that pure helper). **Blocked until #4 merges** —
-   don't open it before then, since it depends on #4's content-SVG/bounds helper.
-2. **Auto-follow connected walls on resize/move** — follow-up to #11: when a wall's
-   endpoint moves, walls sharing that endpoint should follow so junctions stay
-   joined. Leans on geometry; define carefully (which walls count as "connected").
-3. **Fit-to-content keyboard shortcut / "zoom to selection"** — small follow-ups to
-   #9 once it lands (reuse its framed-viewport helper).
-4. **Error boundary** — contain render errors instead of white-screening the app.
-   Small, no new product decisions.
-5. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs human
+1. **SVG (vector) export** — follow-up to #4; reuses #4's content-SVG/bounds helper.
+   **Blocked until #4 merges** — don't open it before then.
+2. **Cascading connected-wall follow** — follow-up to #19: once the immediate-
+   endpoint follow ships, scope cascading (wall A→B→C: moving A's endpoint also
+   cascades to C via B). Needs careful definition to avoid cycles.
+3. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs human
    product input before scoping (see open questions); defer until answered.
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
@@ -159,6 +163,14 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-06-30 — Third Product Agent run. Reconciled state with GitHub: #3 (undo/redo
+  shortcuts), #9 (fit-to-content), #11 (editable wall lengths), and #14 (floating
+  wall options bar) have all **merged** since the last run. Only #4 (PNG export) and
+  #10 (prune stale selection) remain open from prior batches. Updated "Current state"
+  to record all merged work. Created the third issue batch: **#19** auto-follow
+  connected walls on move/resize, **#20** fit-to-content keyboard shortcut + zoom to
+  selection, **#21** error boundary. Refreshed "Known gaps" and "focus next" (SVG
+  export still blocked on #4; cascading wall-follow and rooms are the next horizon).
 - 2026-06-16 — Second Product Agent run. Reconciled state with GitHub: #2 (viewport
   persistence) and #5 (wall-length labels) have merged; #3 (undo/redo shortcuts) and
   #4 (PNG export) remain open/in flight. Updated "Current state" to record the shipped
