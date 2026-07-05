@@ -92,6 +92,12 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   selection-in-history timeline remains explicitly out of scope.)
 - **No error boundaries — in flight (#21).** An unexpected render error takes down
   the whole app rather than being contained; #21 adds a React error boundary.
+- **Connection points not selectable/draggable — in flight (#22).** Only edges
+  (walls) can be selected and moved; the connection points where walls meet (shared
+  endpoint coordinates — there is no node object) can't be grabbed. #22 renders
+  draggable corner/junction handles so a user can drag a connection point and have
+  all co-located wall endpoints follow in one commit. Builds on #19's connectivity
+  helper; keep the coordinate-grouping math pure + Vitest-tested in `src/geometry/`.
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
@@ -124,9 +130,10 @@ measurements, and any accessibility/i18n requirements.
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-06-30): #4 (PNG export), #10 (prune stale
+Current open issues (as of 2026-07-05): #4 (PNG export), #10 (prune stale
 selection), #19 (auto-follow connected walls), #20 (fit shortcut/zoom to
-selection), #21 (error boundary). Do **not** re-propose any of these.
+selection), #21 (error boundary), #22 (select/drag connection points). Do **not**
+re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -163,6 +170,15 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-05 — Human-directed issue creation. A human noticed that connection points
+  (the corners/junctions where walls meet) still can't be selected or dragged — only
+  edges (walls) can. Confirmed against the code: no node/connection object exists
+  (connectivity is implicit in shared endpoint coordinates), selection tracks only
+  `selectedWalls`/`selectedItems`, and `SelectionLayer.tsx` renders no endpoint
+  handles. Verified no existing issue covers it (#19 is the closest but is about
+  auto-follow, not grabbing a junction). Created **#22** select/drag connection
+  points (corner/junction handles), building on #19's connectivity helper. Added it
+  to "Known gaps" and the focus-next open-issues list.
 - 2026-06-30 — Third Product Agent run. Reconciled state with GitHub: #3 (undo/redo
   shortcuts), #9 (fit-to-content), #11 (editable wall lengths), and #14 (floating
   wall options bar) have all **merged** since the last run. Only #4 (PNG export) and
