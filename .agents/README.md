@@ -151,7 +151,11 @@ input. Useful env overrides:
 > **Permissions:** headless runs only execute commands the permission mode/allowlist
 > permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, `gh run`,
 > `gh issue` (Product creates issues; Engineer reads/comments on them), and
-> `.agents/notify.sh` (the Telegram helper). Otherwise run with
+> `.agents/notify.sh` (the Telegram helper). Because each role now runs by invoking a
+> **skill**, the allowlist also permits the `Skill(...)` invocations the shims and
+> shared skills rely on (`product-agent`, `engineer-agent`, `spacory-preflight`,
+> `spacory-verify`, `spacory-conventions`, `spacory-notify`) — otherwise an
+> `acceptEdits` run could stall on the first skill call. Otherwise run with
 > `CLAUDE_PERMISSION_MODE=bypassPermissions` so a headless run doesn't stall.
 
 ### In an interactive Claude Code chat: invoke the skill
