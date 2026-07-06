@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Run the Spacory **Product Agent** in a fresh, headless Claude session in ONE of
-# its two modes. The Product Agent is one role (product) in two capacities —
-# see .agents/product-agent-prompt.md for the full contract.
+# its modes. The Product Agent is one role (product) in several capacities —
+# the full contract lives in the `product-agent` skill
+# (.claude/skills/product-agent/SKILL.md); product-agent-prompt.md is a thin
+# shim that points the headless run at it.
 #
 #   cycle       read project-memory.md + issues → create/refine issues (default)
 #   acceptance  judge a PR vs the issue's criteria → posts an acceptance comment
@@ -72,6 +74,16 @@ case "$MODE" in
     echo "→ Product Agent  [cycle]  (permission-mode: $PERMISSION_MODE)" >&2
     ;;
 esac
+
+# Lead the prompt with the slash-command form so Claude Code deterministically
+# expands the product-agent skill (the documented user-invoked path) instead of
+# relying on the model to invoke it from the appended shim. $MODE is the skill's
+# mode word (cycle|acceptance|clarify); cycle takes no number.
+SLASH="/product-agent $MODE"
+[ -n "${NUM:-}" ] && SLASH="$SLASH $NUM"
+TASK="$SLASH
+
+$TASK"
 
 cd "$REPO_ROOT"
 

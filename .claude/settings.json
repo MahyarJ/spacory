@@ -30,7 +30,13 @@
       "Bash(gh run:*)",
       "Bash(gh issue:*)",
       "Bash(gh repo view:*)",
-      "Bash(.agents/notify.sh:*)"
+      "Bash(.agents/notify.sh:*)",
+      "Skill(product-agent)",
+      "Skill(engineer-agent)",
+      "Skill(spacory-preflight)",
+      "Skill(spacory-verify)",
+      "Skill(spacory-conventions)",
+      "Skill(spacory-notify)"
     ],
     "deny": [
       "Bash(git push --force:*)",

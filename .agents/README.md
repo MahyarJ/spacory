@@ -35,12 +35,30 @@ run coordinating through GitHub.
 | | Product Agent | Engineer Agent |
 |---|---|---|
 | **Role** | Senior PM / analyst — the "what & why" | Senior engineer — the "how" |
-| **Prompt** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
+| **Skill** (source of truth) | [`product-agent`](../.claude/skills/product-agent/SKILL.md) | [`engineer-agent`](../.claude/skills/engineer-agent/SKILL.md) |
+| **System-prompt shim** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
 | **Modes** | `cycle` · `acceptance` · `clarify` | `implement` · `review` · `resolve` · `clarify` |
 | **Never** | writes app code; revisits settled architecture; merges | reads `project-memory.md` or other product context; guesses on ambiguity; merges |
 
-Each prompt is **mode-aware**: the task it's given selects the mode, and it runs only
+Each role is **mode-aware**: the task it's given selects the mode, and it runs only
 that mode per run.
+
+### Where the behaviour lives: skills, not the system prompt
+
+Each role's full contract lives in a **skill** under
+[`.claude/skills/`](../.claude/skills/), so it can be **reused** both by these
+headless runs and directly in an interactive Claude Code chat (via the `/` command
+of the same name). The two `*-prompt.md` files are now **thin shims**: they set the
+role identity and hard invariants, then tell the agent to invoke its skill.
+
+Shared building blocks each role reuses (also usable on their own in a chat):
+
+| Skill | What it is |
+|---|---|
+| [`spacory-preflight`](../.claude/skills/spacory-preflight/SKILL.md) | Confirm `gh auth status` before touching any issue/PR/memory |
+| [`spacory-verify`](../.claude/skills/spacory-verify/SKILL.md) | The definition of done — `npm run check && npx tsc -b && npm test` |
+| [`spacory-conventions`](../.claude/skills/spacory-conventions/SKILL.md) | Repo code conventions (single store + `commit()`, pure tested modules, Biome, cm) |
+| [`spacory-notify`](../.claude/skills/spacory-notify/SKILL.md) | The Telegram wrap-up via `.agents/notify.sh` |
 
 ### Engineer Agent modes
 
@@ -122,9 +140,11 @@ the PR title/description). **Code** changes are only ever Engineer `resolve` (co
 push). Product therefore has no `resolve` — it has no code job. Merging stays a human
 action, as does trivial metadata hygiene if you'd rather not spin an agent for it.
 
-Each script launches a **fresh, headless** `claude` session (`-p`) with the matching
-prompt appended as the system prompt, runs from the repo root, and validates its
-input. Useful env overrides:
+Each script launches a **fresh, headless** `claude` session (`-p`) whose prompt leads
+with the `/<role>-agent <mode> [number]` slash form — so Claude Code deterministically
+expands the role skill (the documented user-invoked path) rather than leaving it to the
+model — with the matching shim appended as the system prompt, runs from the repo root,
+and validates its input. Useful env overrides:
 
 - `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
   fully unattended run in a trusted environment.
@@ -133,16 +153,38 @@ input. Useful env overrides:
 > **Permissions:** headless runs only execute commands the permission mode/allowlist
 > permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, `gh run`,
 > `gh issue` (Product creates issues; Engineer reads/comments on them), and
-> `.agents/notify.sh` (the Telegram helper). Otherwise run with
+> `.agents/notify.sh` (the Telegram helper). Because each role now runs by invoking a
+> **skill**, the allowlist also permits the `Skill(...)` invocations the shims and
+> shared skills rely on (`product-agent`, `engineer-agent`, `spacory-preflight`,
+> `spacory-verify`, `spacory-conventions`, `spacory-notify`) — otherwise an
+> `acceptEdits` run could stall on the first skill call. Otherwise run with
 > `CLAUDE_PERMISSION_MODE=bypassPermissions` so a headless run doesn't stall.
+
+### In an interactive Claude Code chat: invoke the skill
+
+Because each role is a skill, you can drive either agent from a normal chat session
+without the wrapper scripts — just invoke the skill and name the mode:
+
+```
+/product-agent cycle
+/product-agent acceptance 14
+/engineer-agent implement 42
+/engineer-agent review 14
+/engineer-agent clarify 17
+```
+
+The shared skills work standalone too — e.g. `/spacory-verify` to run the definition
+of done, or `/spacory-conventions` to load the repo's code conventions. This is the
+same behaviour the headless runs use, so the two never drift.
 
 ### Manual: feed the prompt yourself
 
-These prompts are system prompts — feed the file's contents as the agent's system
-prompt, then give it the run-specific input below. **The task selects the mode** (the
-prompt branches on it), so the task wording matters.
+These prompts are thin **system-prompt shims** — feed the file's contents as the
+agent's system prompt, then give it the run-specific input below. Each shim tells the
+agent to invoke its skill and run the mode the task names. **The task selects the
+mode**, so the task wording matters.
 
-**Product Agent** — the task picks `cycle` or `acceptance`:
+**Product Agent** — the task picks `cycle`, `acceptance`, or `clarify`:
 
 ```
 System prompt: contents of .agents/product-agent-prompt.md
@@ -155,7 +197,7 @@ In `cycle` it reads `project-memory.md`, surveys issues, creates new issues, upd
 `project-memory.md`, and posts a Telegram summary. In `acceptance` it judges PR #14
 against the linked issue's acceptance criteria and posts a PR comment (no memory edits).
 
-**Engineer Agent** — the task picks `implement`, `review`, or `resolve`:
+**Engineer Agent** — the task picks `implement`, `review`, `resolve`, or `clarify`:
 
 ```
 System prompt: contents of .agents/engineer-agent-prompt.md

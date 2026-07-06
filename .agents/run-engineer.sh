@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Run the Spacory **Engineer Agent** in a fresh, headless Claude session in ONE of
-# its three modes. The Engineer Agent is one role (a senior engineer) in three
-# capacities — see .agents/engineer-agent-prompt.md for the full contract.
+# its modes. The Engineer Agent is one role (a senior engineer) in several
+# capacities — the full contract lives in the `engineer-agent` skill
+# (.claude/skills/engineer-agent/SKILL.md); engineer-agent-prompt.md is a thin
+# shim that points the headless run at it.
 #
 #   implement  the issue is the only spec → branch + PR (default mode)
 #   review     read-only pass over a PR   → posts a code-review comment
@@ -71,6 +73,15 @@ case "$MODE" in
   clarify)   TASK="Answer the technical questions on #$NUM (Engineer Agent clarify mode): reply on the thread answering the engineering questions, defer any product questions to the Product Agent, and make no code changes." ;;
 esac
 [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
+
+# Lead the prompt with the slash-command form so Claude Code deterministically
+# expands the engineer-agent skill (the documented user-invoked path) instead of
+# relying on the model to invoke it from the appended shim. $MODE is exactly the
+# skill's mode word (implement|review|resolve|clarify); the descriptive task below
+# still selects the mode and carries any extra note.
+TASK="/engineer-agent $MODE $NUM
+
+$TASK"
 
 cd "$REPO_ROOT"
 echo "→ Engineer Agent  [$MODE] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
