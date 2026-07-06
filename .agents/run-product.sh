@@ -75,6 +75,16 @@ case "$MODE" in
     ;;
 esac
 
+# Lead the prompt with the slash-command form so Claude Code deterministically
+# expands the product-agent skill (the documented user-invoked path) instead of
+# relying on the model to invoke it from the appended shim. $MODE is the skill's
+# mode word (cycle|acceptance|clarify); cycle takes no number.
+SLASH="/product-agent $MODE"
+[ -n "${NUM:-}" ] && SLASH="$SLASH $NUM"
+TASK="$SLASH
+
+$TASK"
+
 cd "$REPO_ROOT"
 
 args=( -p "$TASK"

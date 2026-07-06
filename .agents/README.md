@@ -140,9 +140,11 @@ the PR title/description). **Code** changes are only ever Engineer `resolve` (co
 push). Product therefore has no `resolve` — it has no code job. Merging stays a human
 action, as does trivial metadata hygiene if you'd rather not spin an agent for it.
 
-Each script launches a **fresh, headless** `claude` session (`-p`) with the matching
-prompt appended as the system prompt, runs from the repo root, and validates its
-input. Useful env overrides:
+Each script launches a **fresh, headless** `claude` session (`-p`) whose prompt leads
+with the `/<role>-agent <mode> [number]` slash form — so Claude Code deterministically
+expands the role skill (the documented user-invoked path) rather than leaving it to the
+model — with the matching shim appended as the system prompt, runs from the repo root,
+and validates its input. Useful env overrides:
 
 - `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
   fully unattended run in a trusted environment.

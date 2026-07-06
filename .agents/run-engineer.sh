@@ -74,6 +74,15 @@ case "$MODE" in
 esac
 [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
 
+# Lead the prompt with the slash-command form so Claude Code deterministically
+# expands the engineer-agent skill (the documented user-invoked path) instead of
+# relying on the model to invoke it from the appended shim. $MODE is exactly the
+# skill's mode word (implement|review|resolve|clarify); the descriptive task below
+# still selects the mode and carries any extra note.
+TASK="/engineer-agent $MODE $NUM
+
+$TASK"
+
 cd "$REPO_ROOT"
 echo "→ Engineer Agent  [$MODE] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
 
