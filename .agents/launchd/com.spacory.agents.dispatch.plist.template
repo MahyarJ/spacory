@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Rendered from this template by .agents/launchd/install.sh — do not edit the
+     installed copy in ~/Library/LaunchAgents directly; edit this template and
+     re-run the installer. Tokens (__REPO_ROOT__, __PATH__) are filled in there. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.spacory.agents.dispatch</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO_ROOT__/.agents/dispatch.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO_ROOT__</string>
+
+  <!-- launchd starts with a bare PATH; give it the dirs holding gh/claude/node/git. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+  </dict>
+
+  <!-- Drive one pipeline action every 10 minutes. dispatch.sh self-guards against
+       overlap, so a run that outlasts the interval simply causes the next to skip. -->
+  <key>StartInterval</key>
+  <integer>600</integer>
+
+  <!-- Catch up once on load, but don't hammer if the Mac was asleep for a while. -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__REPO_ROOT__/.agents/logs/dispatch.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO_ROOT__/.agents/logs/dispatch.log</string>
+
+  <!-- Be a good citizen: low priority, don't wake the machine to run. -->
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Nice</key>
+  <integer>5</integer>
+</dict>
+</plist>

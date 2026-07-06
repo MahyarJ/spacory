@@ -28,5 +28,8 @@ pnpm-debug.log*
 # agent secrets (Telegram, etc.) — .env.example is committed, real .env is not
 .agents/.env
 
+# dispatcher/launchd run logs
+.agents/logs/
+
 # generated CSS modules typings (if using typed-css-modules plugin)
 **/*.module.css.d.ts
