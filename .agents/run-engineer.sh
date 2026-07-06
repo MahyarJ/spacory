@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Run the Spacory **Engineer Agent** in a fresh, headless Claude session in ONE of
-# its three modes. The Engineer Agent is one role (a senior engineer) in three
-# capacities — see .agents/engineer-agent-prompt.md for the full contract.
+# its modes. The Engineer Agent is one role (a senior engineer) in several
+# capacities — the full contract lives in the `engineer-agent` skill
+# (.claude/skills/engineer-agent/SKILL.md); engineer-agent-prompt.md is a thin
+# shim that points the headless run at it.
 #
 #   implement  the issue is the only spec → branch + PR (default mode)
 #   review     read-only pass over a PR   → posts a code-review comment

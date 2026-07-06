@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Run the Spacory **Product Agent** in a fresh, headless Claude session in ONE of
-# its two modes. The Product Agent is one role (product) in two capacities —
-# see .agents/product-agent-prompt.md for the full contract.
+# its modes. The Product Agent is one role (product) in several capacities —
+# the full contract lives in the `product-agent` skill
+# (.claude/skills/product-agent/SKILL.md); product-agent-prompt.md is a thin
+# shim that points the headless run at it.
 #
 #   cycle       read project-memory.md + issues → create/refine issues (default)
 #   acceptance  judge a PR vs the issue's criteria → posts an acceptance comment

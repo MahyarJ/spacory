@@ -64,5 +64,9 @@ Do **not** add AI/Claude attribution to commits or PRs:
 
 - `docs/` is the shared source of truth for architecture and decisions.
 - The two-agent (Product / Engineer) workflow lives in `.agents/`; its living
-  institutional memory is `project-memory.md` in the repo root.
+  institutional memory is `project-memory.md` in the repo root. Each agent's
+  behaviour is now a reusable **skill** (`.claude/skills/{product,engineer}-agent`,
+  plus shared `spacory-preflight` / `spacory-verify` / `spacory-conventions` /
+  `spacory-notify`); the `.agents/*-prompt.md` files are thin shims over them, so the
+  same contract works headlessly and in an interactive `/product-agent` chat.
 - Generated `*.module.css.d.ts` are gitignored.
