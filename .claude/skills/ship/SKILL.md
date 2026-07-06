@@ -20,6 +20,9 @@ If already on a feature branch, stay on it.
 
 ## 2. Verify — the definition of done (must all pass)
 
+These are the gates the **`spacory-verify`** skill defines — it is the canonical
+source; keep the two in sync (or invoke `/spacory-verify`).
+
 ```bash
 npm run check:fix     # apply Biome formatting/safe fixes
 npm run check         # confirm Biome is clean

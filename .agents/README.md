@@ -184,7 +184,7 @@ agent's system prompt, then give it the run-specific input below. Each shim tell
 agent to invoke its skill and run the mode the task names. **The task selects the
 mode**, so the task wording matters.
 
-**Product Agent** — the task picks `cycle` or `acceptance`:
+**Product Agent** — the task picks `cycle`, `acceptance`, or `clarify`:
 
 ```
 System prompt: contents of .agents/product-agent-prompt.md
@@ -197,7 +197,7 @@ In `cycle` it reads `project-memory.md`, surveys issues, creates new issues, upd
 `project-memory.md`, and posts a Telegram summary. In `acceptance` it judges PR #14
 against the linked issue's acceptance criteria and posts a PR comment (no memory edits).
 
-**Engineer Agent** — the task picks `implement`, `review`, or `resolve`:
+**Engineer Agent** — the task picks `implement`, `review`, `resolve`, or `clarify`:
 
 ```
 System prompt: contents of .agents/engineer-agent-prompt.md
