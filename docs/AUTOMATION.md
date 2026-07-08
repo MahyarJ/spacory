@@ -84,6 +84,19 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 | `CLAUDE_PERMISSION_MODE` | `acceptEdits` | passed to run-\*.sh; use `bypassPermissions` for fully unattended if a command isn't allowlisted |
 | `CLAUDE_MODEL` | session default | passed to run-\*.sh |
 
+**Running a tick by hand:** an `implement`/`review`/`resolve` tick spawns agents
+that run for **several minutes** — longer than some interactive shells allow. Run
+it detached so it can't be killed mid-transition (which would strand a PR under an
+`agent:reviewing`/`resolving` lock label until you reset it):
+
+```bash
+mkdir -p .agents/logs
+nohup .agents/dispatch.sh > .agents/logs/tick.log 2>&1 &   # returns immediately
+```
+
+launchd runs on a 10-minute interval and has no such limit, so this only affects
+manual runs.
+
 ### Option B — GitHub Actions (best practice for always-on / event-driven)
 
 Instead of polling, react to events (`issues.opened → implement`,
