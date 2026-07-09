@@ -29,6 +29,7 @@
       "Bash(gh pr:*)",
       "Bash(gh run:*)",
       "Bash(gh issue:*)",
+      "Bash(gh auth status:*)",
       "Bash(gh repo view:*)",
       "Bash(.agents/notify.sh:*)",
       "Skill(product-agent)",
