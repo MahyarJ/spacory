@@ -1,6 +1,6 @@
 import type { Wall, WindowItem } from "@app/schema";
 import { describe, expect, it } from "vitest";
-import { distToSegment, hitItem, hitWall } from "./hit";
+import { distToSegment, hitConnectionPoint, hitItem, hitWall } from "./hit";
 
 const wall = (
   ax: number,
@@ -36,6 +36,20 @@ describe("hitWall", () => {
   });
   it("respects a custom tolerance", () => {
     expect(hitWall({ x: 50, y: 12 }, w, 8)).toBe(true);
+  });
+});
+
+describe("hitConnectionPoint", () => {
+  const point = { x: 50, y: 50 };
+
+  it("hits within the default tolerance", () => {
+    expect(hitConnectionPoint({ x: 55, y: 50 }, point)).toBe(true);
+  });
+  it("misses outside the default tolerance", () => {
+    expect(hitConnectionPoint({ x: 61, y: 50 }, point)).toBe(false);
+  });
+  it("respects a custom tolerance", () => {
+    expect(hitConnectionPoint({ x: 61, y: 50 }, point, 15)).toBe(true);
   });
 });
 

@@ -1,4 +1,5 @@
 import { getPlanBounds } from "@geometry/bounds";
+import { translateEndpointsAt } from "@geometry/connectivity";
 import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
@@ -15,6 +16,7 @@ import {
   type Item,
   isDoor,
   type Plan,
+  type Point,
   type Wall,
 } from "./schema";
 import {
@@ -56,9 +58,12 @@ interface AppState {
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
+  /** The single connection point (shared wall-endpoint coordinate) currently selected. */
+  selectedConnectionPoint: Point | null;
   selectNone: () => void;
   selectWall: (id: string, additive?: boolean) => void;
   selectItem: (id: string, additive?: boolean) => void;
+  selectConnectionPoint: (point: Point) => void;
   deleteSelected: () => void;
   nudgeSelectedWallThickness: (delta: number) => void;
   /**
@@ -80,6 +85,13 @@ interface AppState {
   translateSelectedWalls: (dx: number, dy: number) => void;
   /** Move selected walls without writing to history (live drag preview). */
   translateSelectedWallsLive: (dx: number, dy: number) => void;
+  /**
+   * Move every wall endpoint at the selected connection point, committing a
+   * single undo step (used for arrow-key nudge).
+   */
+  translateSelectedConnectionPoint: (dx: number, dy: number) => void;
+  /** Same, but without writing to history (live drag preview). */
+  translateSelectedConnectionPointLive: (dx: number, dy: number) => void;
   /** Push the current plan onto the undo stack as a single history entry. */
   commitPlan: () => void;
 }
@@ -123,6 +135,7 @@ export const useApp = create<AppState>((set, get) => ({
   setCurrentWallThickness: (t) => set({ currentWallThickness: Math.max(1, t) }),
   selectedWalls: new Set(),
   selectedItems: new Set(),
+  selectedConnectionPoint: null,
   addWall: (w) => {
     const next: Plan = {
       ...get().plan,
@@ -159,7 +172,12 @@ export const useApp = create<AppState>((set, get) => ({
     setView(() => next);
   },
   setIsPanning: (p) => set({ isPanning: p }),
-  selectNone: () => set({ selectedWalls: new Set(), selectedItems: new Set() }),
+  selectNone: () =>
+    set({
+      selectedWalls: new Set(),
+      selectedItems: new Set(),
+      selectedConnectionPoint: null,
+    }),
   selectWall: (id, additive) =>
     set((s) => {
       const ws = additive ? new Set(s.selectedWalls) : new Set<string>();
@@ -167,6 +185,7 @@ export const useApp = create<AppState>((set, get) => ({
       return {
         selectedWalls: ws,
         selectedItems: additive ? s.selectedItems : new Set(),
+        selectedConnectionPoint: null,
       };
     }),
   selectItem: (id, additive) =>
@@ -176,7 +195,14 @@ export const useApp = create<AppState>((set, get) => ({
       return {
         selectedItems: is,
         selectedWalls: additive ? s.selectedWalls : new Set(),
+        selectedConnectionPoint: null,
       };
+    }),
+  selectConnectionPoint: (point) =>
+    set({
+      selectedConnectionPoint: point,
+      selectedWalls: new Set(),
+      selectedItems: new Set(),
     }),
   deleteSelected: () => {
     const { selectedWalls, selectedItems, plan } = get();
@@ -328,6 +354,42 @@ export const useApp = create<AppState>((set, get) => ({
         walls: plan.walls.map((wall) =>
           selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall,
         ),
+      },
+    });
+  },
+  translateSelectedConnectionPoint: (dx, dy) => {
+    const { plan, selectedConnectionPoint } = get();
+    if (!selectedConnectionPoint) return;
+    const next: Plan = {
+      ...plan,
+      walls: translateEndpointsAt(plan.walls, selectedConnectionPoint, dx, dy),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({
+      plan: history.present,
+      selectedConnectionPoint: {
+        x: selectedConnectionPoint.x + dx,
+        y: selectedConnectionPoint.y + dy,
+      },
+    });
+  },
+  translateSelectedConnectionPointLive: (dx, dy) => {
+    const { plan, selectedConnectionPoint } = get();
+    if (!selectedConnectionPoint) return;
+    set({
+      plan: {
+        ...plan,
+        walls: translateEndpointsAt(
+          plan.walls,
+          selectedConnectionPoint,
+          dx,
+          dy,
+        ),
+      },
+      selectedConnectionPoint: {
+        x: selectedConnectionPoint.x + dx,
+        y: selectedConnectionPoint.y + dy,
       },
     });
   },

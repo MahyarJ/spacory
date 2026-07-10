@@ -21,6 +21,10 @@ export function hitWall(p: Point, wall: Wall, tolerance = 6) {
   return d <= wall.thickness / 2 + tolerance;
 }
 
+export function hitConnectionPoint(p: Point, point: Point, tolerance = 10) {
+  return Math.hypot(p.x - point.x, p.y - point.y) <= tolerance;
+}
+
 export function hitItem(p: Point, item: Item, wall: Wall, tolerance = 6) {
   // Transform point to the wall’s local space: X along wall, Y across wall
   const angle = getWallAngle(wall);
