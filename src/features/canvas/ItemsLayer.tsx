@@ -1,5 +1,10 @@
+import { isDoor } from "@app/schema";
 import { useApp } from "@app/store";
-import { getPointOnWall, getWallAngle, getWallDirection } from "@geometry/wall";
+import {
+  getDoorArcPath,
+  getDoorGeometry,
+  getWindowGeometry,
+} from "@geometry/itemGeometry";
 
 export function ItemsLayer() {
   const plan = useApp((s) => s.plan);
@@ -11,41 +16,26 @@ export function ItemsLayer() {
         const wall = wallsById.get(item.wallAttach.wallId);
         if (!wall) return null;
 
-        const angle = getWallAngle(wall);
-        const dir = getWallDirection(wall); // unit vector along wall
-        const n = { x: -dir.y, y: dir.x }; // unit normal (perpendicular to wall)
-
-        const offsetA = item.wallAttach.offset;
-        const length = item.wallAttach.length;
-        const thickness = wall.thickness;
-
-        // Opening center (midpoint along wall)
-        const centerOffset = offsetA + length / 2;
-        const c = getPointOnWall(wall, centerOffset);
-
-        // Rectangle: draw centered at (c), rotated with wall
-        const rectX = c.x - length / 2;
-        const rectY = c.y - thickness / 2;
-
-        if (item.type === "window") {
+        if (!isDoor(item)) {
+          const { rect, midline } = getWindowGeometry(item, wall);
           return (
             <g key={item.id}>
               <rect
-                x={rectX}
-                y={rectY}
-                width={length}
-                height={thickness}
-                transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
+                x={rect.x}
+                y={rect.y}
+                width={rect.width}
+                height={rect.height}
+                transform={`rotate(${rect.angleDeg}, ${rect.cx}, ${rect.cy})`}
                 fill="var(--sp-bg)"
                 stroke="var(--sp-wall)"
                 vectorEffect="non-scaling-stroke"
               />
               <line
-                x1={c.x - length / 2}
-                y1={c.y}
-                x2={c.x + length / 2}
-                y2={c.y}
-                transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
+                x1={midline.x1}
+                y1={midline.y1}
+                x2={midline.x2}
+                y2={midline.y2}
+                transform={`rotate(${rect.angleDeg}, ${rect.cx}, ${rect.cy})`}
                 stroke="var(--sp-wall)"
                 vectorEffect="non-scaling-stroke"
               />
@@ -53,50 +43,25 @@ export function ItemsLayer() {
           );
         }
 
-        // Default -> door
-        // Hinge at the "end" edge midpoint (to switch hinge sides, swap dir sign)
-        const hingeEdge = item.props.hingeEdge === "start" ? -1 : +1;
-        const hinge = {
-          x: c.x + hingeEdge * dir.x * (length / 2),
-          y: c.y + hingeEdge * dir.y * (length / 2),
-        };
-
-        // Closed leaf tip (along wall direction) (to switch hinge sides, swap dir sign also here)
-        const tipClosed = {
-          x: hinge.x - hingeEdge * dir.x * length,
-          y: hinge.y - hingeEdge * dir.y * length,
-        };
-
-        // side -> +1 = +normal(inside), -1 = -normal(outside)
-        const side = item.props.swingSide === "inside" ? +1 : -1;
-        const tipOpen = {
-          x: hinge.x + side * n.x * length,
-          y: hinge.y + side * n.y * length,
-        };
-
-        // sweepFlag depends on direction and hinge side
-        const sweepFlag = hingeEdge * side > 0 ? 0 : 1;
-
-        // SVG arc from closed tip to open tip around the hinge, 90° sweep
-        // We want a 90° (small) arc, so largeArcFlag = 0.
-        const arcPath = `M ${tipClosed.x} ${tipClosed.y} A ${length} ${length} 0 0 ${sweepFlag} ${tipOpen.x} ${tipOpen.y}`;
+        const geometry = getDoorGeometry(item, wall);
+        const { rect, hinge, tipOpen } = geometry;
 
         return (
           <g key={item.id}>
             {/* Hollow opening rectangle aligned to the wall */}
             <rect
-              x={rectX}
-              y={rectY}
-              width={length}
-              height={thickness}
-              transform={`rotate(${(angle * 180) / Math.PI}, ${c.x}, ${c.y})`}
+              x={rect.x}
+              y={rect.y}
+              width={rect.width}
+              height={rect.height}
+              transform={`rotate(${rect.angleDeg}, ${rect.cx}, ${rect.cy})`}
               fill="var(--sp-bg)"
               stroke="var(--sp-wall)"
               vectorEffect="non-scaling-stroke"
             />
             {/* Door swing arc */}
             <path
-              d={arcPath}
+              d={getDoorArcPath(geometry)}
               fill="none"
               stroke="var(--sp-wall)"
               vectorEffect="non-scaling-stroke"

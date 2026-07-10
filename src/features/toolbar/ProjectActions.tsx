@@ -1,5 +1,6 @@
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
 import { useApp } from "@app/store";
+import { buildExportSvg } from "@geometry/exportSvg";
 import { useRef } from "react";
 import styles from "./Toolbar.module.css";
 
@@ -11,21 +12,63 @@ function sanitizeFilename(name: string): string {
   return cleaned || "spacory-plan";
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Raster the export SVG at this multiple of its cm dimensions, so the PNG is
+ *  legible rather than blurry (cm and px are 1:1 on the live canvas). */
+const PNG_EXPORT_SCALE = 2;
+
+function exportPlanAsPng(plan: ReturnType<typeof useApp.getState>["plan"]) {
+  const { markup, width, height } = buildExportSvg(plan);
+  const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  const image = new Image();
+  image.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * PNG_EXPORT_SCALE);
+    canvas.height = Math.round(height * PNG_EXPORT_SCALE);
+    const ctx = canvas.getContext("2d");
+    URL.revokeObjectURL(svgUrl);
+    if (!ctx) {
+      window.alert("Could not export PNG: canvas is unsupported.");
+      return;
+    }
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((pngBlob) => {
+      if (!pngBlob) {
+        window.alert("Could not export PNG.");
+        return;
+      }
+      downloadBlob(pngBlob, `${sanitizeFilename(plan.meta.name)}.png`);
+    }, "image/png");
+  };
+  image.onerror = () => {
+    URL.revokeObjectURL(svgUrl);
+    window.alert("Could not export PNG.");
+  };
+  image.src = svgUrl;
+}
+
 export function ProjectActions() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const onExport = () => {
     const plan = useApp.getState().plan;
     const blob = new Blob([serializePlan(plan)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${sanitizeFilename(plan.meta.name)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${sanitizeFilename(plan.meta.name)}.json`);
   };
+
+  const onExportPng = () => exportPlanAsPng(useApp.getState().plan);
 
   const onImportClick = () => fileInputRef.current?.click();
 
@@ -56,6 +99,9 @@ export function ProjectActions() {
       </button>
       <button type="button" className={styles.button} onClick={onExport}>
         Export
+      </button>
+      <button type="button" className={styles.button} onClick={onExportPng}>
+        Export PNG
       </button>
       <input
         ref={fileInputRef}
