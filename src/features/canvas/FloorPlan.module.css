@@ -4,6 +4,10 @@
   height: 100%;
   background: var(--sp-bg);
   cursor: crosshair;
+  /* Dragging on the canvas (walls, connection points, marquee) shouldn't
+     trigger the browser's native text-selection on SVG labels underneath. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .badge {
