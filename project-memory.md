@@ -80,8 +80,13 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **On-canvas wall-length labels — done (#5, merged).**
 - **Editable wall lengths — done (#11, merged).** Type to resize; angle preserved.
 - **Auto-follow connected walls on move/resize — in flight (#19).** When a wall's
-  endpoint moves, walls sharing that exact endpoint coordinate should follow.
-  Requires a pure connectivity helper in `src/geometry/` or `src/app/`.
+  endpoint moves, walls sharing that endpoint coordinate should follow.
+  The pure connectivity helpers this needs now already exist (shipped with
+  #22/#27): `findConnectedEndpoints`, `pointsEqual` (epsilon-based), and
+  `translateEndpointsAt` in `src/geometry/connectivity.ts`. #19 consumes them and
+  wires the whole-wall move paths (`translateSelectedWalls`, type-to-resize) to
+  follow — distinct from #22 (which drags a connection point). #19's body was
+  realigned to reuse these rather than re-create a helper.
 - **No editable units / unit switching** — changing `plan.meta.units` from the UI is
   not yet scoped (explicitly out of scope of #11).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
@@ -92,12 +97,12 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   selection-in-history timeline remains explicitly out of scope.)
 - **No error boundaries — in flight (#21).** An unexpected render error takes down
   the whole app rather than being contained; #21 adds a React error boundary.
-- **Connection points not selectable/draggable — in flight (#22).** Only edges
-  (walls) can be selected and moved; the connection points where walls meet (shared
-  endpoint coordinates — there is no node object) can't be grabbed. #22 renders
-  draggable corner/junction handles so a user can drag a connection point and have
-  all co-located wall endpoints follow in one commit. Builds on #19's connectivity
-  helper; keep the coordinate-grouping math pure + Vitest-tested in `src/geometry/`.
+- **Connection points selectable/draggable — done (#22, merged as #27).** A user
+  can select and drag the corner/junction handle where walls meet and all
+  co-located wall endpoints follow in one commit. This shipped **first** and built
+  the pure connectivity primitives in `src/geometry/connectivity.ts`
+  (`findConnectedEndpoints`, `pointsEqual`, `getConnectionPoints`,
+  `translateEndpointsAt`, Vitest-tested) that #19 now reuses.
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
