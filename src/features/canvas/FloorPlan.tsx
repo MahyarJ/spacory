@@ -1,13 +1,15 @@
 import { assertNever, type Point, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
 import { clampScale } from "@app/viewport";
-import { hitItem, hitWall } from "@geometry/hit";
+import { getConnectionPoints } from "@geometry/connectivity";
+import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
 import { applyInverseViewTransform, snapToGrid } from "@geometry/snap";
 import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ConnectionPointsLayer } from "./ConnectionPointsLayer";
 import { DimensionsLayer } from "./DimensionsLayer";
 import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
@@ -41,6 +43,7 @@ export function FloorPlan() {
   const selectedWalls = useApp((s) => s.selectedWalls);
   const selectWall = useApp((s) => s.selectWall);
   const selectItem = useApp((s) => s.selectItem);
+  const selectConnectionPoint = useApp((s) => s.selectConnectionPoint);
   const selectNone = useApp((s) => s.selectNone);
   const marquee = useApp((s) => s.marquee);
   const setMarquee = useApp((s) => s.setMarquee);
@@ -53,6 +56,11 @@ export function FloorPlan() {
   const [moving, setMoving] = useState<null | {
     start: Point; // where drag began
     last: Point; // last applied position
+    snap: boolean; // snap-to-grid on this drag
+  }>(null);
+  const [movingPoint, setMovingPoint] = useState<null | {
+    start: Point; // pointer position where drag began
+    last: Point; // last applied pointer position
     snap: boolean; // snap-to-grid on this drag
   }>(null);
 
@@ -77,6 +85,8 @@ export function FloorPlan() {
     const toggleSwing = useApp.getState().toggleSelectedDoorSwingSide;
 
     const nudgeWalls = useApp.getState().translateSelectedWalls;
+    const nudgeConnectionPoint =
+      useApp.getState().translateSelectedConnectionPoint;
 
     const onKey = (e: KeyboardEvent) => {
       // Don't hijack keys while typing into a form field.
@@ -120,6 +130,7 @@ export function FloorPlan() {
           setOpening(null);
           setDragging(false);
           setMoving(null);
+          setMovingPoint(null);
           break;
         case "delete":
         case "backspace":
@@ -138,16 +149,32 @@ export function FloorPlan() {
           toggleSwing();
           break;
         case "arrowup":
-          nudgeWalls(0, -base * step);
+          if (useApp.getState().selectedConnectionPoint) {
+            nudgeConnectionPoint(0, -base * step);
+          } else {
+            nudgeWalls(0, -base * step);
+          }
           break;
         case "arrowdown":
-          nudgeWalls(0, base * step);
+          if (useApp.getState().selectedConnectionPoint) {
+            nudgeConnectionPoint(0, base * step);
+          } else {
+            nudgeWalls(0, base * step);
+          }
           break;
         case "arrowleft":
-          nudgeWalls(-base * step, 0);
+          if (useApp.getState().selectedConnectionPoint) {
+            nudgeConnectionPoint(-base * step, 0);
+          } else {
+            nudgeWalls(-base * step, 0);
+          }
           break;
         case "arrowright":
-          nudgeWalls(base * step, 0);
+          if (useApp.getState().selectedConnectionPoint) {
+            nudgeConnectionPoint(base * step, 0);
+          } else {
+            nudgeWalls(base * step, 0);
+          }
           break;
         default:
           return;
@@ -191,6 +218,20 @@ export function FloorPlan() {
       });
       if (hitI) {
         selectItem(hitI.id, additive);
+        return;
+      }
+
+      // then connection points (corner/junction handles)
+      const hitP = getConnectionPoints(plan.walls).find((p) =>
+        hitConnectionPoint(world, p, 10),
+      );
+      if (hitP) {
+        selectConnectionPoint(hitP);
+        setMovingPoint({
+          start: world,
+          last: world,
+          snap: !e.altKey,
+        });
         return;
       }
 
@@ -299,6 +340,38 @@ export function FloorPlan() {
       setDragging(true);
     }
 
+    // start moving a connection point
+    if (e.buttons === 1 && tool === "select" && movingPoint) {
+      const world = toWorld(e.clientX, e.clientY);
+      const dx = world.x - movingPoint.last.x;
+      const dy = world.y - movingPoint.last.y;
+
+      if (dx !== 0 || dy !== 0) {
+        let tdx = dx,
+          tdy = dy;
+
+        if (movingPoint.snap) {
+          const grid = plan.meta.gridSize;
+          const totalDx = world.x - movingPoint.start.x;
+          const totalDy = world.y - movingPoint.start.y;
+          const snappedDx = Math.round(totalDx / grid) * grid;
+          const snappedDy = Math.round(totalDy / grid) * grid;
+          tdx = snappedDx - (movingPoint.last.x - movingPoint.start.x);
+          tdy = snappedDy - (movingPoint.last.y - movingPoint.start.y);
+        }
+
+        useApp.getState().translateSelectedConnectionPointLive(tdx, tdy);
+        setMovingPoint({
+          ...movingPoint,
+          last: {
+            x: movingPoint.last.x + tdx,
+            y: movingPoint.last.y + tdy,
+          },
+        });
+      }
+      return;
+    }
+
     // start moving wall
     if (e.buttons === 1 && tool === "select" && moving) {
       const world = toWorld(e.clientX, e.clientY);
@@ -388,6 +461,15 @@ export function FloorPlan() {
       setMoving(null);
       return;
     }
+    if (movingPoint) {
+      // Same live-drag-then-commit pattern as whole-wall moves.
+      const moved =
+        movingPoint.last.x !== movingPoint.start.x ||
+        movingPoint.last.y !== movingPoint.start.y;
+      if (moved) useApp.getState().commitPlan();
+      setMovingPoint(null);
+      return;
+    }
   };
 
   const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
@@ -471,6 +553,7 @@ export function FloorPlan() {
           <ItemsLayer />
           <DimensionsLayer />
           <SelectionLayer />
+          <ConnectionPointsLayer />
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}
