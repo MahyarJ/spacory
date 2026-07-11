@@ -1,5 +1,9 @@
 import { getPlanBounds } from "@geometry/bounds";
-import { translateEndpointsAt } from "@geometry/connectivity";
+import {
+  getConnectionPoints,
+  pointsEqual,
+  translateEndpointsAt,
+} from "@geometry/connectivity";
 import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
@@ -116,12 +120,36 @@ function commit(next: Plan) {
 // the viewport is not part of the Plan or the undo history.
 const saveView = throttle(savePersistedView, 200);
 
-function translateWall(w: Wall, dx: number, dy: number): Wall {
-  return {
-    ...w,
-    a: { x: w.a.x + dx, y: w.a.y + dy },
-    b: { x: w.b.x + dx, y: w.b.y + dy },
-  };
+/**
+ * Move the selected walls by (dx, dy), and every other wall endpoint joined to
+ * one of their (pre-move) endpoints along with them, so junctions stay intact.
+ * Only the immediate endpoint is followed — no cascading further through the
+ * connectivity graph.
+ */
+function translateSelectedWallsFollowing(
+  walls: Wall[],
+  selectedWalls: Set<string>,
+  dx: number,
+  dy: number,
+): Wall[] {
+  if (dx === 0 && dy === 0) return walls;
+  const movedPoints = getConnectionPoints(
+    walls.filter((w) => selectedWalls.has(w.id)),
+  );
+  // Decide every wall's new endpoints against the pre-move `walls` array in one
+  // pass, rather than reducing wall-by-wall — otherwise an earlier point's move
+  // can shift a coordinate onto a later movedPoint (e.g. a wall translated by
+  // exactly its own length), causing that point to match and move again.
+  return walls.map((w) => {
+    const atA = movedPoints.some((p) => pointsEqual(p, w.a));
+    const atB = movedPoints.some((p) => pointsEqual(p, w.b));
+    if (!atA && !atB) return w;
+    return {
+      ...w,
+      a: atA ? { x: w.a.x + dx, y: w.a.y + dy } : w.a,
+      b: atB ? { x: w.b.x + dx, y: w.b.y + dy } : w.b,
+    };
+  });
 }
 
 export const useApp = create<AppState>((set, get) => ({
@@ -248,9 +276,13 @@ export const useApp = create<AppState>((set, get) => ({
     const resized = resizeWallToLength(wall, length);
     // Skip a no-op resize so we don't push an empty undo step.
     if (resized.b.x === wall.b.x && resized.b.y === wall.b.y) return;
+    const dx = resized.b.x - wall.b.x;
+    const dy = resized.b.y - wall.b.y;
+    const resizedWalls = plan.walls.map((w) => (w.id === id ? resized : w));
+    // `a` stays put on a resize; only `b` moved, so only walls joined there follow.
     const next: Plan = {
       ...plan,
-      walls: plan.walls.map((w) => (w.id === id ? resized : w)),
+      walls: translateEndpointsAt(resizedWalls, wall.b, dx, dy),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);
@@ -336,9 +368,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (selectedWalls.size === 0) return;
     const next: Plan = {
       ...plan,
-      walls: plan.walls.map((wall) => {
-        return selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall;
-      }),
+      walls: translateSelectedWallsFollowing(plan.walls, selectedWalls, dx, dy),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);
@@ -351,8 +381,11 @@ export const useApp = create<AppState>((set, get) => ({
     set({
       plan: {
         ...plan,
-        walls: plan.walls.map((wall) =>
-          selectedWalls.has(wall.id) ? translateWall(wall, dx, dy) : wall,
+        walls: translateSelectedWallsFollowing(
+          plan.walls,
+          selectedWalls,
+          dx,
+          dy,
         ),
       },
     });
