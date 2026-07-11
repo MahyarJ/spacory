@@ -9,6 +9,7 @@
 #   cycle       read project-memory.md + issues → create/refine issues (default)
 #   acceptance  judge a PR vs the issue's criteria → posts an acceptance comment
 #   clarify     answer product questions on an issue/PR → posts a reply comment
+#   triage      groom a human-submitted idea issue → enrich into a spec, or reject
 #
 # Usage:
 #   .agents/run-product.sh                                  # run a product cycle
@@ -16,6 +17,7 @@
 #   .agents/run-product.sh acceptance 14                    # acceptance-test PR #14
 #   .agents/run-product.sh acceptance 14 "watch mobile UX"  # acceptance + extra note
 #   .agents/run-product.sh clarify 9                        # answer product Qs on #9
+#   .agents/run-product.sh triage 42                        # triage idea issue #42
 #
 # Env overrides:
 #   CLAUDE_PERMISSION_MODE   default: acceptEdits
@@ -38,10 +40,11 @@ command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PA
 
 PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
 
-# acceptance and clarify both take a number; cycle is the default and takes none.
+# acceptance, clarify and triage each take a number; cycle is the default and
+# takes none.
 MODE="cycle"
 case "${1:-}" in
-  acceptance|clarify)
+  acceptance|clarify|triage)
     MODE="$1"
     shift
     NUM="${1:-}"
@@ -68,6 +71,11 @@ case "$MODE" in
     [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
     echo "→ Product Agent  [clarify] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
     ;;
+  triage)
+    TASK="Triage GitHub issue #$NUM (Product Agent triage mode): judge this human-submitted idea against project-memory.md and post one 'Product triage' verdict comment. On accept, rewrite the issue into a full spec (title, user story, acceptance criteria, technical context, out of scope). On reject, comment the rationale and close the issue. If you need a product decision you can't infer, ask on the issue and stop. Make no code changes and do not touch agent:* labels."
+    [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
+    echo "→ Product Agent  [triage] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
+    ;;
   *)
     TASK="Run a product cycle for this repo."
     [ -n "$EXTRA" ] && TASK="$TASK Additional focus for this run: $EXTRA"
@@ -78,7 +86,7 @@ esac
 # Lead the prompt with the slash-command form so Claude Code deterministically
 # expands the product-agent skill (the documented user-invoked path) instead of
 # relying on the model to invoke it from the appended shim. $MODE is the skill's
-# mode word (cycle|acceptance|clarify); cycle takes no number.
+# mode word (cycle|acceptance|clarify|triage); cycle takes no number.
 SLASH="/product-agent $MODE"
 [ -n "${NUM:-}" ] && SLASH="$SLASH $NUM"
 TASK="$SLASH

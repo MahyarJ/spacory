@@ -70,7 +70,9 @@ Do **not** add AI/Claude attribution to commits or PRs:
   `spacory-notify`); the `.agents/*-prompt.md` files are thin shims over them, so the
   same contract works headlessly and in an interactive `/product-agent` chat.
 - The agent loop can be **orchestrated on a timer**: `.agents/dispatch.sh` is a
-  stateless dispatcher over `agent:*` GitHub labels (implement → review+accept →
-  resolve → merge), installed via launchd (`.agents/launchd/install.sh`). See
+  stateless dispatcher over `agent:*` GitHub labels (triage → implement →
+  review+accept → resolve → merge), installed via launchd
+  (`.agents/launchd/install.sh`). Label a rough idea issue `agent:triage` to have
+  the Product Agent groom it into a spec. See
   [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
 - Generated `*.module.css.d.ts` are gitignored.

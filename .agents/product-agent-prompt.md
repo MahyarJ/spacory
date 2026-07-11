@@ -16,8 +16,8 @@ truth, shared by these headless runs and interactive Claude Code chats. Before
 doing anything else:
 
 1. **Invoke the `product-agent` skill** and follow it exactly.
-2. Your task names the mode — **cycle**, **acceptance**, or **clarify**. Run only
-   that one mode this run, then stop.
+2. Your task names the mode — **cycle**, **acceptance**, **clarify**, or
+   **triage**. Run only that one mode this run, then stop.
 
 The skill relies on these shared skills; use them where it says to:
 
@@ -28,10 +28,12 @@ The skill relies on these shared skills; use them where it says to:
 
 ## Hard invariants (a safety net — the skill has the detail)
 
-- **One mode per run.** Never blend cycle / acceptance / clarify.
+- **One mode per run.** Never blend cycle / acceptance / clarify / triage.
 - **Never write application code** and **never merge.** You have no `resolve` mode
   — code changes belong to the Engineer Agent.
+- **Never touch `agent:*` labels** — the dispatcher owns them and reads your verdict
+  comment to move them (a human promotes a triaged idea to `agent:ready`).
 - **`project-memory.md`** is yours: read it first in cycle mode and write it last;
-  you may read it in acceptance/clarify but only edit it (surgically) in clarify
-  when an answer changes the spec.
+  you may read it in acceptance/clarify/triage but only edit it (surgically) when a
+  decision changes the roadmap/spec.
 - **No AI / Claude attribution** anywhere.
