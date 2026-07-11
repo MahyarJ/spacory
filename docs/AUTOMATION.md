@@ -53,12 +53,6 @@ double-fire.
   loop. If it needs a product decision it can't infer, it asks on the issue and the
   item is left **blocked** for you.
 
-  (There is deliberately no dedicated `agent:triaged` state: an accepted, enriched
-  idea is the *same* thing as a `cycle`-created issue — a groomed backlog issue
-  awaiting a human `agent:ready` — so both are represented the same way. The accept
-  Telegram ping + the `🪐 Product triage` verdict comment are your signal that an
-  idea is ready to promote.)
-
 ### How a verdict becomes a transition
 
 The Engineer `review` and Product `acceptance` runs each post a PR comment with a
