@@ -13,16 +13,23 @@
 #
 #   The label state machine (this script owns every transition):
 #
-#     issue  agent:ready       ── implement ──▶  PR agent:review
-#     PR     agent:review       ── review + acceptance ──▶  agent:changes | agent:accepted
-#     PR     agent:changes      ── resolve  ──▶  PR agent:review   (loops, capped)
-#     PR     agent:accepted     ── human merges (or SPACORY_AUTOMERGE=1 + CI green)
-#     *      agent:blocked      ── needs a human; never touched again automatically
+#     issue  agent:triage      ── triage ──▶  enriched backlog issue | closed (rejected)
+#     issue  agent:ready        ── implement ──▶  PR agent:review
+#     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:accepted
+#     PR     agent:changes       ── resolve  ──▶  PR agent:review   (loops, capped)
+#     PR     agent:accepted      ── human merges (or SPACORY_AUTOMERGE=1 + CI green)
+#     *      agent:blocked       ── needs a human; never touched again automatically
+#
+#   agent:triage is the human intake front door: open a rough idea issue, label it
+#   agent:triage, and the Product Agent grooms it (accept+enrich, or reject+close).
+#   An accepted idea lands in the backlog like a cycle-created issue; promoting it
+#   to agent:ready stays a human decision.
 #
 #   Priority per tick (drain PRs before pulling new work):
-#     1. agent:changes  PR  → resolve
-#     2. agent:review   PR  → review + acceptance (in parallel), then transition
-#     3. agent:ready    issue (no open PR) → implement
+#     1. agent:changes  PR    → resolve
+#     2. agent:review   PR    → review + acceptance (in parallel), then transition
+#     3. agent:triage   issue → triage (groom an idea), then transition
+#     4. agent:ready    issue (no open PR) → implement
 #   The product `cycle` (issue creation) is NOT run here — schedule it separately
 #   (see .agents/launchd/com.spacory.agents.cycle.plist.template). Keeping ticket
 #   *creation* on its own slow cadence stops a runaway cycle from flooding the
@@ -70,6 +77,8 @@ gh auth status >/dev/null 2>&1 || die "gh is not authenticated (run: gh auth log
 # `--force` (updates if it exists).
 ensure_labels() {
   local -a specs=(
+    "agent:triage|d4c5f9|Human-submitted idea awaiting Product triage"
+    "agent:triaging|fbca04|Product Agent is triaging this idea"
     "agent:ready|0e8a16|Issue is ready for the Engineer Agent to implement"
     "agent:implementing|fbca04|Engineer Agent is implementing this issue"
     "agent:review|1d76db|PR awaiting Engineer review + Product acceptance"
@@ -98,7 +107,7 @@ swap_label() { remove_label "$1" "$2" "$3"; add_label "$1" "$2" "$4"; }
 block() {  # $1=issue|pr $2=number $3=reason
   local kind="$1" num="$2" reason="$3"
   # strip any in-flight/queue labels, mark blocked.
-  for l in agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving; do
     remove_label "$kind" "$num" "$l"
   done
   add_label "$kind" "$num" "agent:blocked"
@@ -129,6 +138,28 @@ verdict_of() {  # $1=body
   case "$body_lc" in
     *"changes requested"*) echo changes ;;
     *approve*|*accepted*)  echo pass ;;
+    *) echo none ;;
+  esac
+}
+
+# newest ISSUE comment body (newlines flattened) matching a header substring.
+# Triage runs on a fresh issue, so no "after head commit" filter is needed —
+# the newest matching comment is this run's verdict.
+latest_issue_comment() {  # $1=issue $2=header-substring
+  gh issue view "$1" --json comments \
+    --jq '.comments[] | (.body|gsub("[\n\r]";" "))' 2>/dev/null \
+    | grep -F "$2" | tail -1 || true
+}
+
+# classify a Product triage verdict body → accepted | rejected | needs | none.
+# Order matters: reject wins over accept if both words somehow appear.
+triage_verdict_of() {  # $1=body
+  local lc; lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  [ -z "$lc" ] && { echo none; return; }
+  case "$lc" in
+    *reject*)                                            echo rejected ;;
+    *accept*|*enrich*)                                   echo accepted ;;
+    *"needs input"*|*"needs info"*|*question*|*clarif*)  echo needs ;;
     *) echo none ;;
   esac
 }
@@ -236,6 +267,37 @@ maybe_merge() {  # $1=pr — only if the human opted in AND CI is green
   fi
 }
 
+do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
+  local issue="$1"
+  log "→ triage issue #$issue"
+  swap_label issue "$issue" agent:triage agent:triaging
+  if ! run_product triage "$issue"; then
+    block issue "$issue" "product triage run failed"
+    return
+  fi
+  local verdict
+  verdict="$(triage_verdict_of "$(latest_issue_comment "$issue" "Product triage")")"
+  log "  triage verdict: $verdict"
+  case "$verdict" in
+    accepted)
+      # the agent rewrote the issue into a spec. Clear the in-flight label so it lands
+      # in the backlog like a cycle-created issue — a groomed issue awaiting a human's
+      # agent:ready.
+      remove_label issue "$issue" agent:triaging
+      log "✓ issue #$issue enriched (awaiting a human agent:ready)"
+      notify "🧭 Spacory agents: idea #$issue groomed & enriched — review it and label agent:ready to build." ;;
+    rejected)
+      # the agent already commented the rationale and closed the issue.
+      remove_label issue "$issue" agent:triaging
+      log "✓ issue #$issue rejected & closed in triage"
+      notify "🧭 Spacory agents: idea #$issue rejected in triage (closed, with rationale)." ;;
+    needs)
+      block issue "$issue" "triage needs a human product decision (the agent asked a question)" ;;
+    *)
+      block issue "$issue" "could not parse a triage verdict — check issue #$issue's comments" ;;
+  esac
+}
+
 do_implement() {  # $1=issue
   local issue="$1"
   log "→ implement issue #$issue"
@@ -259,6 +321,7 @@ dispatch_once() {
   local n
   for n in $(list_prs "agent:changes"); do do_resolve "$n"; return; done
   for n in $(list_prs "agent:review");  do do_review  "$n"; return; done
+  for n in $(list_issues "agent:triage"); do do_triage "$n"; return; done
   for n in $(list_issues "agent:ready"); do
     # skip if a PR already exists for it (belt-and-suspenders)
     [ -n "$(pr_for_issue "$n")" ] && { log "issue #$n already has a PR; skipping"; continue; }
@@ -272,7 +335,7 @@ dispatch_once() {
 print_status() {
   echo "Spacory agent pipeline ($(gh repo view --json nameWithOwner -q .nameWithOwner)):"
   local l
-  for l in agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:accepted agent:blocked; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:accepted agent:blocked; do
     printf '  %-20s' "$l"
     gh issue list --state open --label "$l" --json number --jq '[.[].number] | map("#\(.)") | join(" ")' 2>/dev/null | tr -d '\n'
     printf ' | '

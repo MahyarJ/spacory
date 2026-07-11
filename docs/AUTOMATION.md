@@ -21,6 +21,9 @@ labels — they just post their usual verdict comments, which the dispatcher
 reads). Run `.agents/dispatch.sh setup` once to create the labels.
 
 ```
+ issue agent:triage ──triage──▶ enriched backlog issue  (accepted → issue rewritten as a spec)
+                          └────▶ closed                 (rejected, with a rationale comment)
+ groomed backlog issue ──(human labels agent:ready)──▶ into the build loop
  issue agent:ready ──implement──▶ PR agent:review
  PR agent:review ──review + acceptance──▶ agent:changes   (if either asks for changes)
                                     └────▶ agent:accepted  (if both pass)
@@ -29,14 +32,26 @@ reads). Run `.agents/dispatch.sh setup` once to create the labels.
  anything ──▶ agent:blocked          (needs a human; the dispatcher leaves it alone)
 ```
 
-In-flight states (`agent:implementing` / `reviewing` / `resolving`) are set while
-an agent is running so a crash or restart is visible and can't double-fire.
+In-flight states (`agent:triaging` / `implementing` / `reviewing` / `resolving`)
+are set while an agent is running so a crash or restart is visible and can't
+double-fire.
 
 ### Enqueuing work
 
-Label an issue **`agent:ready`** to hand it to the loop. Do this by hand, or let
-the daily product `cycle` create issues and label the ones it deems ready. (The
-`cycle` runs on its own slow timer so it can't flood the implement queue.)
+**Two front doors, both label-driven:**
+
+- **You have a spec-ready issue** → label it **`agent:ready`** and the loop
+  implements it. Do this by hand, or let the daily product `cycle` create issues
+  and label the ones it deems ready. (The `cycle` runs on its own slow timer so it
+  can't flood the implement queue.)
+- **You have a rough idea / feature request** → open an issue with a title and a
+  few sentences and label it **`agent:triage`**. The Product Agent grooms it:
+  **accepts** it (rewriting the issue into a full spec and clearing the triage
+  label, so it lands in the backlog exactly like a `cycle`-created issue) or
+  **rejects** it (a rationale comment + close). Promoting an enriched idea to
+  `agent:ready` is **your** call — triage never auto-enqueues work into the build
+  loop. If it needs a product decision it can't infer, it asks on the issue and the
+  item is left **blocked** for you.
 
 ### How a verdict becomes a transition
 
@@ -48,11 +63,18 @@ maps `changes requested → agent:changes`, `approve`/`accepted → toward
 agent:accepted`. If it can't parse a verdict, the PR is **blocked** rather than
 guessed at.
 
+Triage works the same way on an **issue**: the Product `triage` run posts a
+`🪐 Product triage` comment with a `**Verdict:**` line, and the dispatcher maps
+`accepted → clear the triage label (groomed backlog issue)`,
+`rejected → (already closed by the agent)`, `needs input → agent:blocked`.
+Unparseable → blocked.
+
 ## Priority per tick (drain before pulling new work)
 
 1. `agent:changes` PR → **resolve**
 2. `agent:review` PR → **review + acceptance** (run in parallel), then transition
-3. `agent:ready` issue with no PR → **implement**
+3. `agent:triage` issue → **triage** (groom the idea), then transition
+4. `agent:ready` issue with no PR → **implement**
 
 One action per tick, so a short interval can never stampede a stack of expensive
 agent runs. A `mkdir` lock (macOS has no `flock`) makes overlapping ticks skip;

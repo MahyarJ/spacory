@@ -37,7 +37,7 @@ run coordinating through GitHub.
 | **Role** | Senior PM / analyst — the "what & why" | Senior engineer — the "how" |
 | **Skill** (source of truth) | [`product-agent`](../.claude/skills/product-agent/SKILL.md) | [`engineer-agent`](../.claude/skills/engineer-agent/SKILL.md) |
 | **System-prompt shim** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
-| **Modes** | `cycle` · `acceptance` · `clarify` | `implement` · `review` · `resolve` · `clarify` |
+| **Modes** | `cycle` · `acceptance` · `clarify` · `triage` | `implement` · `review` · `resolve` · `clarify` |
 | **Never** | writes app code; revisits settled architecture; merges | reads `project-memory.md` or other product context; guesses on ambiguity; merges |
 
 Each role is **mode-aware**: the task it's given selects the mode, and it runs only
@@ -76,6 +76,27 @@ Shared building blocks each role reuses (also usable on their own in a chat):
 | `cycle` | repo | `project-memory.md` (first), repo selectively, existing issues | GitHub Issues; updates `project-memory.md`; Telegram |
 | `acceptance` | a PR # | the PR diff + the linked issue's acceptance criteria (may read memory, never writes it) | an acceptance **comment** on the PR |
 | `clarify` | an Issue/PR # | the open question comments + `project-memory.md` | a reply **comment** answering the **product** questions; surgical spec/memory edits only if the answer changes the spec |
+| `triage` | an Issue # (a human-submitted idea) | the raw idea + `project-memory.md` | one `🪐 Product triage` **verdict comment**; on accept the issue rewritten into a full spec; on reject a rationale + the issue **closed** |
+
+### Bring an idea to the Product Agent (intake)
+
+Have a feature idea or notice a missing capability? Don't write the spec yourself —
+open a rough issue (a title + a few sentences) and hand it to the Product Agent:
+
+```bash
+gh issue create --title "Idea: <one line>" --body "<why it'd help / rough sketch>" \
+  --label agent:triage
+# then let the dispatcher pick it up, or run it now:
+.agents/run-product.sh triage <N>       # headless
+# or, in a chat:  /product-agent triage <N>
+```
+
+The Product Agent judges it against `project-memory.md` and either **enriches** it
+into a proper issue (User story · Acceptance criteria · Technical context · Out of
+scope) — landing it in the backlog just like a `cycle`-created issue — or
+**rejects** it with a rationale and closes it. An enriched idea waits in the
+backlog until **you** promote it with `agent:ready` — triage never pushes work into
+the build loop on its own.
 
 ### Reviewing a PR: fan out, then resolve manually
 
@@ -109,6 +130,7 @@ headless run that coordinates only through GitHub. Merging stays a human action.
 .agents/run-product.sh "focus on export"   # optional extra steer for this run
 .agents/run-product.sh acceptance 14   # acceptance-test PR #14 (posts a comment)
 .agents/run-product.sh clarify 9       # answer product/scope questions on #9 (posts a reply)
+.agents/run-product.sh triage 42       # triage idea issue #42 (enrich into a spec, or reject)
 
 # Engineer Agent
 .agents/run-engineer.sh 2              # implement issue #2 (opens a PR) — default mode
@@ -168,6 +190,7 @@ without the wrapper scripts — just invoke the skill and name the mode:
 ```
 /product-agent cycle
 /product-agent acceptance 14
+/product-agent triage 42
 /engineer-agent implement 42
 /engineer-agent review 14
 /engineer-agent clarify 17
@@ -184,13 +207,14 @@ agent's system prompt, then give it the run-specific input below. Each shim tell
 agent to invoke its skill and run the mode the task names. **The task selects the
 mode**, so the task wording matters.
 
-**Product Agent** — the task picks `cycle`, `acceptance`, or `clarify`:
+**Product Agent** — the task picks `cycle`, `acceptance`, `clarify`, or `triage`:
 
 ```
 System prompt: contents of .agents/product-agent-prompt.md
 Task (cycle):       "Run a product cycle for the repo at /path/to/spacory."
 Task (acceptance):  "Acceptance-test pull request #14."
 Task (clarify):     "Answer the product questions on issue #9."
+Task (triage):      "Triage GitHub issue #42."
 ```
 
 In `cycle` it reads `project-memory.md`, surveys issues, creates new issues, updates
