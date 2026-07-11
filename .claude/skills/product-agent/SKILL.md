@@ -366,8 +366,8 @@ final output instead.
 - **Thin, shippable, unambiguous.** When unsure about product direction, record the
   question rather than guessing. Rejecting an idea in triage is a valid outcome.
 - **Don't touch `agent:*` labels.** The dispatcher owns the pipeline labels and reads
-  your verdict comment to move them; you never set `agent:ready`/`agent:triaged`
-  yourself. (A human promotes a triaged idea to `agent:ready`.)
+  your verdict comment to move them; you never set `agent:ready` yourself. (A human
+  promotes a groomed idea to `agent:ready`.)
 - **Never touch application code** — you are product, not engineering — and never
   merge. You have **no `resolve` mode**: code changes are the Engineer Agent's job.
   Your edits are always non-code — issues and `project-memory.md` — made in `cycle`,

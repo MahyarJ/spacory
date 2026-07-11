@@ -21,9 +21,9 @@ labels — they just post their usual verdict comments, which the dispatcher
 reads). Run `.agents/dispatch.sh setup` once to create the labels.
 
 ```
- issue agent:triage ──triage──▶ agent:triaged  (accepted → issue rewritten as a spec)
-                          └────▶ closed         (rejected, with a rationale comment)
- issue agent:triaged ──(human labels agent:ready)──▶ into the build loop
+ issue agent:triage ──triage──▶ enriched backlog issue  (accepted → issue rewritten as a spec)
+                          └────▶ closed                 (rejected, with a rationale comment)
+ groomed backlog issue ──(human labels agent:ready)──▶ into the build loop
  issue agent:ready ──implement──▶ PR agent:review
  PR agent:review ──review + acceptance──▶ agent:changes   (if either asks for changes)
                                     └────▶ agent:accepted  (if both pass)
@@ -46,11 +46,18 @@ double-fire.
   can't flood the implement queue.)
 - **You have a rough idea / feature request** → open an issue with a title and a
   few sentences and label it **`agent:triage`**. The Product Agent grooms it:
-  **accepts** it (rewriting the issue into a full spec and moving it to
-  `agent:triaged`) or **rejects** it (a rationale comment + close). Promoting an
-  enriched `agent:triaged` idea to `agent:ready` is **your** call — triage never
-  auto-enqueues work into the build loop. If it needs a product decision it can't
-  infer, it asks on the issue and the item is left **blocked** for you.
+  **accepts** it (rewriting the issue into a full spec and clearing the triage
+  label, so it lands in the backlog exactly like a `cycle`-created issue) or
+  **rejects** it (a rationale comment + close). Promoting an enriched idea to
+  `agent:ready` is **your** call — triage never auto-enqueues work into the build
+  loop. If it needs a product decision it can't infer, it asks on the issue and the
+  item is left **blocked** for you.
+
+  (There is deliberately no dedicated `agent:triaged` state: an accepted, enriched
+  idea is the *same* thing as a `cycle`-created issue — a groomed backlog issue
+  awaiting a human `agent:ready` — so both are represented the same way. The accept
+  Telegram ping + the `🪐 Product triage` verdict comment are your signal that an
+  idea is ready to promote.)
 
 ### How a verdict becomes a transition
 
@@ -64,8 +71,9 @@ guessed at.
 
 Triage works the same way on an **issue**: the Product `triage` run posts a
 `🪐 Product triage` comment with a `**Verdict:**` line, and the dispatcher maps
-`accepted → agent:triaged`, `rejected → (already closed by the agent)`,
-`needs input → agent:blocked`. Unparseable → blocked.
+`accepted → clear the triage label (groomed backlog issue)`,
+`rejected → (already closed by the agent)`, `needs input → agent:blocked`.
+Unparseable → blocked.
 
 ## Priority per tick (drain before pulling new work)
 

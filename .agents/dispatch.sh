@@ -13,8 +13,8 @@
 #
 #   The label state machine (this script owns every transition):
 #
-#     issue  agent:triage      ── triage ──▶  agent:triaged (enriched) | closed (rejected)
-#     issue  agent:triaged      ── human labels agent:ready ──▶  (into the build loop)
+#     issue  agent:triage      ── triage ──▶  enriched backlog issue | closed (rejected)
+#     issue  (groomed backlog)  ── human labels agent:ready ──▶  (into the build loop)
 #     issue  agent:ready        ── implement ──▶  PR agent:review
 #     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:accepted
 #     PR     agent:changes       ── resolve  ──▶  PR agent:review   (loops, capped)
@@ -23,7 +23,9 @@
 #
 #   agent:triage is the human intake front door: open a rough idea issue, label it
 #   agent:triage, and the Product Agent grooms it (accept+enrich, or reject+close).
-#   Promotion of an enriched idea to agent:ready stays a human decision.
+#   An accepted idea lands in the backlog like a cycle-created issue (no dedicated
+#   "triaged" label — it would just duplicate that state); promoting it to
+#   agent:ready stays a human decision.
 #
 #   Priority per tick (drain PRs before pulling new work):
 #     1. agent:changes  PR    → resolve
@@ -79,7 +81,6 @@ ensure_labels() {
   local -a specs=(
     "agent:triage|d4c5f9|Human-submitted idea awaiting Product triage"
     "agent:triaging|fbca04|Product Agent is triaging this idea"
-    "agent:triaged|0e8a16|Enriched by Product triage — awaiting a human agent:ready"
     "agent:ready|0e8a16|Issue is ready for the Engineer Agent to implement"
     "agent:implementing|fbca04|Engineer Agent is implementing this issue"
     "agent:review|1d76db|PR awaiting Engineer review + Product acceptance"
@@ -281,9 +282,12 @@ do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
   log "  triage verdict: $verdict"
   case "$verdict" in
     accepted)
-      # the agent rewrote the issue into a spec; hand it to a human to promote.
-      swap_label issue "$issue" agent:triaging agent:triaged
-      log "✓ issue #$issue enriched → agent:triaged (awaiting a human agent:ready)"
+      # the agent rewrote the issue into a spec. Clear the triage labels so it lands
+      # in the backlog exactly like a cycle-created issue — a groomed issue awaiting
+      # a human's agent:ready. (No dedicated agent:triaged state: the dispatcher never
+      # acts on it, and it would just duplicate the cycle "groomed backlog" state.)
+      remove_label issue "$issue" agent:triaging
+      log "✓ issue #$issue enriched (awaiting a human agent:ready)"
       notify "🧭 Spacory agents: idea #$issue triaged & enriched — review it and label agent:ready to build." ;;
     rejected)
       # the agent already commented the rationale and closed the issue.
@@ -301,7 +305,6 @@ do_implement() {  # $1=issue
   local issue="$1"
   log "→ implement issue #$issue"
   swap_label issue "$issue" agent:ready agent:implementing
-  remove_label issue "$issue" agent:triaged   # clear any leftover triage state
   if ! run_engineer implement "$issue"; then
     block issue "$issue" "engineer implement run failed"
     return
@@ -335,7 +338,7 @@ dispatch_once() {
 print_status() {
   echo "Spacory agent pipeline ($(gh repo view --json nameWithOwner -q .nameWithOwner)):"
   local l
-  for l in agent:triage agent:triaging agent:triaged agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:accepted agent:blocked; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:accepted agent:blocked; do
     printf '  %-20s' "$l"
     gh issue list --state open --label "$l" --json number --jq '[.[].number] | map("#\(.)") | join(" ")' 2>/dev/null | tr -d '\n'
     printf ' | '
