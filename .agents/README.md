@@ -96,9 +96,7 @@ into a proper issue (User story · Acceptance criteria · Technical context · O
 scope) — landing it in the backlog just like a `cycle`-created issue — or
 **rejects** it with a rationale and closes it. An enriched idea waits in the
 backlog until **you** promote it with `agent:ready` — triage never pushes work into
-the build loop on its own. (There's no separate `agent:triaged` state: an accepted
-idea is the same as a groomed `cycle` issue, so it's represented the same way; the
-accept notification + the `🪐 Product triage` comment are your promote-me signal.)
+the build loop on its own.
 
 ### Reviewing a PR: fan out, then resolve manually
 

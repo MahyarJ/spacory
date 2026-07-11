@@ -22,9 +22,8 @@
 #
 #   agent:triage is the human intake front door: open a rough idea issue, label it
 #   agent:triage, and the Product Agent grooms it (accept+enrich, or reject+close).
-#   An accepted idea lands in the backlog like a cycle-created issue (no dedicated
-#   "triaged" label — it would just duplicate that state); promoting it to
-#   agent:ready stays a human decision.
+#   An accepted idea lands in the backlog like a cycle-created issue; promoting it
+#   to agent:ready stays a human decision.
 #
 #   Priority per tick (drain PRs before pulling new work):
 #     1. agent:changes  PR    → resolve
@@ -281,13 +280,12 @@ do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
   log "  triage verdict: $verdict"
   case "$verdict" in
     accepted)
-      # the agent rewrote the issue into a spec. Clear the triage labels so it lands
-      # in the backlog exactly like a cycle-created issue — a groomed issue awaiting
-      # a human's agent:ready. (No dedicated agent:triaged state: the dispatcher never
-      # acts on it, and it would just duplicate the cycle "groomed backlog" state.)
+      # the agent rewrote the issue into a spec. Clear the in-flight label so it lands
+      # in the backlog like a cycle-created issue — a groomed issue awaiting a human's
+      # agent:ready.
       remove_label issue "$issue" agent:triaging
       log "✓ issue #$issue enriched (awaiting a human agent:ready)"
-      notify "🧭 Spacory agents: idea #$issue triaged & enriched — review it and label agent:ready to build." ;;
+      notify "🧭 Spacory agents: idea #$issue groomed & enriched — review it and label agent:ready to build." ;;
     rejected)
       # the agent already commented the rationale and closed the issue.
       remove_label issue "$issue" agent:triaging
