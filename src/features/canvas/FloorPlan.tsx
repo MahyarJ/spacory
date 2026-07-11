@@ -552,8 +552,8 @@ export function FloorPlan() {
           <WallsLayer />
           <ItemsLayer />
           <DimensionsLayer />
-          <ConnectionPointsLayer />
           <SelectionLayer />
+          <ConnectionPointsLayer />
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}
