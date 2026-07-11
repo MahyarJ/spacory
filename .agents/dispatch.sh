@@ -14,7 +14,6 @@
 #   The label state machine (this script owns every transition):
 #
 #     issue  agent:triage      ── triage ──▶  enriched backlog issue | closed (rejected)
-#     issue  (groomed backlog)  ── human labels agent:ready ──▶  (into the build loop)
 #     issue  agent:ready        ── implement ──▶  PR agent:review
 #     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:accepted
 #     PR     agent:changes       ── resolve  ──▶  PR agent:review   (loops, capped)
