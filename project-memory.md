@@ -103,6 +103,12 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   the pure connectivity primitives in `src/geometry/connectivity.ts`
   (`findConnectedEndpoints`, `pointsEqual`, `getConnectionPoints`,
   `translateEndpointsAt`, Vitest-tested) that #19 now reuses.
+- **No way to detach a wall from a junction — in flight (#30).** #22 welds and #19
+  follows co-located endpoints, but there is no way to pull a **single** wall's
+  endpoint out of a shared junction. Since connectivity is implicit in coordinate
+  equality, detach = moving that one wall's endpoint to a distinct coordinate (not
+  a persistent flag). #30 proposes per-wall endpoint handles on a single selected
+  wall; best landed after #19.
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
@@ -148,6 +154,8 @@ rough priority order) are:
 2. **Cascading connected-wall follow** — follow-up to #19: once the immediate-
    endpoint follow ships, scope cascading (wall A→B→C: moving A's endpoint also
    cascades to C via B). Needs careful definition to avoid cycles.
+   - **Detach a wall from a junction (#30)** is the created counterpart to #19
+     (break a join rather than keep it); prioritize #19 first, then #30.
 3. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs human
    product input before scoping (see open questions); defer until answered.
 
@@ -175,6 +183,17 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-11 — Human-directed issue creation. After #22/#27 (drag a connection
+  point → co-located endpoints move together) and #19 (open; whole-wall moves make
+  connected walls follow), a human noted there's no way to do the **opposite** —
+  pull one wall out of a junction. Confirmed the gap and that connectivity is
+  implicit in coordinate equality (no node object), so "disconnect" must mean
+  moving one wall's endpoint to a distinct coordinate, not a persistent flag. This
+  is the follow-up #22 explicitly deferred ("splitting a junction"). Created
+  **#30** Detach a single wall's endpoint from a junction (enhancement) — proposes
+  per-wall endpoint handles on a single selected wall, reuses
+  `connectivity.ts`/`getWallLength` guards, best sequenced after #19. No new open
+  questions.
 - 2026-07-05 — Human-directed issue creation. A human noticed that connection points
   (the corners/junctions where walls meet) still can't be selected or dragged — only
   edges (walls) can. Confirmed against the code: no node/connection object exists
