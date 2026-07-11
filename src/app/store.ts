@@ -1,6 +1,7 @@
 import { getPlanBounds } from "@geometry/bounds";
 import {
   getConnectionPoints,
+  pointsEqual,
   translateEndpointsAt,
 } from "@geometry/connectivity";
 import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
@@ -131,13 +132,24 @@ function translateSelectedWallsFollowing(
   dx: number,
   dy: number,
 ): Wall[] {
+  if (dx === 0 && dy === 0) return walls;
   const movedPoints = getConnectionPoints(
     walls.filter((w) => selectedWalls.has(w.id)),
   );
-  return movedPoints.reduce(
-    (acc, point) => translateEndpointsAt(acc, point, dx, dy),
-    walls,
-  );
+  // Decide every wall's new endpoints against the pre-move `walls` array in one
+  // pass, rather than reducing wall-by-wall — otherwise an earlier point's move
+  // can shift a coordinate onto a later movedPoint (e.g. a wall translated by
+  // exactly its own length), causing that point to match and move again.
+  return walls.map((w) => {
+    const atA = movedPoints.some((p) => pointsEqual(p, w.a));
+    const atB = movedPoints.some((p) => pointsEqual(p, w.b));
+    if (!atA && !atB) return w;
+    return {
+      ...w,
+      a: atA ? { x: w.a.x + dx, y: w.a.y + dy } : w.a,
+      b: atB ? { x: w.b.x + dx, y: w.b.y + dy } : w.b,
+    };
+  });
 }
 
 export const useApp = create<AppState>((set, get) => ({

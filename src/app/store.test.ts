@@ -91,6 +91,17 @@ describe("translateSelectedWalls", () => {
     expect(w3).toEqual(wall("w3", 100, 100, 200, 100));
   });
 
+  it("does not collapse a wall translated by exactly its own length", () => {
+    // Translating w1 by (100, 0) moves both its endpoints; the first-moved
+    // endpoint must not be re-matched and moved again on the second pass.
+    loadWithSelection([wall("w1", 0, 0, 100, 0)], ["w1"]);
+
+    useApp.getState().translateSelectedWalls(100, 0);
+
+    const w1 = useApp.getState().plan.walls.find((w) => w.id === "w1");
+    expect(w1).toEqual(wall("w1", 100, 0, 200, 0));
+  });
+
   it("leaves an unconnected wall untouched", () => {
     loadWithSelection(
       [wall("w1", 0, 0, 100, 0), wall("w2", 500, 500, 600, 500)],
