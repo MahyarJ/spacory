@@ -5,7 +5,13 @@ import { getConnectionPoints } from "@geometry/connectivity";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
 import { applyInverseViewTransform, snapToGrid } from "@geometry/snap";
-import { findNearestWall, getPointOnWall, getWallAngle } from "@geometry/wall";
+import {
+  findNearestWall,
+  getPointOnWall,
+  getWallAngle,
+  getWallLength,
+  MIN_WALL_LENGTH,
+} from "@geometry/wall";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -264,7 +270,7 @@ export function FloorPlan() {
           b: snapped,
           thickness: useApp.getState().currentWallThickness,
         };
-        addWall(w);
+        if (getWallLength(w) >= MIN_WALL_LENGTH) addWall(w);
       }
       // chain wall drawing
       setDrawingWall(snapped);
@@ -431,7 +437,7 @@ export function FloorPlan() {
         b: snapped,
         thickness: useApp.getState().currentWallThickness,
       };
-      addWall(w);
+      if (getWallLength(w) >= MIN_WALL_LENGTH) addWall(w);
       setDrawingWall(null);
       setDragging(false);
     }

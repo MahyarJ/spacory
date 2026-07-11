@@ -1,3 +1,4 @@
+import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import {
   createInitialPlan,
   type Item,
@@ -134,7 +135,11 @@ export function coercePlan(raw: unknown): Plan {
     throw new PlanParseError('Plan is missing an "items" array.');
   }
 
-  const walls = raw.walls.map(asWall);
+  // Drop degenerate zero-length walls (a === b): they render as nothing but
+  // still contribute a dangling connection-point handle. See issue #28.
+  const walls = raw.walls
+    .map(asWall)
+    .filter((w) => getWallLength(w) >= MIN_WALL_LENGTH);
   const items = raw.items.map(asItem);
 
   // Drop items whose wall no longer exists to keep the renderer safe.

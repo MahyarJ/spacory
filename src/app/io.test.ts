@@ -82,6 +82,27 @@ describe("parsePlan normalization", () => {
     expect(parsed.items.map((i) => i.id)).toEqual(["door_1"]);
   });
 
+  it("drops degenerate zero-length walls and any items attached to them", () => {
+    const text = JSON.stringify({
+      meta: {},
+      walls: [
+        { id: "w1", a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, thickness: 8 },
+        { id: "w2", a: { x: 50, y: 50 }, b: { x: 50, y: 50 }, thickness: 8 },
+      ],
+      items: [
+        {
+          id: "win_on_degenerate",
+          type: "window",
+          wallAttach: { wallId: "w2", offset: 0, length: 5 },
+          thickness: 10,
+        },
+      ],
+    });
+    const parsed = parsePlan(text);
+    expect(parsed.walls.map((w) => w.id)).toEqual(["w1"]);
+    expect(parsed.items).toEqual([]);
+  });
+
   it("normalizes an unknown version but keeps the geometry", () => {
     const text = JSON.stringify({
       version: "0.0.1-legacy",
