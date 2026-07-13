@@ -4,6 +4,8 @@ import { defineConfig } from "vite";
 import { patchCssModules } from "vite-css-modules";
 
 export default defineConfig({
+  // Served from https://<user>.github.io/spacory/ on GitHub Pages.
+  base: "/spacory/",
   plugins: [
     react(),
     patchCssModules({
