@@ -51,6 +51,17 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   longer shift the layout when they appear/disappear (#14, merged).
 - **Theming** — dark / light / system via CSS variables (`src/app/theming.ts`,
   `src/theme.css`).
+- **PNG image export** — "Export PNG" toolbar button rasters the plan via
+  `buildExportSvg` (`src/geometry/exportSvg.ts`) → `<canvas>` → PNG blob (#4,
+  merged).
+- **Connection points selectable/draggable** — drag a corner/junction handle and
+  every co-located wall endpoint moves together in one commit (#22, merged as
+  #27; `src/geometry/connectivity.ts`).
+- **Auto-follow connected walls on move/resize** — moving a whole selected wall,
+  or type-to-resizing one, also moves the immediate (non-cascading) endpoint of
+  any other wall sharing that point, so junctions stay intact (#19, merged;
+  `translateSelectedWallsFollowing` in `src/app/store.ts`).
+- **Zero-length walls rejected when drawing** (#29, merged).
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -61,10 +72,11 @@ of truth and all edits flow through one `commit()` chokepoint. Pure logic
 
 From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 
-- **PNG image export — in flight (#4).** Raster export of the plan; SVG (vector)
-  export deliberately deferred to a follow-up.
-- **No SVG/vector image export** — follow-up to PNG export (#4); not yet scoped.
-  Blocked until #4 merges (reuses #4's content-SVG + bounds helper).
+- **PNG image export — done (#4, merged).** Raster export of the plan; SVG
+  (vector) export deliberately deferred to a follow-up.
+- **No SVG/vector image export — in flight (#33).** Thin wiring follow-up to #4:
+  save `buildExportSvg`'s existing markup as a `.svg` file next to "Export PNG";
+  no new rendering logic.
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -72,21 +84,21 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
   Keyboard shortcut wires `fitView()`; also "zoom to selection" when walls are
   selected. Reuses `computeFitView` from `src/app/viewport.ts`.
-- **No miter limit / bevel fallback** — very acute wall angles produce long
-  spike-like miters; a miter limit is noted as a possible future tweak.
+- **No miter limit / bevel fallback — in flight (#34).** Very acute wall angles
+  produce long spike-like miters; #34 caps the miter at a multiple of
+  half-thickness and falls back to a bevel, per `docs/DECISIONS.md`'s noted
+  future tweak.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
 - **On-canvas wall-length labels — done (#5, merged).**
 - **Editable wall lengths — done (#11, merged).** Type to resize; angle preserved.
-- **Auto-follow connected walls on move/resize — in flight (#19).** When a wall's
-  endpoint moves, walls sharing that endpoint coordinate should follow.
-  The pure connectivity helpers this needs now already exist (shipped with
-  #22/#27): `findConnectedEndpoints`, `pointsEqual` (epsilon-based), and
-  `translateEndpointsAt` in `src/geometry/connectivity.ts`. #19 consumes them and
-  wires the whole-wall move paths (`translateSelectedWalls`, type-to-resize) to
-  follow — distinct from #22 (which drags a connection point). #19's body was
-  realigned to reuse these rather than re-create a helper.
+- **Auto-follow connected walls on move/resize — done (#19, merged).** Moving a
+  whole selected wall, or type-to-resizing one, moves the immediate endpoint of
+  any other wall sharing that point (`translateSelectedWallsFollowing` in
+  `src/app/store.ts`), reusing `src/geometry/connectivity.ts`'s primitives. Only
+  the immediate endpoint follows — no cascading further through the connectivity
+  graph (see "Cascading connected-wall follow" below).
 - **No editable units / unit switching** — changing `plan.meta.units` from the UI is
   not yet scoped (explicitly out of scope of #11).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
@@ -103,6 +115,17 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   the pure connectivity primitives in `src/geometry/connectivity.ts`
   (`findConnectedEndpoints`, `pointsEqual`, `getConnectionPoints`,
   `translateEndpointsAt`, Vitest-tested) that #19 now reuses.
+- **Cascading connected-wall follow — not yet scoped; needs human input.** #19
+  (merged) only follows the *immediate* endpoint a moved wall touches — a chain
+  A–B–C (B shares one endpoint with A, its other endpoint with C) does not
+  propagate a whole-wall move of A on to C. Whether it *should* is a genuine UX
+  question, not just an implementation gap: making it cascade means treating the
+  whole connected chain as a single rigid body (every reachable wall translates
+  by the same delta), which is a materially different feel from today's "hinge"
+  behavior (an unselected neighbor's far endpoint stays put; only the shared
+  point moves) — and could mean dragging one wall of a large connected floor
+  plan drags much of the building with it. Don't scope an issue for this until a
+  human confirms which behavior is wanted (see open questions below).
 - **No way to detach a wall from a junction — in flight (#30).** #22 welds and #19
   follows co-located endpoints, but there is no way to pull a **single** wall's
   endpoint out of a shared junction. Since connectivity is implicit in coordinate
@@ -112,7 +135,9 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
-measurements, and any accessibility/i18n requirements.
+measurements, any accessibility/i18n requirements, and — new this run — **should
+a whole-wall move cascade through a connected chain as one rigid body, or stay
+"hinge" behavior as it is today** (see "Cascading connected-wall follow" above)?
 
 ## Architecture decisions
 
@@ -141,23 +166,22 @@ measurements, and any accessibility/i18n requirements.
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-05): #4 (PNG export), #10 (prune stale
-selection), #19 (auto-follow connected walls), #20 (fit shortcut/zoom to
-selection), #21 (error boundary), #22 (select/drag connection points). Do **not**
-re-propose any of these.
+Current open issues (as of 2026-07-12): #10 (prune stale selection), #20 (fit
+shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
+junction), #33 (SVG export), #34 (miter limit/bevel). Do **not** re-propose any
+of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
 
-1. **SVG (vector) export** — follow-up to #4; reuses #4's content-SVG/bounds helper.
-   **Blocked until #4 merges** — don't open it before then.
-2. **Cascading connected-wall follow** — follow-up to #19: once the immediate-
-   endpoint follow ships, scope cascading (wall A→B→C: moving A's endpoint also
-   cascades to C via B). Needs careful definition to avoid cycles.
-   - **Detach a wall from a junction (#30)** is the created counterpart to #19
-     (break a join rather than keep it); prioritize #19 first, then #30.
-3. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs human
-   product input before scoping (see open questions); defer until answered.
+1. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs
+   human product input before scoping (see open questions); defer until answered.
+2. **Cascading connected-wall follow** — genuinely needs a human UX call before
+   it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
+   gaps" and the open question above. Do not write this issue until answered.
+
+Once #33/#34 land, the next cycle should reconcile GitHub state and look for the
+next thin, independently-shippable slice — nothing else is currently queued.
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
 pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
@@ -183,6 +207,33 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-13 — Triage run on human-submitted idea #35 ("deploy the app on main
+  update"). Accepted and enriched: scoped tightly to a GitHub Pages deploy
+  gated on green CI on `main` (no backend, no secrets, no new hosting
+  decision — fits the client-only architecture as-is). Rewrote #35's title/body
+  into a full spec (GitHub Actions Pages deploy, `vite.config.ts` base-path
+  check, README link) and posted the triage verdict; left custom domain, PR
+  previews, and other hosts out of scope.
+- 2026-07-13 — Fifth Product Agent run. Checked GitHub: no change since the last
+  run — #10, #20, #21, #30, #33, #34 are all still open with zero comments, and
+  there are no open PRs at all (the Engineer Agent hasn't started any of them
+  yet). No human input has landed on either open product question (rooms scope;
+  whether whole-wall moves should cascade through a connected chain). Per the
+  prior run's note ("nothing else is currently queued" until #33/#34 land), took
+  no action this cycle — created no issues and made no substantive edits, since
+  there is nothing to reconcile and no new information to scope against.
+- 2026-07-12 — Fourth Product Agent run. Reconciled state with GitHub: #4 (PNG
+  export), #19 (auto-follow connected walls), and #22/#27 (select/drag connection
+  points) have all **merged** since the last run; #28/#29 (reject zero-length
+  walls) also merged. Only #10, #20, #21, #30 remain open from prior batches.
+  Updated "Current state" and "Known gaps" to reflect all of the above. Created
+  the fourth issue batch: **#33** SVG (vector) export (thin follow-up to #4,
+  reuses `buildExportSvg`'s markup as-is) and **#34** miter-limit/bevel fallback
+  for acute wall junctions (resolves the documented `DECISIONS.md` gap in
+  `geometry/junction.ts`). Did **not** open a cascading-connected-wall-follow
+  issue: on inspection this isn't just an implementation gap but a real UX fork
+  (rigid-chain-body vs. today's hinge behavior) — recorded as a new open question
+  for the human instead of guessing. Rooms remain deferred pending human input.
 - 2026-07-11 — Human-directed issue creation. After #22/#27 (drag a connection
   point → co-located endpoints move together) and #19 (open; whole-wall moves make
   connected walls follow), a human noted there's no way to do the **opposite** —
