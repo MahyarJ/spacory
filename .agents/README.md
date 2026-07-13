@@ -117,8 +117,12 @@ comments:
 .agents/run-engineer.sh resolve 14       # addresses the comments, pushes to the branch
 ```
 
-There is intentionally **no coordinating/orchestration script** — every step is a fresh
-headless run that coordinates only through GitHub. Merging stays a human action.
+You can drive every step manually like this — each is a fresh headless run that
+coordinates only through GitHub — **or** hand the whole loop to the optional,
+label-driven dispatcher (`dispatch.sh`), which derives the next action from the
+`agent:*` labels and fires the matching run on a timer. See
+[`../docs/AUTOMATION.md`](../docs/AUTOMATION.md). Either way, merging stays a human
+action.
 
 ## How to invoke
 
@@ -161,6 +165,14 @@ non-code edit to its own artifact (Product → the issue / `project-memory.md`; 
 the PR title/description). **Code** changes are only ever Engineer `resolve` (commits +
 push). Product therefore has no `resolve` — it has no code job. Merging stays a human
 action, as does trivial metadata hygiene if you'd rather not spin an agent for it.
+
+In the **orchestrated loop** you don't dispatch this by hand: label the issue *or* the
+PR **`agent:clarify`** and the dispatcher runs Product `clarify` for you — the
+mid-flight refinement door (the "daily-scrum" case: raise it on the PR where the
+confusion lives, and the decision is folded back into the issue). For a PR it then goes
+back for a fresh review round against the updated spec; because editing the issue body
+resets the review-round budget, refining a spec this way never trips the loop's
+non-convergence cap. See [`../docs/AUTOMATION.md`](../docs/AUTOMATION.md).
 
 Each script launches a **fresh, headless** `claude` session (`-p`) whose prompt leads
 with the `/<role>-agent <mode> [number]` slash form — so Claude Code deterministically
