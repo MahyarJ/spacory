@@ -40,6 +40,34 @@ earns a place on the roadmap and, if so, shape it into an implementable issue.
 Follow the **`spacory-preflight`** skill first: confirm `gh auth status` succeeds
 before you read or write anything. If it fails, send the blocked wrap-up and stop.
 
+## Committing `project-memory.md` (whenever you edit it)
+
+`project-memory.md` is your shared institutional memory and it lives on **`main`**.
+It is **exclusively yours** — the Engineer Agent never reads it — so it must **never**
+ride along in a feature branch or a code PR, and it must **never** be left
+uncommitted. A dirty memory file pollutes the working tree that the next agent run
+(and any Engineer branch sharing this checkout) inherits, and an uncommitted update
+is invisible to every other branch and lost on a crash.
+
+So in any mode that **edits** the file (`cycle` always; `clarify`/`triage` when a
+decision changes the spec — **not** `acceptance`, which is read-only), follow this
+exactly:
+
+1. **Be on `main` before you edit.** Product modes touch no code and need no branch.
+   Run `git switch main` first (the file is identical across branches, so this is
+   safe). Do this **only** when you're going to edit the file — never switch
+   branches during read-only `acceptance`.
+2. **Edit, then commit only that file.** Stage nothing but the memory file:
+   `git add project-memory.md && git commit -m "Update project memory: <what changed>"`.
+   Never bundle it with any other change.
+3. **Push to `main`:** `git push origin main`, so other branches and the next run
+   pick it up immediately.
+4. **No AI attribution** in the commit (repo rule — no `Co-Authored-By`/"Generated
+   with" trailers).
+
+End every run with a clean working tree — `git status` must show no pending
+`project-memory.md` changes.
+
 ---
 
 ## Mode: run a product cycle
@@ -139,6 +167,9 @@ URL) — never mark an issue "in flight" unless it exists on GitHub.
 
 Keep edits surgical and preserve the file's structure and any human-authored notes.
 
+Then **commit and push it to `main`** per *Committing `project-memory.md`* above —
+on its own commit, no code, nothing left uncommitted.
+
 ---
 
 ## Mode: acceptance-test a PR
@@ -230,9 +261,11 @@ gh issue comment <N> --body "🪐 **Product clarification**
 (Use `gh pr comment <N>` if the questions are on a PR.) If a decision **changes the
 spec**, make it durable — surgically edit the **issue body** to match, and/or record
 the decision in `project-memory.md` (e.g. resolve an entry under "Known gaps & open
-questions"), preserving the file's structure and any human notes. If it doesn't
-change the spec, the reply comment alone is enough. Never touch application code or
-merge.
+questions"), preserving the file's structure and any human notes. **If you edit
+`project-memory.md`, commit and push it to `main`** per *Committing
+`project-memory.md`* above (on its own commit, nothing left uncommitted). If it
+doesn't change the spec, the reply comment alone is enough. Never touch application
+code or merge.
 
 ---
 
@@ -307,7 +340,9 @@ gh issue close <N> --reason "not planned"
 
 Optionally record the decision in `project-memory.md` (e.g. under "Known gaps &
 open questions" or as a Changelog note) so the idea isn't re-proposed — surgically,
-preserving structure and human notes.
+preserving structure and human notes. **If you do edit it, commit and push it to
+`main`** per *Committing `project-memory.md`* above (own commit, nothing left
+uncommitted).
 
 **On needs-input** — ask and stop:
 
@@ -359,7 +394,9 @@ final output instead.
 - **Memory lives in `project-memory.md`, not in your session.** In cycle mode, read
   it first and write it last. In acceptance mode you may read but never modify it. In
   clarify and triage modes you may read it and surgically update it only when a
-  decision changes the roadmap/spec.
+  decision changes the roadmap/spec. **Whenever you edit it, commit and push it to
+  `main` on its own commit** (see *Committing `project-memory.md`*) — never leave it
+  uncommitted, and never let it ride along in a code branch/PR.
 - **The issue is the contract.** If it isn't in the issue, the engineer didn't know
   it — judge acceptance against the issue's own criteria, not hindsight, and when you
   triage-enrich, put *everything* the engineer needs into the issue.
