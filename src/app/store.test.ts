@@ -242,4 +242,58 @@ describe("live drag item reconciliation", () => {
 
     expect(useApp.getState().plan.items).toHaveLength(0);
   });
+
+  it("reappears a mid-drag-removed item when the same gesture regrows the wall", () => {
+    // w1: (0,0)-(100,0), door at offset 0 length 40. Shrinking to 30 (< 40)
+    // removes it live; regrowing back past 40 within the same gesture must
+    // bring it back rather than leaving it gone until a post-release Undo.
+    const door = attachedDoor(0, 40);
+    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
+    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().beginLiveDrag();
+
+    // Tick 1: drag `b` in to (30,0) — wall length 30, door dropped.
+    useApp.getState().translateSelectedConnectionPointLive(-70, 0);
+    expect(useApp.getState().plan.items).toHaveLength(0);
+
+    // Tick 2: reverse and drag back out to (100,0) — wall length 100 again.
+    useApp.getState().translateSelectedConnectionPointLive(70, 0);
+    expect(useApp.getState().plan.items).toHaveLength(1);
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(0);
+    expect(useApp.getState().plan.items[0].wallAttach.length).toBe(40);
+  });
+
+  it("restores a clamped item to its exact pre-drag offset when the gesture regrows the wall", () => {
+    // Door at offset 50 length 40 fits a 100-wall ([50,90]). Shrink to 70 →
+    // clamps to offset 30; regrow back to 100 within the same gesture must
+    // restore the exact pre-drag offset 50, not leave it drifted at 30.
+    const door = attachedDoor(50, 40);
+    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
+    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().beginLiveDrag();
+
+    // Tick 1: shrink to 70 — opening [50,90] no longer fits, clamps to 30.
+    useApp.getState().translateSelectedConnectionPointLive(-30, 0);
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(30);
+
+    // Tick 2: regrow back to 100 — must snap back to the exact pre-drag offset.
+    useApp.getState().translateSelectedConnectionPointLive(30, 0);
+    expect(useApp.getState().plan.walls.find((w) => w.id === "w1")?.b).toEqual({
+      x: 100,
+      y: 0,
+    });
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(50);
+    expect(useApp.getState().plan.items[0].wallAttach.length).toBe(40);
+  });
+
+  it("commitPlan clears the pre-drag snapshot so the next gesture starts fresh", () => {
+    const door = attachedDoor(50, 40);
+    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
+    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().beginLiveDrag();
+    useApp.getState().translateSelectedConnectionPointLive(-30, 0);
+    useApp.getState().commitPlan();
+
+    expect(useApp.getState().liveDragItems).toBeNull();
+  });
 });

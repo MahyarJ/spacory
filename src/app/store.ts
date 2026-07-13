@@ -97,6 +97,19 @@ interface AppState {
   translateSelectedConnectionPoint: (dx: number, dy: number) => void;
   /** Same, but without writing to history (live drag preview). */
   translateSelectedConnectionPointLive: (dx: number, dy: number) => void;
+  /**
+   * Snapshot of `plan.items` as they stood when a live drag gesture started, or
+   * `null` when no gesture is in progress. The `*Live` functions reconcile this
+   * pre-drag snapshot against the wall's current live length on every tick —
+   * never the previous tick's already-reconciled result — so reversing a drag
+   * (regrowing the wall) within the same gesture restores removed items and
+   * exact pre-drag offsets, rather than compounding tick-over-tick.
+   */
+  liveDragItems: Item[] | null;
+  /** Capture the pre-drag item snapshot at the start of a live drag gesture. */
+  beginLiveDrag: () => void;
+  /** Clear the pre-drag item snapshot when a live drag ends without committing. */
+  endLiveDrag: () => void;
   /** Push the current plan onto the undo stack as a single history entry. */
   commitPlan: () => void;
 }
@@ -383,7 +396,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({ plan: history.present });
   },
   translateSelectedWallsLive: (dx, dy) => {
-    const { plan, selectedWalls } = get();
+    const { plan, selectedWalls, liveDragItems } = get();
     if (selectedWalls.size === 0) return;
     const walls = translateSelectedWallsFollowing(
       plan.walls,
@@ -391,11 +404,14 @@ export const useApp = create<AppState>((set, get) => ({
       dx,
       dy,
     );
+    // Reconcile the pre-drag snapshot (if a gesture is in progress) against the
+    // current live walls, so a mid-drag regrow restores removed items and exact
+    // pre-drag offsets instead of compounding the previous tick's clamp/remove.
     set({
       plan: {
         ...plan,
         walls,
-        items: reconcileItemsToWalls(walls, plan.items),
+        items: reconcileItemsToWalls(walls, liveDragItems ?? plan.items),
       },
     });
   },
@@ -417,7 +433,7 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
   translateSelectedConnectionPointLive: (dx, dy) => {
-    const { plan, selectedConnectionPoint } = get();
+    const { plan, selectedConnectionPoint, liveDragItems } = get();
     if (!selectedConnectionPoint) return;
     const walls = translateEndpointsAt(
       plan.walls,
@@ -425,11 +441,12 @@ export const useApp = create<AppState>((set, get) => ({
       dx,
       dy,
     );
+    // Reconcile from the pre-drag snapshot (see translateSelectedWallsLive).
     set({
       plan: {
         ...plan,
         walls,
-        items: reconcileItemsToWalls(walls, plan.items),
+        items: reconcileItemsToWalls(walls, liveDragItems ?? plan.items),
       },
       selectedConnectionPoint: {
         x: selectedConnectionPoint.x + dx,
@@ -437,12 +454,17 @@ export const useApp = create<AppState>((set, get) => ({
       },
     });
   },
+  liveDragItems: null,
+  beginLiveDrag: () => set({ liveDragItems: get().plan.items }),
+  endLiveDrag: () => set({ liveDragItems: null }),
   commitPlan: () => {
     const next: Plan = {
       ...get().plan,
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);
-    set({ plan: history.present });
+    // The gesture is over: the reconciled live items are now committed, so drop
+    // the pre-drag snapshot before the next gesture captures a fresh one.
+    set({ plan: history.present, liveDragItems: null });
   },
 }));
