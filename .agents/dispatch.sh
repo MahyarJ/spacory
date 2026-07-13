@@ -194,6 +194,29 @@ pr_for_issue() {  # $1=issue number
 run_engineer() { "$SCRIPT_DIR/run-engineer.sh" "$@"; }
 run_product()  { "$SCRIPT_DIR/run-product.sh"  "$@"; }
 
+# Safety net: project-memory.md is the Product Agent's shared memory and belongs on
+# main (the Engineer never reads it). The agent is supposed to commit+push it itself
+# (see the product-agent skill), but if a run left it dirty, land it on main here so
+# it isn't swept into a feature branch or lost. Deterministic, best-effort, never
+# fails the tick. Only ever touches project-memory.md.
+commit_memory() {
+  git diff --quiet -- project-memory.md \
+    && git diff --cached --quiet -- project-memory.md && return 0
+  log "project-memory.md left dirty by the product run; auto-committing it to main."
+  local branch; branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  if [ "$branch" != "main" ]; then
+    # the file is branch-invariant (only the Product Agent edits it), so switching
+    # carries the single-file change onto main without conflict.
+    git switch main >/dev/null 2>&1 || { log "  couldn't switch to main; leaving memory dirty"; return 0; }
+  fi
+  git add project-memory.md
+  git commit -m "Update project memory (dispatcher auto-commit)" >/dev/null 2>&1 \
+    || { log "  nothing to commit after all"; [ "$branch" != main ] && git switch "$branch" >/dev/null 2>&1 || true; return 0; }
+  git push origin main >/dev/null 2>&1 || log "  push to main failed; committed locally."
+  [ "$branch" != "main" ] && git switch "$branch" >/dev/null 2>&1 || true
+  log "✓ project-memory.md committed to main."
+}
+
 # ── pipeline actions ─────────────────────────────────────────────────────────
 list_issues() { gh issue list --state open --label "$1" --json number --jq '.[].number'; }
 list_prs()    { gh pr    list --state open --label "$1" --json number --jq '.[].number'; }
@@ -275,6 +298,7 @@ do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
     block issue "$issue" "product triage run failed"
     return
   fi
+  commit_memory   # triage may record the decision in project-memory.md
   local verdict
   verdict="$(triage_verdict_of "$(latest_issue_comment "$issue" "Product triage")")"
   log "  triage verdict: $verdict"
@@ -351,6 +375,7 @@ main() {
     cycle)
       log "→ product cycle"
       if run_product; then log "✓ product cycle complete"; else notify "⚠️ Spacory agents: product cycle failed."; fi
+      commit_memory
       exit 0 ;;
     tick)   dispatch_once ;;
     *)      die "unknown command: $1 (use: setup | status | cycle | tick)" ;;
