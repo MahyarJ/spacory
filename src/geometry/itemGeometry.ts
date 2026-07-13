@@ -1,5 +1,10 @@
-import type { DoorItem, Wall, WindowItem } from "@app/schema";
-import { getPointOnWall, getWallAngle, getWallDirection } from "./wall";
+import type { DoorItem, Item, Wall, WindowItem } from "@app/schema";
+import {
+  getPointOnWall,
+  getWallAngle,
+  getWallDirection,
+  getWallLength,
+} from "./wall";
 
 /** A rotated rectangle: the opening cut into the wall for an item. */
 export interface OpeningRect {
@@ -101,4 +106,37 @@ export function getDoorGeometry(item: DoorItem, wall: Wall): DoorGeometry {
 export function getDoorArcPath(geometry: DoorGeometry): string {
   const { tipClosed, tipOpen, radius, sweepFlag } = geometry;
   return `M ${tipClosed.x} ${tipClosed.y} A ${radius} ${radius} 0 0 ${sweepFlag} ${tipOpen.x} ${tipOpen.y}`;
+}
+
+/**
+ * Reconcile every item's `wallAttach` against its wall's current `length`:
+ * clamp the opening back within the wall's bounds if it still fits, or drop
+ * the item if the wall has shrunk shorter than the opening itself. Items
+ * whose wall is missing (already handled at the io.ts import boundary) or
+ * whose opening already fits are returned unchanged. Call this once from the
+ * `commit()` chokepoint so every wall-resize path is covered uniformly.
+ */
+export function reconcileItemsToWalls(walls: Wall[], items: Item[]): Item[] {
+  const wallsById = new Map(walls.map((w) => [w.id, w]));
+  const result: Item[] = [];
+  for (const item of items) {
+    const wall = wallsById.get(item.wallAttach.wallId);
+    if (!wall) {
+      result.push(item);
+      continue;
+    }
+    const wallLength = getWallLength(wall);
+    const { offset, length } = item.wallAttach;
+    if (offset >= 0 && offset + length <= wallLength) {
+      result.push(item);
+      continue;
+    }
+    if (length > wallLength) continue; // no valid position left — drop it
+    const clampedOffset = Math.max(0, Math.min(offset, wallLength - length));
+    result.push({
+      ...item,
+      wallAttach: { ...item.wallAttach, offset: clampedOffset },
+    });
+  }
+  return result;
 }

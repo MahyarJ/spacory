@@ -4,6 +4,7 @@ import {
   pointsEqual,
   translateEndpointsAt,
 } from "@geometry/connectivity";
+import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
@@ -111,7 +112,14 @@ function persist() {
 }
 
 function commit(next: Plan) {
-  history = commitHistory(history, next);
+  // Reconcile door/window openings against their wall's current length here so
+  // every wall-resize path (type-to-length, connection-point drag, auto-follow)
+  // is covered without touching each call site individually.
+  const reconciled: Plan = {
+    ...next,
+    items: reconcileItemsToWalls(next.walls, next.items),
+  };
+  history = commitHistory(history, reconciled);
   persist();
 }
 
