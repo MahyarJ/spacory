@@ -132,14 +132,21 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   equality, detach = moving that one wall's endpoint to a distinct coordinate (not
   a persistent flag). #30 proposes per-wall endpoint handles on a single selected
   wall; best landed after #19.
-- **Attached openings not reconciled when their wall shrinks — in flight (#38).**
-  `item.wallAttach` (offset/length) is never adjusted against the wall's current
-  `length` on any resize path (type-to-resize, connection-point drag, or a
-  connected wall shrinking via auto-follow), so a door/window can end up
-  rendered off the wall. Triaged from a human-submitted idea (2026-07-13);
-  chosen fix is reposition-first (clamp offset back within bounds), remove only
-  as a last resort (opening no longer fits at any offset), applied once at the
-  `commit()` chokepoint so it covers all resize paths.
+- **Attached openings not reconciled when their wall shrinks — in flight (#38,
+  PR #39).** `item.wallAttach` (offset/length) is never adjusted against the
+  wall's current `length` on any resize path (type-to-resize, connection-point
+  drag, or a connected wall shrinking via auto-follow), so a door/window can
+  end up rendered off the wall. Triaged from a human-submitted idea
+  (2026-07-13); chosen fix is reposition-first (clamp offset back within
+  bounds), remove only as a last resort (opening no longer fits at any
+  offset). PR #39 implements this at the `commit()` chokepoint, but the
+  reporter clarified (2026-07-13) that the same clamp/remove must also apply
+  **live**, during an in-progress connection-point/wall drag — today's fix
+  only reconciles once the drag is committed, since `translateSelected*Live`
+  intentionally bypasses `commit()` to avoid spamming undo history. Spec
+  updated on #38 to require live parity (reuse
+  `reconcileItemsToWalls`/`itemGeometry.ts` from the `*Live` store functions
+  too, without pushing a history entry) — this is still open work.
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
@@ -216,6 +223,15 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-13 — Clarify run on #38: reporter followed up that the landed fix
+  (PR #39) only reconciles openings at `commit()` time, so during a live
+  connection-point/wall drag the opening still renders off-bounds until
+  pointer-up. Decided live parity is required (clamp/remove during the drag
+  preview too, reusing `reconcileItemsToWalls`), and rejected the alternative
+  of deliberately showing the opening off-bounds mid-drag as a "distance"
+  cue — a truthful live preview beats a surprising one for this tool. Updated
+  #38's spec (Chosen behavior, acceptance criteria, Technical context) to
+  require this; PR #39 will need follow-up work before #38 is fully done.
 - 2026-07-13 — Triage run on human-submitted idea #38 ("windows/doors go off
   the wall after it's shrunk"). Confirmed the root cause in the code: no
   resize path (type-to-resize, connection-point drag, connected-wall
