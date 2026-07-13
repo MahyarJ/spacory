@@ -238,6 +238,7 @@ export function FloorPlan() {
           last: world,
           snap: !e.altKey,
         });
+        useApp.getState().beginLiveDrag();
         return;
       }
 
@@ -249,6 +250,7 @@ export function FloorPlan() {
           last: world,
           snap: !e.altKey,
         });
+        useApp.getState().beginLiveDrag();
         if (!selectedWalls.has(hitW.id)) selectWall(hitW.id, additive);
         return;
       }
@@ -463,7 +465,10 @@ export function FloorPlan() {
       // single undo step, but only if the walls actually moved.
       const moved =
         moving.last.x !== moving.start.x || moving.last.y !== moving.start.y;
+      // `commitPlan` clears the pre-drag snapshot; a no-op drag never committed,
+      // so clear it explicitly to avoid a stale snapshot leaking into the next.
       if (moved) useApp.getState().commitPlan();
+      else useApp.getState().endLiveDrag();
       setMoving(null);
       return;
     }
@@ -473,6 +478,7 @@ export function FloorPlan() {
         movingPoint.last.x !== movingPoint.start.x ||
         movingPoint.last.y !== movingPoint.start.y;
       if (moved) useApp.getState().commitPlan();
+      else useApp.getState().endLiveDrag();
       setMovingPoint(null);
       return;
     }

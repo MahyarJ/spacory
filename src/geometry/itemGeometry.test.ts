@@ -4,6 +4,7 @@ import {
   getDoorArcPath,
   getDoorGeometry,
   getWindowGeometry,
+  reconcileItemsToWalls,
 } from "./itemGeometry";
 
 const wall = (ax: number, ay: number, bx: number, by: number): Wall => ({
@@ -98,5 +99,32 @@ describe("getDoorGeometry", () => {
     expect(getDoorArcPath(geometry)).toBe(
       `M 40 0 A 20 20 0 0 ${geometry.sweepFlag} 60 -20`,
     );
+  });
+});
+
+describe("reconcileItemsToWalls", () => {
+  it("clamps an opening back onto a shrunk wall, preserving its length", () => {
+    const walls = [wall(0, 0, 50, 0)];
+    const items = [windowItem()]; // offset 40, length 20 -> spans 40..60, wall is now 0..50
+    const [result] = reconcileItemsToWalls(walls, items);
+    expect(result.wallAttach).toEqual({ wallId: "w", offset: 30, length: 20 });
+  });
+
+  it("removes an item whose own length no longer fits the shrunk wall", () => {
+    const walls = [wall(0, 0, 10, 0)]; // shorter than the window's own 20cm length
+    const items = [windowItem()];
+    expect(reconcileItemsToWalls(walls, items)).toEqual([]);
+  });
+
+  it("leaves an item unchanged when its opening already fits", () => {
+    const walls = [wall(0, 0, 100, 0)];
+    const items = [windowItem()]; // offset 40, length 20 -> fits within 0..100
+    const [result] = reconcileItemsToWalls(walls, items);
+    expect(result).toBe(items[0]);
+  });
+
+  it("leaves an item unchanged when its wall no longer exists", () => {
+    const items = [windowItem()];
+    expect(reconcileItemsToWalls([], items)).toEqual(items);
   });
 });
