@@ -132,6 +132,14 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   equality, detach = moving that one wall's endpoint to a distinct coordinate (not
   a persistent flag). #30 proposes per-wall endpoint handles on a single selected
   wall; best landed after #19.
+- **Attached openings not reconciled when their wall shrinks — in flight (#38).**
+  `item.wallAttach` (offset/length) is never adjusted against the wall's current
+  `length` on any resize path (type-to-resize, connection-point drag, or a
+  connected wall shrinking via auto-follow), so a door/window can end up
+  rendered off the wall. Triaged from a human-submitted idea (2026-07-13);
+  chosen fix is reposition-first (clamp offset back within bounds), remove only
+  as a last resort (opening no longer fits at any offset), applied once at the
+  `commit()` chokepoint so it covers all resize paths.
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
@@ -166,10 +174,11 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-12): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-13): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction), #33 (SVG export), #34 (miter limit/bevel). Do **not** re-propose any
-of these.
+junction), #33 (SVG export), #34 (miter limit/bevel), #38 (reconcile
+door/window openings when their wall shrinks). Do **not** re-propose any of
+these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -207,6 +216,17 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-13 — Triage run on human-submitted idea #38 ("windows/doors go off
+  the wall after it's shrunk"). Confirmed the root cause in the code: no
+  resize path (type-to-resize, connection-point drag, connected-wall
+  auto-follow) reconciles `item.wallAttach` against the wall's new `length`.
+  Accepted and enriched: chose reposition-first (clamp the opening back
+  within the wall's new bounds), remove-as-last-resort (only when the
+  opening no longer fits at any offset) — rejected "block the resize"
+  (punishes an unrelated action) and "always remove" (too destructive) as
+  the primary behavior. Scoped the fix to the shared `commit()` chokepoint so
+  every resize path is covered by one pure, tested reconciliation function.
+  Rewrote #38's title/body into a full spec and posted the triage verdict.
 - 2026-07-13 — Triage run on human-submitted idea #35 ("deploy the app on main
   update"). Accepted and enriched: scoped tightly to a GitHub Pages deploy
   gated on green CI on `main` (no backend, no secrets, no new hosting
