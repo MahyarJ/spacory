@@ -28,13 +28,14 @@ reads). Run `.agents/dispatch.sh setup` once to create the labels.
  PR agent:review ──review + acceptance──▶ agent:changes   (if either asks for changes)
                                     └────▶ agent:accepted  (if both pass)
  PR agent:changes ──resolve──▶ PR agent:review            (loops, capped by SPACORY_MAX_ROUNDS)
+ issue/PR agent:clarify ──clarify──▶ spec refined; PR ▶ agent:review, issue ▶ backlog
  PR agent:accepted ──▶ human merges  (or SPACORY_AUTOMERGE=1 + CI green)
  anything ──▶ agent:blocked          (needs a human; the dispatcher leaves it alone)
 ```
 
-In-flight states (`agent:triaging` / `implementing` / `reviewing` / `resolving`)
-are set while an agent is running so a crash or restart is visible and can't
-double-fire.
+In-flight states (`agent:triaging` / `implementing` / `reviewing` / `resolving` /
+`clarifying`) are set while an agent is running so a crash or restart is visible
+and can't double-fire.
 
 ### Enqueuing work
 
@@ -52,6 +53,17 @@ double-fire.
   `agent:ready` is **your** call — triage never auto-enqueues work into the build
   loop. If it needs a product decision it can't infer, it asks on the issue and the
   item is left **blocked** for you.
+
+**Mid-flight refinement (the "daily-scrum" door):** when work is already in the
+loop and you want to reshape the spec — you left a question, or a PR's result made
+you realize the requirements should change — label the **issue _or_ the PR**
+**`agent:clarify`**. The Product Agent answers on the thread and folds any decision
+back into the **issue body** (the spec is the issue, always), then the dispatcher
+sends a PR back to **`agent:review`** to be re-judged against the updated spec (an
+issue just returns to the backlog). Raising it on the PR where the confusion lives
+is fine — the answer still lands in the ticket. Because editing the issue body
+**resets the review-round budget** (below), refining the spec this way never counts
+against the non-convergence guard.
 
 ### How a verdict becomes a transition
 
@@ -72,9 +84,10 @@ Unparseable → blocked.
 ## Priority per tick (drain before pulling new work)
 
 1. `agent:changes` PR → **resolve**
-2. `agent:review` PR → **review + acceptance** (run in parallel), then transition
-3. `agent:triage` issue → **triage** (groom the idea), then transition
-4. `agent:ready` issue with no PR → **implement**
+2. `agent:clarify` issue/PR → **clarify** (answer + refine the spec), then transition
+3. `agent:review` PR → **review + acceptance** (run in parallel), then transition
+4. `agent:triage` issue → **triage** (groom the idea), then transition
+5. `agent:ready` issue with no PR → **implement**
 
 One action per tick, so a short interval can never stampede a stack of expensive
 agent runs. A `mkdir` lock (macOS has no `flock`) makes overlapping ticks skip;
@@ -101,7 +114,7 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `SPACORY_MAX_ROUNDS` | `3` | resolve↔review rounds before a PR is blocked |
+| `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the spec last changed** before a PR is blocked (editing the linked issue body — directly or via `agent:clarify` — resets the count) |
 | `SPACORY_AUTOMERGE` | `0` | `1` = squash-merge an accepted PR once CI is green |
 | `CLAUDE_PERMISSION_MODE` | `acceptEdits` | passed to run-\*.sh; use `bypassPermissions` for fully unattended if a command isn't allowlisted |
 | `CLAUDE_MODEL` | session default | passed to run-\*.sh |
@@ -133,7 +146,10 @@ since it's fully unattended. The same `dispatch.sh` logic lifts over unchanged.
 
 - **One action per tick** + **mkdir lock** → no stampede, no overlap.
 - **In-flight labels** → double-firing is visible and prevented across restarts.
-- **Round cap** (`SPACORY_MAX_ROUNDS`) → a non-converging PR is blocked, not looped forever.
+- **Round cap** (`SPACORY_MAX_ROUNDS`) → a non-converging PR is blocked, not looped
+  forever. Counted only **since the spec last changed**, so a human amending the
+  issue mid-PR (directly or via `agent:clarify`) doesn't burn the budget — the cap
+  trips on genuine agent-vs-agent stalling, not on evolving requirements.
 - **Unparseable verdict / failed run → `agent:blocked` + Telegram**, never a guess.
 - **Agents never self-merge.** The terminal step is a human (or the explicit,
   opt-in `SPACORY_AUTOMERGE` — infrastructure the human chose, gated on green CI).
