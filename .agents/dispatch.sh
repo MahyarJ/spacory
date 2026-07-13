@@ -17,6 +17,7 @@
 #     issue  agent:ready        ── implement ──▶  PR agent:review
 #     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:accepted
 #     PR     agent:changes       ── resolve  ──▶  PR agent:review   (loops, capped)
+#     issue/PR agent:clarify      ── clarify  ──▶  spec refined; PR→agent:review, issue→backlog
 #     PR     agent:accepted      ── human merges (or SPACORY_AUTOMERGE=1 + CI green)
 #     *      agent:blocked       ── needs a human; never touched again automatically
 #
@@ -25,11 +26,20 @@
 #   An accepted idea lands in the backlog like a cycle-created issue; promoting it
 #   to agent:ready stays a human decision.
 #
+#   agent:clarify is the mid-flight refinement door: label an issue OR a PR
+#   agent:clarify when you've left a question/comment that should reshape the spec
+#   (the "daily-scrum" case — raise it on the PR where the confusion lives). The
+#   Product Agent answers and folds any decision back into the *issue* body, then
+#   a PR is sent back to agent:review to be re-judged against the updated spec.
+#   Because editing the issue body resets the review-round budget (see
+#   review_rounds), legitimate spec growth no longer burns the loop guard.
+#
 #   Priority per tick (drain PRs before pulling new work):
-#     1. agent:changes  PR    → resolve
-#     2. agent:review   PR    → review + acceptance (in parallel), then transition
-#     3. agent:triage   issue → triage (groom an idea), then transition
-#     4. agent:ready    issue (no open PR) → implement
+#     1. agent:changes   PR       → resolve
+#     2. agent:clarify   issue/PR → clarify (answer + refine spec), then transition
+#     3. agent:review    PR       → review + acceptance (in parallel), then transition
+#     4. agent:triage    issue    → triage (groom an idea), then transition
+#     5. agent:ready     issue (no open PR) → implement
 #   The product `cycle` (issue creation) is NOT run here — schedule it separately
 #   (see .agents/launchd/com.spacory.agents.cycle.plist.template). Keeping ticket
 #   *creation* on its own slow cadence stops a runaway cycle from flooding the
@@ -42,7 +52,12 @@
 #   .agents/dispatch.sh cycle      # run one product cycle now (for the cycle timer)
 #
 # Env knobs:
-#   SPACORY_MAX_ROUNDS    resolve↔review rounds before giving up → blocked (default 3)
+#   SPACORY_MAX_ROUNDS    resolve↔review rounds before giving up → blocked (default 5).
+#                         Counted only SINCE the linked issue's body was last
+#                         edited, so a human amending the spec (directly or via an
+#                         agent:clarify run) resets the budget — the cap trips on
+#                         genuine agent-vs-agent non-convergence, not on legitimate
+#                         spec growth (see review_rounds / spec_reset_time).
 #   SPACORY_AUTOMERGE     "1" to `gh pr merge --squash` an accepted PR once CI is
 #                         green. Default off — the agents never self-merge, and this
 #                         is infrastructure the human explicitly opted into, not an
@@ -57,7 +72,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-3}"
+MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-5}"
 AUTOMERGE="${SPACORY_AUTOMERGE:-0}"
 
 # ── logging ────────────────────────────────────────────────────────────────
@@ -85,6 +100,8 @@ ensure_labels() {
     "agent:reviewing|c5def5|Review + acceptance in flight"
     "agent:changes|d93f0b|Changes requested — awaiting Engineer resolve"
     "agent:resolving|fbca04|Engineer Agent is resolving review comments"
+    "agent:clarify|c2e0c6|A human question/comment should reshape the spec — awaiting Product clarify"
+    "agent:clarifying|fbca04|Product Agent is clarifying and refining the spec"
     "agent:accepted|0e8a16|Passed review + acceptance — awaiting human merge"
     "agent:blocked|b60205|Needs a human; the dispatcher will not touch it"
   )
@@ -107,7 +124,7 @@ swap_label() { remove_label "$1" "$2" "$3"; add_label "$1" "$2" "$4"; }
 block() {  # $1=issue|pr $2=number $3=reason
   local kind="$1" num="$2" reason="$3"
   # strip any in-flight/queue labels, mark blocked.
-  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:clarify agent:clarifying; do
     remove_label "$kind" "$num" "$l"
   done
   add_label "$kind" "$num" "agent:blocked"
@@ -164,10 +181,37 @@ triage_verdict_of() {  # $1=body
   esac
 }
 
-# count how many Engineer-review rounds this PR has seen (loop guard).
-review_rounds() {
+# the issue number a PR closes (from its "Closes/Fixes/Resolves #N" body), or "".
+issue_for_pr() {  # $1=pr
+  gh pr view "$1" --json body \
+    --jq '(.body // "") | capture("(?i)(clos|fix|resolv)e[sd]? +#(?<n>[0-9]+)") | .n' \
+    2>/dev/null || true
+}
+
+# ISO time the linked issue's body was last edited, or "" (never edited / no
+# linked issue / lookup failed). This is the "spec changed" signal that resets
+# the review-round budget: both a human editing the issue and an agent:clarify
+# run edit the body, so legitimate spec growth doesn't count as non-convergence.
+# "" sorts before every ISO timestamp, so a missing value safely counts ALL
+# rounds (today's behaviour) rather than zeroing the guard.
+spec_reset_time() {  # $1=pr
+  local issue; issue="$(issue_for_pr "$1")"
+  [ -z "$issue" ] && { echo ""; return; }
+  local nwo owner name
+  nwo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || { echo ""; return; }
+  owner="${nwo%%/*}"; name="${nwo##*/}"
+  gh api graphql -f query="query{repository(owner:\"$owner\",name:\"$name\"){issue(number:$issue){lastEditedAt}}}" \
+    --jq '.data.repository.issue.lastEditedAt // ""' 2>/dev/null || echo ""
+}
+
+# count Engineer-review rounds this PR has seen SINCE the spec last changed (loop
+# guard). Only reviews posted after the linked issue's last body edit count, so a
+# human amending the spec mid-PR (directly or via agent:clarify) resets the clock
+# — the cap trips on genuine agent-vs-agent stalling, not on evolving requirements.
+review_rounds() {  # $1=pr
+  local since; since="$(spec_reset_time "$1")"
   gh pr view "$1" --json comments \
-    --jq '[.comments[] | select(.body | test("Engineer review"))] | length'
+    --jq "[.comments[] | select(.createdAt > \"$since\") | select(.body | test(\"Engineer review\"))] | length"
 }
 
 ci_green() {  # $1=pr → 0 if all required checks passed (or none exist)
@@ -322,6 +366,31 @@ do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
   esac
 }
 
+do_clarify() {  # $1=issue|pr $2=number — answer a human question, refine the spec
+  local kind="$1" num="$2"
+  log "→ clarify $kind #$num"
+  swap_label "$kind" "$num" agent:clarify agent:clarifying
+  if ! run_product clarify "$num"; then
+    block "$kind" "$num" "product clarify run failed"
+    return
+  fi
+  commit_memory   # clarify may record a decision in project-memory.md
+  if [ "$kind" = pr ]; then
+    # The spec may have moved; re-judge the PR against it. Editing the issue body
+    # (which clarify does when a decision changes the spec) resets the round
+    # budget, so this fresh review round doesn't count as non-convergence.
+    swap_label pr "$num" agent:clarifying agent:review
+    log "✓ clarified PR #$num → agent:review (re-evaluate against the updated spec)"
+    notify "💬 Spacory agents: clarified PR #$num — re-reviewing against the updated spec."
+  else
+    # An issue: it's refined and back in the backlog; promoting to agent:ready
+    # stays a human decision (same as a triage-accepted issue).
+    remove_label issue "$num" agent:clarifying
+    log "✓ clarified issue #$num (spec refined; awaiting a human next step)"
+    notify "💬 Spacory agents: clarified issue #$num (spec refined if the answer changed it)."
+  fi
+}
+
 do_implement() {  # $1=issue
   local issue="$1"
   log "→ implement issue #$issue"
@@ -344,6 +413,10 @@ do_implement() {  # $1=issue
 dispatch_once() {
   local n
   for n in $(list_prs "agent:changes"); do do_resolve "$n"; return; done
+  # Human questions/refinements come next — answer them before more review or
+  # implement churn. agent:clarify can sit on either an issue or a PR.
+  for n in $(list_prs    "agent:clarify"); do do_clarify pr    "$n"; return; done
+  for n in $(list_issues "agent:clarify"); do do_clarify issue "$n"; return; done
   for n in $(list_prs "agent:review");  do do_review  "$n"; return; done
   for n in $(list_issues "agent:triage"); do do_triage "$n"; return; done
   for n in $(list_issues "agent:ready"); do
@@ -359,7 +432,7 @@ dispatch_once() {
 print_status() {
   echo "Spacory agent pipeline ($(gh repo view --json nameWithOwner -q .nameWithOwner)):"
   local l
-  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:accepted agent:blocked; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:clarify agent:clarifying agent:accepted agent:blocked; do
     printf '  %-20s' "$l"
     gh issue list --state open --label "$l" --json number --jq '[.[].number] | map("#\(.)") | join(" ")' 2>/dev/null | tr -d '\n'
     printf ' | '
