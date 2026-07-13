@@ -381,20 +381,21 @@ export const useApp = create<AppState>((set, get) => ({
     };
     commit(next);
     set({ plan: history.present });
-    // (later) also slide attached items with their wall if needed
   },
   translateSelectedWallsLive: (dx, dy) => {
     const { plan, selectedWalls } = get();
     if (selectedWalls.size === 0) return;
+    const walls = translateSelectedWallsFollowing(
+      plan.walls,
+      selectedWalls,
+      dx,
+      dy,
+    );
     set({
       plan: {
         ...plan,
-        walls: translateSelectedWallsFollowing(
-          plan.walls,
-          selectedWalls,
-          dx,
-          dy,
-        ),
+        walls,
+        items: reconcileItemsToWalls(walls, plan.items),
       },
     });
   },
@@ -418,15 +419,17 @@ export const useApp = create<AppState>((set, get) => ({
   translateSelectedConnectionPointLive: (dx, dy) => {
     const { plan, selectedConnectionPoint } = get();
     if (!selectedConnectionPoint) return;
+    const walls = translateEndpointsAt(
+      plan.walls,
+      selectedConnectionPoint,
+      dx,
+      dy,
+    );
     set({
       plan: {
         ...plan,
-        walls: translateEndpointsAt(
-          plan.walls,
-          selectedConnectionPoint,
-          dx,
-          dy,
-        ),
+        walls,
+        items: reconcileItemsToWalls(walls, plan.items),
       },
       selectedConnectionPoint: {
         x: selectedConnectionPoint.x + dx,

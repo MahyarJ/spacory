@@ -165,3 +165,81 @@ describe("setSelectedWallLength", () => {
     expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(40);
   });
 });
+
+describe("live drag item reconciliation", () => {
+  function attachedDoor(
+    offset: number,
+    length: number,
+    wallId = "w1",
+  ): DoorItem {
+    return {
+      id: "d1",
+      type: "door",
+      thickness: 10,
+      wallAttach: { wallId, offset, length },
+      props: { hingeEdge: "start", swingSide: "outside" },
+    };
+  }
+
+  it("translateSelectedWallsLive clamps an item on a following wall as it shrinks", () => {
+    // w1 selected: (0,0)-(100,0). w2 not selected, joined at (100,0):
+    // (100,0)-(100,100), length 100, with a door flush at its far end.
+    // Translating w1 down by 50 drags the shared endpoint to (100,50),
+    // shrinking w2 to length 50 — the door no longer fits at offset 60.
+    const door = attachedDoor(60, 40, "w2");
+    useApp
+      .getState()
+      .loadPlan(
+        planWith(
+          [wall("w1", 0, 0, 100, 0), wall("w2", 100, 0, 100, 100)],
+          [door],
+        ),
+      );
+    useApp.setState({ selectedWalls: new Set(["w1"]) });
+
+    useApp.getState().translateSelectedWallsLive(0, 50);
+
+    const w2 = useApp.getState().plan.walls.find((w) => w.id === "w2");
+    expect(w2?.a).toEqual({ x: 100, y: 50 });
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(10);
+    expect(useApp.getState().plan.items[0].wallAttach.length).toBe(40);
+  });
+
+  it("translateSelectedConnectionPointLive clamps an attached item while dragging, without committing history", () => {
+    // w1: (0,0)-(100,0), door flush at the far end. Dragging endpoint `b`
+    // inward to (70,0) shrinks the wall to 70 live; the door (offset 60,
+    // length 40) no longer fits and must clamp to offset 30.
+    const door = attachedDoor(60, 40);
+    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
+    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+
+    useApp.getState().translateSelectedConnectionPointLive(-30, 0);
+
+    const w1 = useApp.getState().plan.walls.find((w) => w.id === "w1");
+    expect(w1?.b).toEqual({ x: 70, y: 0 });
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(30);
+    expect(useApp.getState().plan.items[0].wallAttach.length).toBe(40);
+
+    // The live path must not push a new undo-history entry: `loadPlan` starts
+    // a fresh (empty) history, so `undo()` here is a no-op if (and only if)
+    // the live drag didn't commit — the shrunk/clamped state must survive it.
+    useApp.getState().undo();
+    expect(useApp.getState().plan.walls.find((w) => w.id === "w1")?.b).toEqual({
+      x: 70,
+      y: 0,
+    });
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(30);
+  });
+
+  it("translateSelectedConnectionPointLive removes an item that no longer fits, live", () => {
+    // Shrinking w1 to 30 leaves no room for a 40-long door — must be removed
+    // during the drag itself, not just on drop.
+    const door = attachedDoor(0, 40);
+    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
+    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+
+    useApp.getState().translateSelectedConnectionPointLive(-70, 0);
+
+    expect(useApp.getState().plan.items).toHaveLength(0);
+  });
+});
