@@ -382,6 +382,9 @@ export const useApp = create<AppState>((set, get) => ({
       selectedWalls: new Set(),
       selectedItems: new Set(),
       marquee: null,
+      // Loading a document ends any in-progress drag; drop its pre-drag snapshot
+      // so a stale one can't reconcile the new plan against the old doc's items.
+      liveDragItems: null,
     });
   },
   translateSelectedWalls: (dx, dy) => {
