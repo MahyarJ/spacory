@@ -211,7 +211,7 @@ describe("live drag item reconciliation", () => {
     // length 40) no longer fits and must clamp to offset 30.
     const door = attachedDoor(60, 40);
     useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
-    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
 
     useApp.getState().translateSelectedConnectionPointLive(-30, 0);
 
@@ -236,7 +236,7 @@ describe("live drag item reconciliation", () => {
     // during the drag itself, not just on drop.
     const door = attachedDoor(0, 40);
     useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
-    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
 
     useApp.getState().translateSelectedConnectionPointLive(-70, 0);
 
@@ -249,7 +249,7 @@ describe("live drag item reconciliation", () => {
     // bring it back rather than leaving it gone until a post-release Undo.
     const door = attachedDoor(0, 40);
     useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
-    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
     useApp.getState().beginLiveDrag();
 
     // Tick 1: drag `b` in to (30,0) — wall length 30, door dropped.
@@ -269,7 +269,7 @@ describe("live drag item reconciliation", () => {
     // restore the exact pre-drag offset 50, not leave it drifted at 30.
     const door = attachedDoor(50, 40);
     useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
-    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
     useApp.getState().beginLiveDrag();
 
     // Tick 1: shrink to 70 — opening [50,90] no longer fits, clamps to 30.
@@ -289,11 +289,72 @@ describe("live drag item reconciliation", () => {
   it("commitPlan clears the pre-drag snapshot so the next gesture starts fresh", () => {
     const door = attachedDoor(50, 40);
     useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
-    useApp.setState({ selectedConnectionPoint: { x: 100, y: 0 } });
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
     useApp.getState().beginLiveDrag();
     useApp.getState().translateSelectedConnectionPointLive(-30, 0);
     useApp.getState().commitPlan();
 
     expect(useApp.getState().liveDragItems).toBeNull();
+  });
+});
+
+describe("connection-point drag snapping onto unrelated junctions", () => {
+  it("does not weld an unrelated junction's walls in when the live drag merely transits over its coordinate", () => {
+    // Junction A: w1.b / w2.a at (100, 0). Junction B (unrelated): w3.a at
+    // (100, 100), joined to w4. Dragging A up by 100 makes its live position
+    // pass exactly through B's coordinate mid-gesture — w3/w4 must stay put.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([
+          wall("w1", 0, 0, 100, 0),
+          wall("w2", 100, 0, 200, 0),
+          wall("w3", 100, 100, 200, 100),
+          wall("w4", 100, 100, 100, 200),
+        ]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+
+    useApp.getState().translateSelectedConnectionPointLive(0, 100);
+
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 100, y: 100 });
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 100, y: 100 });
+    // Junction B's walls are untouched, even though A now sits on B's coordinate.
+    expect(walls.find((w) => w.id === "w3")?.a).toEqual({ x: 100, y: 100 });
+    expect(walls.find((w) => w.id === "w4")?.a).toEqual({ x: 100, y: 100 });
+
+    // Continuing past B and back off it must not have picked up its walls.
+    useApp.getState().translateSelectedConnectionPointLive(0, 50);
+    const after = useApp.getState().plan.walls;
+    expect(after.find((w) => w.id === "w1")?.b).toEqual({ x: 100, y: 150 });
+    expect(after.find((w) => w.id === "w3")?.a).toEqual({ x: 100, y: 100 });
+    expect(after.find((w) => w.id === "w4")?.a).toEqual({ x: 100, y: 100 });
+  });
+
+  it("still welds on an intentional drop onto another junction's coordinate", () => {
+    // Dropping A exactly onto B's coordinate is the existing, intentional
+    // merge behavior: it falls out of the shared-coordinate data model at
+    // commit time, not a re-derived live membership set.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([
+          wall("w1", 0, 0, 100, 0),
+          wall("w2", 100, 0, 200, 0),
+          wall("w3", 100, 100, 200, 100),
+        ]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+
+    useApp.getState().translateSelectedConnectionPointLive(0, 100);
+    useApp.getState().commitPlan();
+
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 100, y: 100 });
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 100, y: 100 });
+    // w1/w2's dropped endpoint now shares w3's coordinate: connected per the
+    // data model (getConnectionPoints/findConnectedEndpoints match by coord).
+    expect(walls.find((w) => w.id === "w3")?.a).toEqual({ x: 100, y: 100 });
   });
 });

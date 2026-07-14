@@ -1,8 +1,11 @@
 import { getPlanBounds } from "@geometry/bounds";
 import {
+  findConnectedEndpoints,
   getConnectionPoints,
   pointsEqual,
+  translateEndpoints,
   translateEndpointsAt,
+  type WallEndpointRef,
 } from "@geometry/connectivity";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
@@ -65,6 +68,14 @@ interface AppState {
   selectedItems: Set<string>;
   /** The single connection point (shared wall-endpoint coordinate) currently selected. */
   selectedConnectionPoint: Point | null;
+  /**
+   * The wall endpoints that belonged to `selectedConnectionPoint`'s junction at
+   * the moment it was selected (grab time), fixed for the life of the
+   * selection/gesture. Drag translation moves exactly this set rather than
+   * re-deriving membership from the live coordinate on every tick, so merely
+   * passing over an unrelated junction's coordinate mid-drag can't weld it in.
+   */
+  selectedConnectionPointEndpoints: WallEndpointRef[];
   selectNone: () => void;
   selectWall: (id: string, additive?: boolean) => void;
   selectItem: (id: string, additive?: boolean) => void;
@@ -185,6 +196,7 @@ export const useApp = create<AppState>((set, get) => ({
   selectedWalls: new Set(),
   selectedItems: new Set(),
   selectedConnectionPoint: null,
+  selectedConnectionPointEndpoints: [],
   addWall: (w) => {
     const next: Plan = {
       ...get().plan,
@@ -226,6 +238,7 @@ export const useApp = create<AppState>((set, get) => ({
       selectedWalls: new Set(),
       selectedItems: new Set(),
       selectedConnectionPoint: null,
+      selectedConnectionPointEndpoints: [],
     }),
   selectWall: (id, additive) =>
     set((s) => {
@@ -235,6 +248,7 @@ export const useApp = create<AppState>((set, get) => ({
         selectedWalls: ws,
         selectedItems: additive ? s.selectedItems : new Set(),
         selectedConnectionPoint: null,
+        selectedConnectionPointEndpoints: [],
       };
     }),
   selectItem: (id, additive) =>
@@ -245,14 +259,21 @@ export const useApp = create<AppState>((set, get) => ({
         selectedItems: is,
         selectedWalls: additive ? s.selectedWalls : new Set(),
         selectedConnectionPoint: null,
+        selectedConnectionPointEndpoints: [],
       };
     }),
   selectConnectionPoint: (point) =>
-    set({
+    set((s) => ({
       selectedConnectionPoint: point,
+      // Snapshot the junction's membership once, at grab time — the live drag
+      // and nudge translate exactly this set (see `selectedConnectionPointEndpoints`).
+      selectedConnectionPointEndpoints: findConnectedEndpoints(
+        s.plan.walls,
+        point,
+      ),
       selectedWalls: new Set(),
       selectedItems: new Set(),
-    }),
+    })),
   deleteSelected: () => {
     const { selectedWalls, selectedItems, plan } = get();
     if (selectedWalls.size === 0 && selectedItems.size === 0) return;
@@ -419,11 +440,17 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
   translateSelectedConnectionPoint: (dx, dy) => {
-    const { plan, selectedConnectionPoint } = get();
+    const { plan, selectedConnectionPoint, selectedConnectionPointEndpoints } =
+      get();
     if (!selectedConnectionPoint) return;
     const next: Plan = {
       ...plan,
-      walls: translateEndpointsAt(plan.walls, selectedConnectionPoint, dx, dy),
+      walls: translateEndpoints(
+        plan.walls,
+        selectedConnectionPointEndpoints,
+        dx,
+        dy,
+      ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);
@@ -436,15 +463,25 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
   translateSelectedConnectionPointLive: (dx, dy) => {
-    const { plan, selectedConnectionPoint, liveDragItems } = get();
-    if (!selectedConnectionPoint) return;
-    const walls = translateEndpointsAt(
-      plan.walls,
+    const {
+      plan,
       selectedConnectionPoint,
+      selectedConnectionPointEndpoints,
+      liveDragItems,
+    } = get();
+    if (!selectedConnectionPoint) return;
+    const walls = translateEndpoints(
+      plan.walls,
+      selectedConnectionPointEndpoints,
       dx,
       dy,
     );
     // Reconcile from the pre-drag snapshot (see translateSelectedWallsLive).
+    // Note: the drop-to-merge weld is not a separate step here — it falls out
+    // of the data model (two walls are connected iff endpoints share a
+    // coordinate), so landing the dragged endpoint on another junction's
+    // coordinate at the final commit already welds them; only the live-preview
+    // membership is fixed to the grab-time set.
     set({
       plan: {
         ...plan,
