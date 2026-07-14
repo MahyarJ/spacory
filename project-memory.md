@@ -140,8 +140,19 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   equality, detach = moving that one wall's endpoint to a distinct coordinate (not
   a persistent flag). #30 proposes per-wall endpoint handles on a single selected
   wall; best landed after #19.
-- **Attached openings not reconciled when their wall shrinks — in flight (#38,
-  PR #39).** `item.wallAttach` (offset/length) is never adjusted against the
+- **Connection-point drag can snap onto an unrelated overlapping junction —
+  in flight (#48, triaged from a human-submitted bug report).** The live
+  connection-point drag (#22/#27) re-derives which wall endpoints belong to
+  the dragged junction by matching the *live* (moving) coordinate against all
+  walls on every pointer-move tick, rather than fixing the endpoint set once
+  at drag start. If the live position merely passes over another junction's
+  coordinate (common with grid snapping), that junction's walls get welded in
+  and keep moving along, even though the user never meant to merge them.
+  Fix: snapshot the junction's endpoints once at grab time (`connectivity.ts`'s
+  unused-outside-tests `findConnectedEndpoints` is the natural primitive) and
+  keep the existing intentional drop-to-merge behavior unchanged.
+- **Attached openings not reconciled when their wall shrinks — done (#38,
+  closed).** `item.wallAttach` (offset/length) is never adjusted against the
   wall's current `length` on any resize path (type-to-resize, connection-point
   drag, or a connected wall shrinking via auto-follow), so a door/window can
   end up rendered off the wall. Triaged from a human-submitted idea
@@ -191,9 +202,10 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 Current open issues (as of 2026-07-14): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction), #33 (SVG export), #38 (reconcile door/window openings when their
-wall shrinks), #46 (remove dead `wedgePoints` writes for 2-wall junctions,
-triaged from a human-submitted idea). #34 has **merged** (PR #43). Do **not**
+junction), #33 (SVG export), #46 (remove dead `wedgePoints` writes for 2-wall
+junctions, triaged from a human-submitted idea), #48 (connection-point drag
+snaps onto unrelated overlapping junctions, triaged from a human-submitted
+bug report). #34 has **merged** (PR #43); #38 has **closed**. Do **not**
 re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
@@ -232,6 +244,19 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-14 — Triage run on human-submitted bug report #48 ("dragging a
+  junction snaps onto another junction it passes over"). Investigated the
+  live connection-point drag path (`FloorPlan.tsx` → `store.ts` →
+  `connectivity.ts`'s `translateEndpointsAt`): confirmed it re-matches the
+  dragged junction's endpoint set against the *live* coordinate on every
+  pointer-move tick instead of fixing the set once at drag start, so merely
+  transiting over another junction's coordinate (common with grid snapping)
+  welds it in permanently for the rest of the drag. Accepted as a genuine bug
+  (not a UX quirk) and enriched #48 into a full spec: snapshot the junction's
+  endpoints once at grab time via the existing-but-unused
+  `findConnectedEndpoints`, preserve intentional drop-to-merge behavior, add
+  regression test coverage. Also reconciled GitHub state while here: #38
+  (reconcile openings on wall shrink) has closed since the last run.
 - 2026-07-14 — Re-triage of human-submitted idea #46 ("dead `wedgePoints`
   writes for `m === 2` in `junction.ts`"). A prior triage pass had
   **rejected** #46 because the dead code lived only in PR #43, which was
