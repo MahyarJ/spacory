@@ -184,10 +184,11 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
       const right = rightBeveled ? eRightBase : rightMiter;
 
       corners.set(cornerKey(e), { left, right });
-      wedgePoints.push(left);
-      if (leftBeveled) {
-        wedgePoints.push(ccwRightBase);
-        if (m === 2) twoWallFills.push([e.node, left, ccwRightBase]);
+      if (m >= 3) {
+        wedgePoints.push(left);
+        if (leftBeveled) wedgePoints.push(ccwRightBase);
+      } else if (leftBeveled) {
+        twoWallFills.push([e.node, left, ccwRightBase]);
       }
     }
 
