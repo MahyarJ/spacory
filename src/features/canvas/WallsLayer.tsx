@@ -24,7 +24,7 @@ export function WallsLayer() {
           />
         );
       })}
-      {/* Fill the open core of 3+-wall junctions so they read as solid. */}
+      {/* Fill junction cores (3+-wall) and beveled-corner gaps so they read as solid. */}
       {junctions.map((poly) => (
         <polygon
           key={`junction-${polygonToPoints(poly)}`}

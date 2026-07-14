@@ -30,6 +30,17 @@ function lineIntersection(
   return { x: p1.x + s * d1.x, y: p1.y + s * d1.y };
 }
 
+/**
+ * Miter limit, expressed as a multiple of the (smaller) half-thickness at a
+ * corner — the same ratio-to-stroke-width convention as SVG's
+ * `stroke-miterlimit`. A miter point farther than this from the shared node
+ * is replaced by a bevel (a flat edge along the two walls' own outer edges),
+ * so very acute corners don't produce a long spike. 3 is a common default for
+ * CAD/vector tools: generous enough to keep normal corners fully mitered,
+ * tight enough to cap the spike at genuinely sharp angles.
+ */
+export const MITER_LIMIT = 3;
+
 // Node matching precision (coordinates are in cm; 1e-3 groups coincident ends).
 const QUANT = 1000;
 const nodeKey = (p: Point): string =>
@@ -119,6 +130,11 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
   const cornerKey = (e: Pick<WallEnd, "wallId" | "end">) =>
     `${e.wallId}:${e.end}`;
 
+  // A miter point farther than this from the shared node is too long —
+  // bevelled corners fall back to the wall's own (unextended) edge point.
+  const tooLong = (miter: Point, node: Point, limit: number) =>
+    Math.hypot(miter.x - node.x, miter.y - node.y) > limit;
+
   for (const ends of nodes.values()) {
     if (ends.length === 1) {
       // Free end: a plain perpendicular cap.
@@ -134,7 +150,14 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
     const m = sorted.length;
     // The left corner of end k is the miter point of the wedge between end k
     // and its CCW neighbour; collected in angular order these bound the core.
+    // A beveled wedge contributes its two base points instead of one miter
+    // point, opening a small flat edge in the core fill's boundary.
     const wedgePoints: Point[] = [];
+    // For a 2-wall corner there's no ring to fold a beveled wedge's extra
+    // point into (only `m >= 3` forms one below), so each beveled wedge here
+    // gets its own small triangular fill: the shared node plus the two
+    // walls' own base points, closing the gap left between them.
+    const twoWallFills: Point[][] = [];
 
     for (let k = 0; k < m; k++) {
       const e = sorted[k];
@@ -147,19 +170,34 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
       const cwLeftBase = add(cw.node, mul(cw.nL, cw.h));
 
       // Left corner: this end's left edge meets the CCW neighbour's right edge.
-      const left =
+      const leftMiter =
         lineIntersection(eLeftBase, e.t, ccwRightBase, ccw.t) ?? eLeftBase;
+      const leftLimit = MITER_LIMIT * Math.min(e.h, ccw.h);
+      const leftBeveled = tooLong(leftMiter, e.node, leftLimit);
+      const left = leftBeveled ? eLeftBase : leftMiter;
+
       // Right corner: this end's right edge meets the CW neighbour's left edge.
-      const right =
+      const rightMiter =
         lineIntersection(eRightBase, e.t, cwLeftBase, cw.t) ?? eRightBase;
+      const rightLimit = MITER_LIMIT * Math.min(e.h, cw.h);
+      const rightBeveled = tooLong(rightMiter, e.node, rightLimit);
+      const right = rightBeveled ? eRightBase : rightMiter;
 
       corners.set(cornerKey(e), { left, right });
       wedgePoints.push(left);
+      if (leftBeveled) {
+        wedgePoints.push(ccwRightBase);
+        if (m === 2) twoWallFills.push([e.node, left, ccwRightBase]);
+      }
     }
 
-    // With 3+ walls the wedge points enclose an open core; fill it. (With 2
-    // walls they're just the shared inner/outer corners — zero area.)
+    // With 3+ walls the wedge points enclose an open core; fill it — a
+    // beveled wedge just contributes an extra point, flattening that corner
+    // of the core without opening a gap. With exactly 2 walls there's no
+    // ring to fold into, so a beveled wedge instead gets its own small
+    // triangular fill (`twoWallFills`) closing the same kind of gap.
     if (m >= 3) junctions.push(wedgePoints);
+    else junctions.push(...twoWallFills);
   }
 
   // 3) Assemble each wall's quad. "left/right" are relative to each end's own
