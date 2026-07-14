@@ -84,21 +84,18 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
   Keyboard shortcut wires `fitView()`; also "zoom to selection" when walls are
   selected. Reuses `computeFitView` from `src/app/viewport.ts`.
-- **No miter limit / bevel fallback — in flight (#34, PR #43); spec amended,
-  PR needs follow-up.** Very acute wall angles produce long spike-like miters;
-  #34 caps the miter at a multiple of half-thickness and falls back to a
-  bevel, per `docs/DECISIONS.md`'s noted future tweak. Two clarify passes on
-  PR #43 (2026-07-14): the first floated a decorative "patch cap" for beveled
+- **No miter limit / bevel fallback — done (#34, merged as PR #43).** Very
+  acute wall angles produce long spike-like miters; #34 caps the miter at a
+  multiple of half-thickness and falls back to a bevel, per
+  `docs/DECISIONS.md`'s noted future tweak. Two clarify passes on PR #43
+  (2026-07-14): the first floated a decorative "patch cap" for beveled
   corners, which was declined as cosmetic scope creep. The follow-up
-  pinpointed a real gap instead — the 2-wall case has no equivalent of the
-  3+-wall `junctions` core-fill (`computeWallGeometry` only builds it for
-  `m >= 3`), so a beveled 2-wall corner leaves an open, unfilled notch where
-  the 3+-wall case tiles cleanly. That's inconsistent with #34's own "clean,
-  bounded corner" promise, so #34's acceptance criteria now require the
-  2-wall bevel to be gap-free too (reusing the same base-point fill already
-  used for 3+-wall junctions — no new visual treatment). PR #43 as it
-  currently stands does not satisfy this new criterion and needs a follow-up
-  commit before it's done.
+  pinpointed a real gap instead — the 2-wall case had no equivalent of the
+  3+-wall `junctions` core-fill, leaving an open notch on a beveled 2-wall
+  corner; the spec was amended to require the 2-wall bevel to be gap-free
+  too, and PR #43 landed that follow-up commit before merging. A residual
+  dead-code artifact from this fill (`wedgePoints` writes on the `m === 2`
+  path) is tracked as its own cleanup issue, #46.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
@@ -192,11 +189,12 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-13): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-14): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction), #33 (SVG export), #34 (miter limit/bevel), #38 (reconcile
-door/window openings when their wall shrinks). Do **not** re-propose any of
-these.
+junction), #33 (SVG export), #38 (reconcile door/window openings when their
+wall shrinks), #46 (remove dead `wedgePoints` writes for 2-wall junctions,
+triaged from a human-submitted idea). #34 has **merged** (PR #43). Do **not**
+re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -207,7 +205,7 @@ rough priority order) are:
    it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
    gaps" and the open question above. Do not write this issue until answered.
 
-Once #33/#34 land, the next cycle should reconcile GitHub state and look for the
+Once #33 lands, the next cycle should reconcile GitHub state and look for the
 next thin, independently-shippable slice — nothing else is currently queued.
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
@@ -234,6 +232,18 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-14 — Re-triage of human-submitted idea #46 ("dead `wedgePoints`
+  writes for `m === 2` in `junction.ts`"). A prior triage pass had
+  **rejected** #46 because the dead code lived only in PR #43, which was
+  still open/unmerged at the time — cosmetic cleanup of unmerged work isn't a
+  backlog item. The reporter followed up: PR #43 (implementing #34,
+  miter-limit/bevel) has since **merged** to `main`, and the engineer
+  declined to fold the cleanup into that PR as scope drift. Re-checked the
+  merged `src/geometry/junction.ts`: the dead `wedgePoints.push` calls for
+  the `m === 2` case are indeed present on `main`. Reversed the verdict to
+  **accepted** and enriched #46 into a full spec (guard the two dead pushes
+  with `m >= 3`, add a regression test, behavior-preserving). Also updated
+  "Known gaps"/"focus next" to mark #34 done (merged as PR #43).
 - 2026-07-14 — Second clarify run on PR #43 (issue #34). Reporter clarified that
   the earlier "patch cap" question was really pointing at a genuine gap: 3+-wall
   junctions fill the beveled wedge cleanly, but the 2-wall case has no
