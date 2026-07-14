@@ -418,6 +418,12 @@ export const useApp = create<AppState>((set, get) => ({
       // Loading a document ends any in-progress drag; drop its pre-drag snapshot
       // so a stale one can't reconcile the new plan against the old doc's items.
       liveDragItems: null,
+      // A held connection-point selection has no reliable meaning against a
+      // freshly loaded plan (wall ids may collide with an unrelated junction
+      // in the new doc), so drop it rather than risk a following nudge
+      // dragging the wrong walls.
+      selectedConnectionPoint: null,
+      selectedConnectionPointEndpoints: [],
     });
   },
   translateSelectedWalls: (dx, dy) => {
