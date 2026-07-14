@@ -84,21 +84,21 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
   Keyboard shortcut wires `fitView()`; also "zoom to selection" when walls are
   selected. Reuses `computeFitView` from `src/app/viewport.ts`.
-- **No miter limit / bevel fallback — in flight (#34, PR #43).** Very acute wall
-  angles produce long spike-like miters; #34 caps the miter at a multiple of
-  half-thickness and falls back to a bevel, per `docs/DECISIONS.md`'s noted
-  future tweak.
-- **Beveled acute corners look "uncured" — candidate future enhancement, not
-  scoped.** Clarify run on PR #43 (2026-07-14): a human noted that once the
-  miter limit falls back to a plain bevel, the wall ends aren't visually
-  "patched" the way a real construction corner would be — a small square/rect
-  closing the gap between the two wall outer corners was floated as an idea.
-  Decided this is out of scope for #34/#43 (the plain bevel matches the
-  documented rationale and the common `stroke-miterlimit`-style convention;
-  not a defect), but it's a legitimate cosmetic follow-up if real-world usage
-  shows this edge case (very acute wall angles) bothers users often enough to
-  prioritize. No issue opened yet — revisit only if there's a concrete signal
-  it's worth it.
+- **No miter limit / bevel fallback — in flight (#34, PR #43); spec amended,
+  PR needs follow-up.** Very acute wall angles produce long spike-like miters;
+  #34 caps the miter at a multiple of half-thickness and falls back to a
+  bevel, per `docs/DECISIONS.md`'s noted future tweak. Two clarify passes on
+  PR #43 (2026-07-14): the first floated a decorative "patch cap" for beveled
+  corners, which was declined as cosmetic scope creep. The follow-up
+  pinpointed a real gap instead — the 2-wall case has no equivalent of the
+  3+-wall `junctions` core-fill (`computeWallGeometry` only builds it for
+  `m >= 3`), so a beveled 2-wall corner leaves an open, unfilled notch where
+  the 3+-wall case tiles cleanly. That's inconsistent with #34's own "clean,
+  bounded corner" promise, so #34's acceptance criteria now require the
+  2-wall bevel to be gap-free too (reusing the same base-point fill already
+  used for 3+-wall junctions — no new visual treatment). PR #43 as it
+  currently stands does not satisfy this new criterion and needs a follow-up
+  commit before it's done.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
@@ -234,6 +234,17 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-14 — Second clarify run on PR #43 (issue #34). Reporter clarified that
+  the earlier "patch cap" question was really pointing at a genuine gap: 3+-wall
+  junctions fill the beveled wedge cleanly, but the 2-wall case has no
+  equivalent core-fill (`m >= 3` guard in `computeWallGeometry`), so a beveled
+  2-wall corner leaves an open notch — inconsistent with the 3+-wall case and
+  with #34's "clean, bounded corner" promise. Reversed the prior "cosmetic,
+  not a defect" read for this specific complaint: added a new acceptance
+  criterion to #34 requiring the 2-wall bevel to be gap-free (reuse the
+  existing base-point fill approach, no new visual language), kept the
+  decorative "patch cap" idea itself out of scope. PR #43 needs a follow-up
+  commit to satisfy the amended spec before it's mergeable.
 - 2026-07-14 — Clarify run on PR #43 (#34's miter-limit/bevel fallback, already
   accepted). A human asked whether the plain bevel fallback at very acute
   corners should be visually "patched" with a small square/rect cap, since
