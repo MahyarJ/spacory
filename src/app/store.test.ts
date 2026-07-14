@@ -409,4 +409,35 @@ describe("connection-point drag snapping onto unrelated junctions", () => {
     expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 110, y: 100 });
     expect(walls.find((w) => w.id === "w3")?.a).toEqual({ x: 110, y: 100 });
   });
+
+  it("clears the connection-point selection on undo so a following nudge can't drag the wrong walls", () => {
+    // Regression: nudging A onto B's coordinate welds them and re-derives the
+    // selection to the merged set, but undo reverts the plan underneath that
+    // selection. If the (now stale) selection survived, a following nudge
+    // could match it against an unrelated junction at the same coordinate, or
+    // silently drag nothing/the wrong walls — so undo drops the selection.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([
+          wall("w1", 0, 0, 100, 0),
+          wall("w2", 100, 0, 200, 0),
+          wall("w3", 100, 100, 200, 100),
+        ]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+
+    useApp.getState().translateSelectedConnectionPoint(0, 100);
+    useApp.getState().undo();
+
+    expect(useApp.getState().selectedConnectionPoint).toBeNull();
+    expect(useApp.getState().selectedConnectionPointEndpoints).toEqual([]);
+
+    // A nudge with no selection is a no-op — no wall moves.
+    useApp.getState().translateSelectedConnectionPoint(10, 0);
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 100, y: 0 });
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 100, y: 0 });
+    expect(walls.find((w) => w.id === "w3")?.a).toEqual({ x: 100, y: 100 });
+  });
 });

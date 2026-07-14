@@ -384,13 +384,25 @@ export const useApp = create<AppState>((set, get) => ({
     if (!history.past.length) return;
     history = undoHistory(history);
     persist();
-    set({ plan: history.present });
+    // A held connection-point selection has no reliable meaning across a
+    // history jump (the coordinate it was grabbed at may no longer be a
+    // junction, or may now match an unrelated one), so drop it rather than
+    // risk a following nudge dragging the wrong walls.
+    set({
+      plan: history.present,
+      selectedConnectionPoint: null,
+      selectedConnectionPointEndpoints: [],
+    });
   },
   redo: () => {
     if (!history.future.length) return;
     history = redoHistory(history);
     persist();
-    set({ plan: history.present });
+    set({
+      plan: history.present,
+      selectedConnectionPoint: null,
+      selectedConnectionPointEndpoints: [],
+    });
   },
   marquee: null,
   setMarquee: (m) => set({ marquee: m }),
