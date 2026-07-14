@@ -498,6 +498,7 @@ export const useApp = create<AppState>((set, get) => ({
   beginLiveDrag: () => set({ liveDragItems: get().plan.items }),
   endLiveDrag: () => set({ liveDragItems: null }),
   commitPlan: () => {
+    const { selectedConnectionPoint } = get();
     const next: Plan = {
       ...get().plan,
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
@@ -505,6 +506,16 @@ export const useApp = create<AppState>((set, get) => ({
     commit(next);
     // The gesture is over: the reconciled live items are now committed, so drop
     // the pre-drag snapshot before the next gesture captures a fresh one.
-    set({ plan: history.present, liveDragItems: null });
+    // If a connection point is still selected (e.g. the drop welded it onto
+    // another junction), re-derive its membership from the just-committed
+    // plan — otherwise a subsequent nudge would keep moving only the
+    // grab-time set and silently un-weld the junction just created.
+    set({
+      plan: history.present,
+      liveDragItems: null,
+      selectedConnectionPointEndpoints: selectedConnectionPoint
+        ? findConnectedEndpoints(history.present.walls, selectedConnectionPoint)
+        : [],
+    });
   },
 }));

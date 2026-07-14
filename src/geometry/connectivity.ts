@@ -50,17 +50,12 @@ export function translateEndpointsAt(
   dy: number,
   eps = EPS,
 ): Wall[] {
-  if (dx === 0 && dy === 0) return walls;
-  return walls.map((w) => {
-    const atA = pointsEqual(w.a, point, eps);
-    const atB = pointsEqual(w.b, point, eps);
-    if (!atA && !atB) return w;
-    return {
-      ...w,
-      a: atA ? { x: w.a.x + dx, y: w.a.y + dy } : w.a,
-      b: atB ? { x: w.b.x + dx, y: w.b.y + dy } : w.b,
-    };
-  });
+  return translateEndpoints(
+    walls,
+    findConnectedEndpoints(walls, point, eps),
+    dx,
+    dy,
+  );
 }
 
 /**

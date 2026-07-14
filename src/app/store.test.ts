@@ -357,4 +357,31 @@ describe("connection-point drag snapping onto unrelated junctions", () => {
     // data model (getConnectionPoints/findConnectedEndpoints match by coord).
     expect(walls.find((w) => w.id === "w3")?.a).toEqual({ x: 100, y: 100 });
   });
+
+  it("moves the newly-welded junction's walls together on a nudge right after a merge drop", () => {
+    // Regression: dropping A onto B's coordinate welds them, but the
+    // selection stays live (no re-click). A subsequent nudge must move the
+    // whole merged junction (w1/w2/w3), not just A's grab-time set (w1/w2) —
+    // otherwise the nudge silently un-welds the junction just created.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([
+          wall("w1", 0, 0, 100, 0),
+          wall("w2", 100, 0, 200, 0),
+          wall("w3", 100, 100, 200, 100),
+        ]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+
+    useApp.getState().translateSelectedConnectionPointLive(0, 100);
+    useApp.getState().commitPlan();
+
+    useApp.getState().translateSelectedConnectionPoint(10, 0);
+
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 110, y: 100 });
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 110, y: 100 });
+    expect(walls.find((w) => w.id === "w3")?.a).toEqual({ x: 110, y: 100 });
+  });
 });
