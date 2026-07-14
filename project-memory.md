@@ -84,10 +84,21 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
   Keyboard shortcut wires `fitView()`; also "zoom to selection" when walls are
   selected. Reuses `computeFitView` from `src/app/viewport.ts`.
-- **No miter limit / bevel fallback — in flight (#34).** Very acute wall angles
-  produce long spike-like miters; #34 caps the miter at a multiple of
+- **No miter limit / bevel fallback — in flight (#34, PR #43).** Very acute wall
+  angles produce long spike-like miters; #34 caps the miter at a multiple of
   half-thickness and falls back to a bevel, per `docs/DECISIONS.md`'s noted
   future tweak.
+- **Beveled acute corners look "uncured" — candidate future enhancement, not
+  scoped.** Clarify run on PR #43 (2026-07-14): a human noted that once the
+  miter limit falls back to a plain bevel, the wall ends aren't visually
+  "patched" the way a real construction corner would be — a small square/rect
+  closing the gap between the two wall outer corners was floated as an idea.
+  Decided this is out of scope for #34/#43 (the plain bevel matches the
+  documented rationale and the common `stroke-miterlimit`-style convention;
+  not a defect), but it's a legitimate cosmetic follow-up if real-world usage
+  shows this edge case (very acute wall angles) bothers users often enough to
+  prioritize. No issue opened yet — revisit only if there's a concrete signal
+  it's worth it.
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
@@ -223,6 +234,15 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-14 — Clarify run on PR #43 (#34's miter-limit/bevel fallback, already
+  accepted). A human asked whether the plain bevel fallback at very acute
+  corners should be visually "patched" with a small square/rect cap, since
+  the wall ends otherwise look uncured. Decided no spec change: the plain
+  bevel is the documented, intentional behavior and matches common
+  `stroke-miterlimit`-style convention, so this isn't a defect in #34/#43.
+  Logged the patch-cap idea as a candidate future cosmetic enhancement under
+  "Known gaps" rather than opening an issue — no evidence yet it's worth
+  prioritizing over the current backlog.
 - 2026-07-13 — Clarify run on #38: reporter followed up that the landed fix
   (PR #39) only reconciles openings at `commit()` time, so during a live
   connection-point/wall drag the opening still renders off-bounds until
