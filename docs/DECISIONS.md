@@ -8,10 +8,17 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 ## Miter limit is a multiple of half-thickness, not a fixed cm value
 
 **Decision.** `computeWallGeometry` (`src/geometry/junction.ts`) caps each
-corner's miter point at `MITER_LIMIT * halfThickness` (`MITER_LIMIT = 3`) from
-the shared node. Past that, the corner falls back to a **bevel** — the wall's
-own unextended edge point — instead of the far-flung miter spike, per-corner
-(one acute wedge in a junction can bevel while its neighbours stay mitered).
+corner's miter point at `MITER_LIMIT * theSmallerHalfThickness` of the two
+adjoining walls (`MITER_LIMIT = 3`) from the shared node. Past that, the
+corner falls back to a **bevel** — the wall's own unextended edge point —
+instead of the far-flung miter spike, per-corner (one acute wedge in a
+junction can bevel while its neighbours stay mitered).
+
+A beveled wedge must still be gap-free, matching the existing 3+-wall
+junction core fill: at a 2-wall corner (no ring of wedges to fold the extra
+point into), a beveled wedge instead gets its own small triangular fill — the
+shared node plus the two walls' own base points — so the two wall ends never
+leave an open notch between them.
 
 **Why a ratio, not a fixed distance.** The miter geometry itself scales with
 wall thickness (a thicker wall's miter reaches proportionally farther at the

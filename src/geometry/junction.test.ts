@@ -249,4 +249,30 @@ describe("miter limit (bevel fallback)", () => {
     );
     expect(uniquePoints).toHaveLength(core.length);
   });
+
+  it("fills the gap at a beveled 2-wall corner (no open notch)", () => {
+    const rad = (10 * Math.PI) / 180;
+    const { walls, junctions } = computeWallGeometry([
+      wall("a", 0, 0, 100, 0, 10), // half-thickness 5
+      wall("b", 0, 0, 100 * Math.cos(rad), 100 * Math.sin(rad), 10),
+    ]);
+    const a = walls.get("a") as WallQuad;
+    const b = walls.get("b") as WallQuad;
+
+    // At a 10° angle both the acute wedge and the (nearly-parallel-lines)
+    // wide wedge bevel, so each side gets its own small triangular fill.
+    expect(junctions).toHaveLength(2);
+    const allCorners = [...a, ...b];
+    for (const fill of junctions) {
+      expect(fill).toHaveLength(3);
+      // Each fill is the shared node plus the two walls' own edge points —
+      // no gap between the fill and the two walls' own quads.
+      expect(fill.some((p) => near(p, node))).toBe(true);
+      const wallCorners = fill.filter((p) => !near(p, node));
+      expect(wallCorners).toHaveLength(2);
+      for (const v of wallCorners) {
+        expect(allCorners.some((c) => near(c, v))).toBe(true);
+      }
+    }
+  });
 });

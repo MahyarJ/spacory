@@ -130,6 +130,11 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
   const cornerKey = (e: Pick<WallEnd, "wallId" | "end">) =>
     `${e.wallId}:${e.end}`;
 
+  // A miter point farther than this from the shared node is too long —
+  // bevelled corners fall back to the wall's own (unextended) edge point.
+  const tooLong = (miter: Point, node: Point, limit: number) =>
+    Math.hypot(miter.x - node.x, miter.y - node.y) > limit;
+
   for (const ends of nodes.values()) {
     if (ends.length === 1) {
       // Free end: a plain perpendicular cap.
@@ -148,11 +153,11 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
     // A beveled wedge contributes its two base points instead of one miter
     // point, opening a small flat edge in the core fill's boundary.
     const wedgePoints: Point[] = [];
-
-    // A miter point farther than this from the shared node is too long —
-    // bevelled corners fall back to the wall's own (unextended) edge point.
-    const tooLong = (miter: Point, node: Point, limit: number) =>
-      Math.hypot(miter.x - node.x, miter.y - node.y) > limit;
+    // For a 2-wall corner there's no ring to fold a beveled wedge's extra
+    // point into (only `m >= 3` forms one below), so each beveled wedge here
+    // gets its own small triangular fill: the shared node plus the two
+    // walls' own base points, closing the gap left between them.
+    const twoWallFills: Point[][] = [];
 
     for (let k = 0; k < m; k++) {
       const e = sorted[k];
@@ -180,14 +185,19 @@ export function computeWallGeometry(walls: Wall[]): WallGeometry {
 
       corners.set(cornerKey(e), { left, right });
       wedgePoints.push(left);
-      if (leftBeveled) wedgePoints.push(ccwRightBase);
+      if (leftBeveled) {
+        wedgePoints.push(ccwRightBase);
+        if (m === 2) twoWallFills.push([e.node, left, ccwRightBase]);
+      }
     }
 
     // With 3+ walls the wedge points enclose an open core; fill it — a
     // beveled wedge just contributes an extra point, flattening that corner
-    // of the core without opening a gap. (With 2 walls there's no enclosed
-    // core to fill either way — they're just the shared inner/outer corners.)
+    // of the core without opening a gap. With exactly 2 walls there's no
+    // ring to fold into, so a beveled wedge instead gets its own small
+    // triangular fill (`twoWallFills`) closing the same kind of gap.
     if (m >= 3) junctions.push(wedgePoints);
+    else junctions.push(...twoWallFills);
   }
 
   // 3) Assemble each wall's quad. "left/right" are relative to each end's own
