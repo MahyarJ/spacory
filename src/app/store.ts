@@ -454,12 +454,21 @@ export const useApp = create<AppState>((set, get) => ({
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);
+    // The nudge may have landed the point on another junction's coordinate,
+    // welding them (see commitPlan below) — re-derive membership from the
+    // just-committed plan so a following nudge moves the whole welded
+    // junction instead of silently un-welding it.
+    const movedPoint = {
+      x: selectedConnectionPoint.x + dx,
+      y: selectedConnectionPoint.y + dy,
+    };
     set({
       plan: history.present,
-      selectedConnectionPoint: {
-        x: selectedConnectionPoint.x + dx,
-        y: selectedConnectionPoint.y + dy,
-      },
+      selectedConnectionPoint: movedPoint,
+      selectedConnectionPointEndpoints: findConnectedEndpoints(
+        history.present.walls,
+        movedPoint,
+      ),
     });
   },
   translateSelectedConnectionPointLive: (dx, dy) => {
