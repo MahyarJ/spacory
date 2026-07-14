@@ -1,6 +1,6 @@
 import type { Point, Wall } from "@app/schema";
 import { describe, expect, it } from "vitest";
-import { computeWallGeometry, type WallQuad } from "./junction";
+import { computeWallGeometry, MITER_LIMIT, type WallQuad } from "./junction";
 
 // Back-compat shim: most tests only care about the per-wall quads.
 const computeWallPolygons = (walls: Wall[]) => computeWallGeometry(walls).walls;
@@ -170,5 +170,83 @@ describe("junction core fills", () => {
     for (const v of geom.junctions[0]) {
       expect(allCorners.some((c) => near(c, v))).toBe(true);
     }
+  });
+});
+
+describe("miter limit (bevel fallback)", () => {
+  const node = { x: 0, y: 0 };
+  const dist = (p: Point) => Math.hypot(p.x - node.x, p.y - node.y);
+
+  it("bounds a very acute (~10°) corner instead of a long miter spike", () => {
+    const rad = (10 * Math.PI) / 180;
+    const polys = computeWallPolygons([
+      wall("a", 0, 0, 100, 0, 10), // half-thickness 5
+      wall("b", 0, 0, 100 * Math.cos(rad), 100 * Math.sin(rad), 10),
+    ]);
+    const a = polys.get("a") as WallQuad;
+    const b = polys.get("b") as WallQuad;
+
+    // Every corner near the shared node stays within the miter limit — no
+    // spike shooting far past the junction. (Each wall's far free end, at
+    // ~100cm, is unaffected and excluded here.)
+    const limit = MITER_LIMIT * 5 + EPS;
+    for (const quad of [a, b]) {
+      for (const p of quad.filter((p) => dist(p) < 50)) {
+        expect(dist(p)).toBeLessThanOrEqual(limit);
+      }
+    }
+  });
+
+  it("leaves a normal/obtuse angle mitered exactly as before", () => {
+    // A 90° corner's outer miter point sits farther from the node than the
+    // (small) miter limit alone would allow, proving it's a real miter and
+    // not a beveled fallback.
+    const polys = computeWallPolygons([
+      wall("h", 0, 0, 100, 0, 10),
+      wall("v", 0, 0, 0, 100, 10),
+    ]);
+    const h = polys.get("h") as WallQuad;
+    const v = polys.get("v") as WallQuad;
+    const outer = { x: -5, y: -5 };
+    expect(quadHas(h, outer)).toBe(true);
+    expect(quadHas(v, outer)).toBe(true);
+  });
+
+  it("bevels only the acute wedge of a 3-wall junction, keeping a valid core fill", () => {
+    // Two walls meet at a sharp ~8° angle; a third, perpendicular wall joins
+    // the same node, giving a mix of one beveled wedge and two normal ones.
+    const rad = (8 * Math.PI) / 180;
+    const { walls, junctions } = computeWallGeometry([
+      wall("a", 0, 0, 100, 0, 10),
+      wall("b", 0, 0, 100 * Math.cos(rad), 100 * Math.sin(rad), 10),
+      wall("c", 0, 0, 0, -100, 10),
+    ]);
+    const a = walls.get("a") as WallQuad;
+    const b = walls.get("b") as WallQuad;
+    const c = walls.get("c") as WallQuad;
+
+    // The acute a/b wedge is capped: every corner near the shared node (as
+    // opposed to each wall's far free end, ~100cm away) stays within the
+    // miter limit.
+    const limit = MITER_LIMIT * 5 + EPS;
+    for (const quad of [a, b, c]) {
+      for (const p of quad.filter((p) => dist(p) < 50)) {
+        expect(dist(p)).toBeLessThanOrEqual(limit);
+      }
+    }
+
+    // ...while the core fill still closes up: every one of its vertices is a
+    // real wall corner (no gap), and it forms a single simple polygon (no
+    // overlap) with no repeated vertex.
+    expect(junctions).toHaveLength(1);
+    const core = junctions[0];
+    const allCorners = [...walls.values()].flat();
+    for (const v of core) {
+      expect(allCorners.some((corner) => near(corner, v))).toBe(true);
+    }
+    const uniquePoints = core.filter(
+      (p, i) => !core.slice(0, i).some((q) => near(p, q)),
+    );
+    expect(uniquePoints).toHaveLength(core.length);
   });
 });

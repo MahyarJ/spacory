@@ -5,6 +5,24 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Miter limit is a multiple of half-thickness, not a fixed cm value
+
+**Decision.** `computeWallGeometry` (`src/geometry/junction.ts`) caps each
+corner's miter point at `MITER_LIMIT * halfThickness` (`MITER_LIMIT = 3`) from
+the shared node. Past that, the corner falls back to a **bevel** — the wall's
+own unextended edge point — instead of the far-flung miter spike, per-corner
+(one acute wedge in a junction can bevel while its neighbours stay mitered).
+
+**Why a ratio, not a fixed distance.** The miter geometry itself scales with
+wall thickness (a thicker wall's miter reaches proportionally farther at the
+same angle), so the cutoff needs to scale the same way — a fixed cm limit
+would cap thick walls too aggressively and thin walls not enough. This mirrors
+SVG's own `stroke-miterlimit`, which is likewise a ratio to `stroke-width`.
+`3` is a common default in CAD/vector tools: generous enough to leave normal
+(right-angle, obtuse) corners fully mitered, tight enough to bound genuinely
+acute ones. This resolves the gap noted below under "Wall junctions are
+mitered, not covered."
+
 ## Viewport autosave: throttle, not debounce
 
 **Decision.** The viewport (pan/zoom) is persisted to its own `localStorage`
@@ -32,8 +50,9 @@ for 3+-way junctions uses the *same* miter points and shares each edge with a
 wall, so it tiles seamlessly rather than overlaying. See `geometry/junction.ts`.
 
 **Scope.** Only shared **endpoints** form junctions. A wall ending mid-span of
-another isn't auto-split (would require wall splitting). Very acute angles
-produce long miters; a miter limit (bevel fallback) is a possible future tweak.
+another isn't auto-split (would require wall splitting). Very acute angles are
+now capped by a miter limit (bevel fallback) — see "Miter limit is a multiple
+of half-thickness, not a fixed cm value" above.
 
 ## Undo history is diff-based and persisted
 
