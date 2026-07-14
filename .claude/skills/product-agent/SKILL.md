@@ -184,6 +184,9 @@ issues, or modify `project-memory.md` in this mode.
 gh pr view <PR_NUMBER> --comments         # description, the "Closes #N" link
 gh pr diff <PR_NUMBER>                     # the change
 gh issue view <ISSUE_NUMBER> --comments    # the issue's acceptance criteria = your checklist
+# Inline (line-level) review comments are NOT shown by `gh pr view --comments`:
+gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments \
+  --jq '.[] | "\(.path):\(.line // .original_line) — \(.user.login): \(.body)"'
 ```
 
 You **may** read `project-memory.md` for product context but **do not modify it**
@@ -237,6 +240,9 @@ is always the Engineer Agent's `resolve` — defer it.
 ```bash
 gh issue view <N> --comments   # if it's an issue — the question thread + the spec
 gh pr view <N> --comments      # if it's a PR — the question thread + the "Closes #N" link
+# For a PR, inline (line-level) questions are NOT shown by `gh pr view --comments`:
+gh api repos/{owner}/{repo}/pulls/<N>/comments \
+  --jq '.[] | "\(.path):\(.line // .original_line) — \(.user.login): \(.body)"'
 ```
 
 Read `project-memory.md` for context (this mode **may** read it). Identify the

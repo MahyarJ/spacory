@@ -149,6 +149,9 @@ will **not** change this run. Your output is one PR comment.
 gh pr view <PR_NUMBER> --comments        # description, discussion, the "Closes #N" link
 gh pr diff <PR_NUMBER>                    # the actual change
 gh issue view <ISSUE_NUMBER> --comments   # the issue the PR closes — the original spec
+# Inline (line-level) review comments are NOT shown by `gh pr view --comments`:
+gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments \
+  --jq '.[] | "\(.path):\(.line // .original_line) — \(.user.login): \(.body)"'
 ```
 
 Read whatever source files you need for context. You **may** check out the branch
@@ -195,6 +198,10 @@ for this run. You make the minimal changes that address them.
 ```bash
 gh pr view <PR_NUMBER> --comments    # the review + acceptance comments = your spec
 gh pr diff <PR_NUMBER>               # current state of the change
+# Inline (line-level) review comments are NOT shown by `gh pr view --comments`.
+# Read them too — a reviewer's feedback is often anchored to a specific line:
+gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments \
+  --jq '.[] | "\(.path):\(.line // .original_line) — \(.user.login): \(.body)"'
 ```
 
 Treat **blocking** findings as required; address actionable nits if cheap and in
@@ -256,6 +263,9 @@ and point at `resolve` — do not write code here.
 gh pr view <N> --comments      # if it's a PR — the question thread + the "Closes #N" link
 gh issue view <N> --comments   # if it's an issue — the question thread
 gh pr diff <N>                  # if a PR: the change the questions are about
+# For a PR, inline (line-level) questions are NOT shown by `gh pr view --comments`:
+gh api repos/{owner}/{repo}/pulls/<N>/comments \
+  --jq '.[] | "\(.path):\(.line // .original_line) — \(.user.login): \(.body)"'
 ```
 
 Read whatever source files you need to answer accurately. Identify either (a) the
