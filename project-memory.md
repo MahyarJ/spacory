@@ -62,6 +62,10 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   any other wall sharing that point, so junctions stay intact (#19, merged;
   `translateSelectedWallsFollowing` in `src/app/store.ts`).
 - **Zero-length walls rejected when drawing** (#29, merged).
+- **Icon + label toolbar** — toolbar buttons pair each label with an icon:
+  `lucide-react` for generic controls, in-house inline-SVG glyphs for the domain
+  tools (Wall, Window) in `src/features/toolbar/icons.tsx` (#51). Door borrows
+  lucide's `DoorOpen` pending a custom swing glyph (#52). See `docs/DECISIONS.md`.
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
