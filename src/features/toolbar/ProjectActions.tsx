@@ -96,11 +96,11 @@ export function ProjectActions() {
   return (
     <>
       <button type="button" className={styles.button} onClick={onImportClick}>
-        <Upload size={18} />
+        <Download size={18} />
         Import
       </button>
       <button type="button" className={styles.button} onClick={onExport}>
-        <Download size={18} />
+        <Upload size={18} />
         Export
       </button>
       <button type="button" className={styles.button} onClick={onExportPng}>
