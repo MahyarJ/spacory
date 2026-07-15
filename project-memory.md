@@ -200,13 +200,14 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-14): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-15): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction), #33 (SVG export), #46 (remove dead `wedgePoints` writes for 2-wall
-junctions, triaged from a human-submitted idea), #48 (connection-point drag
-snaps onto unrelated overlapping junctions, triaged from a human-submitted
-bug report). #34 has **merged** (PR #43); #38 has **closed**. Do **not**
-re-propose any of these.
+junction), #33 (SVG export), #45 (dispatcher can't recover an orphaned
+in-flight label — human-authored automation issue, not a floor-plan product
+feature; not this agent's spec to write, left as-is), #48 (connection-point
+drag snaps onto unrelated overlapping junctions). #34 and #46 have **merged/
+closed**; #48's fix has landed as **PR #49**, labeled `agent:accepted` and
+awaiting a human merge. Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -244,6 +245,19 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-15 — Sixth Product Agent run. Reconciled state with GitHub: #46
+  (dead `wedgePoints` cleanup) has closed, and #48's fix has landed as PR #49
+  (labeled `agent:accepted`, awaiting a human merge). Noted new issue #45
+  (dispatcher can't recover a ticket orphaned on a transient in-flight
+  label) — a human-authored, already-fully-specced automation issue about
+  `.agents/dispatch.sh`, not a floor-plan product feature, so left it as-is
+  rather than re-triaging or duplicating it. Created no new issues this
+  cycle: the remaining open issues (#10, #20, #21, #30, #33) are already
+  well-scoped and untouched by any in-flight PR, and the two blockers on the
+  next tier of work — rooms scope, and whether whole-wall moves should
+  cascade through a connected chain — still have no human answer. Per the
+  prior run's guidance, held off proposing anything new until #33 lands or
+  one of those open questions is resolved.
 - 2026-07-14 — Triage run on human-submitted bug report #48 ("dragging a
   junction snaps onto another junction it passes over"). Investigated the
   live connection-point drag path (`FloorPlan.tsx` → `store.ts` →
