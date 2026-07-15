@@ -72,6 +72,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Load config from the gitignored .agents/.env (CLAUDE_MODEL, CLAUDE_PERMISSION_MODE,
+# Telegram creds, …) and export it so the run-*.sh children inherit it. launchd
+# starts with a bare environment, so without this the pass-through vars are unset.
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  . "$SCRIPT_DIR/.env"
+  set +a
+fi
+
 MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-5}"
 AUTOMERGE="${SPACORY_AUTOMERGE:-0}"
 

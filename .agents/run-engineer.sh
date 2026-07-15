@@ -28,7 +28,9 @@
 # Env overrides:
 #   CLAUDE_PERMISSION_MODE   default: acceptEdits
 #                            (use "bypassPermissions" for fully unattended runs)
-#   CLAUDE_MODEL             default: the session default model
+#   CLAUDE_MODEL             default: the session default model. Set in
+#                            .agents/.env to pin (dispatch.sh sources it); this
+#                            repo pins "opus".
 #
 # Note: for an unattended headless run to not stall, the commands the agent uses
 # must be permitted. This repo's .claude/settings.json allows git, npm, `gh pr`

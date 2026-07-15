@@ -182,7 +182,13 @@ and validates its input. Useful env overrides:
 
 - `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
   fully unattended run in a trusted environment.
-- `CLAUDE_MODEL` — pin a specific model; defaults to the session default.
+- `CLAUDE_MODEL` — pin a specific model; defaults to the session default. This repo
+  pins `opus` in `.agents/.env`.
+
+> **Config surface:** `dispatch.sh` sources `.agents/.env` (gitignored) and exports
+> it, so that file is the single place to set any of these knobs — `CLAUDE_MODEL`,
+> `CLAUDE_PERMISSION_MODE`, `SPACORY_MAX_ROUNDS`, `SPACORY_AUTOMERGE`, and the
+> Telegram creds. See `.agents/.env.example` for the documented list.
 
 > **Permissions:** headless runs only execute commands the permission mode/allowlist
 > permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, `gh run`,
