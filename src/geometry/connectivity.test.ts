@@ -4,6 +4,7 @@ import {
   findConnectedEndpoints,
   getConnectionPoints,
   pointsEqual,
+  translateEndpoints,
   translateEndpointsAt,
 } from "./connectivity";
 
@@ -124,6 +125,57 @@ describe("translateEndpointsAt", () => {
   it("moves both ends of a zero-length wall together", () => {
     const walls = [wall("w1", 5, 5, 5, 5)];
     const moved = translateEndpointsAt(walls, { x: 5, y: 5 }, 2, 3);
+    expect(moved[0]).toEqual({
+      id: "w1",
+      a: { x: 7, y: 8 },
+      b: { x: 7, y: 8 },
+      thickness: 10,
+    });
+  });
+});
+
+describe("translateEndpoints", () => {
+  it("moves exactly the given refs, leaving other walls untouched", () => {
+    const walls = [
+      wall("w1", 0, 0, 100, 0),
+      wall("w2", 100, 0, 200, 0),
+      wall("w3", 500, 500, 600, 500),
+    ];
+    const refs = findConnectedEndpoints(walls, { x: 100, y: 0 });
+    const moved = translateEndpoints(walls, refs, 5, -5);
+    expect(moved[0].b).toEqual({ x: 105, y: -5 });
+    expect(moved[1].a).toEqual({ x: 105, y: -5 });
+    expect(moved[2]).toBe(walls[2]);
+  });
+
+  it("does not pull in a wall whose endpoint lands on the target coordinate only after the move", () => {
+    // Regression for the drag-snap bug: junction A (w1's `b`) is dragged onto
+    // junction B's coordinate (w2's `a`, an unrelated wall). Because the
+    // membership set was captured before the move (via findConnectedEndpoints
+    // at grab time), w2 must not be swept in even though the two walls now
+    // share a coordinate.
+    const walls = [wall("w1", 0, 0, 50, 0), wall("w2", 100, 0, 200, 0)];
+    const refs = findConnectedEndpoints(walls, { x: 50, y: 0 }); // just w1.b
+    const moved = translateEndpoints(walls, refs, 50, 0); // w1.b -> (100, 0)
+    expect(moved[0].b).toEqual({ x: 100, y: 0 });
+    expect(moved[1]).toBe(walls[1]); // w2 unmoved, still (100,0)-(200,0)
+  });
+
+  it("is a no-op for a zero delta, returning the same array reference", () => {
+    const walls = [wall("w1", 0, 0, 100, 0)];
+    const refs = findConnectedEndpoints(walls, { x: 0, y: 0 });
+    expect(translateEndpoints(walls, refs, 0, 0)).toBe(walls);
+  });
+
+  it("is a no-op for an empty ref list", () => {
+    const walls = [wall("w1", 0, 0, 100, 0)];
+    expect(translateEndpoints(walls, [], 5, 5)).toBe(walls);
+  });
+
+  it("moves both ends of a zero-length wall together when both are refs", () => {
+    const walls = [wall("w1", 5, 5, 5, 5)];
+    const refs = findConnectedEndpoints(walls, { x: 5, y: 5 });
+    const moved = translateEndpoints(walls, refs, 2, 3);
     expect(moved[0]).toEqual({
       id: "w1",
       a: { x: 7, y: 8 },

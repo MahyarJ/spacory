@@ -50,15 +50,41 @@ export function translateEndpointsAt(
   dy: number,
   eps = EPS,
 ): Wall[] {
-  if (dx === 0 && dy === 0) return walls;
+  return translateEndpoints(
+    walls,
+    findConnectedEndpoints(walls, point, eps),
+    dx,
+    dy,
+  );
+}
+
+/**
+ * Move exactly the given wall endpoints by (dx, dy) — a fixed-membership
+ * junction drag. Unlike `translateEndpointsAt`, membership isn't re-derived
+ * from the live coordinate on each call, so transiting over an unrelated
+ * junction's coordinate mid-drag can't pull its endpoints along. Pure: walls
+ * untouched by the move keep their original object identity.
+ */
+export function translateEndpoints(
+  walls: Wall[],
+  refs: WallEndpointRef[],
+  dx: number,
+  dy: number,
+): Wall[] {
+  if ((dx === 0 && dy === 0) || refs.length === 0) return walls;
+  const endsByWall = new Map<string, Set<WallEndpointRef["end"]>>();
+  for (const ref of refs) {
+    const ends = endsByWall.get(ref.wallId) ?? new Set();
+    ends.add(ref.end);
+    endsByWall.set(ref.wallId, ends);
+  }
   return walls.map((w) => {
-    const atA = pointsEqual(w.a, point, eps);
-    const atB = pointsEqual(w.b, point, eps);
-    if (!atA && !atB) return w;
+    const ends = endsByWall.get(w.id);
+    if (!ends) return w;
     return {
       ...w,
-      a: atA ? { x: w.a.x + dx, y: w.a.y + dy } : w.a,
-      b: atB ? { x: w.b.x + dx, y: w.b.y + dy } : w.b,
+      a: ends.has("a") ? { x: w.a.x + dx, y: w.a.y + dy } : w.a,
+      b: ends.has("b") ? { x: w.b.x + dx, y: w.b.y + dy } : w.b,
     };
   });
 }
