@@ -62,10 +62,6 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   any other wall sharing that point, so junctions stay intact (#19, merged;
   `translateSelectedWallsFollowing` in `src/app/store.ts`).
 - **Zero-length walls rejected when drawing** (#29, merged).
-- **Icon + label toolbar** — toolbar buttons pair each label with an icon:
-  `lucide-react` for generic controls, in-house inline-SVG glyphs for the domain
-  tools (Wall, Window) in `src/features/toolbar/icons.tsx` (#51). Door borrows
-  lucide's `DoorOpen` pending a custom swing glyph (#52). See `docs/DECISIONS.md`.
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -103,6 +99,14 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
+- **Toolbar icon + label buttons — in flight (#51), PR #53 open, not yet merged
+  to `main`.** Pairs every toolbar button's existing text label with an icon
+  (`lucide-react` for generic controls, hand-drawn inline-SVG for Wall/Window in
+  `src/features/toolbar/icons.tsx`), per `docs/DECISIONS.md`. Written up
+  retroactively — the implementation and PR came first. Door temporarily borrows
+  lucide's `DoorOpen`; **#52** (open) tracks its replacement with a custom
+  plan-view swing glyph once #51 lands. Do not list this under "Current state"
+  as shipped until PR #53 actually merges.
 - **On-canvas wall-length labels — done (#5, merged).**
 - **Editable wall lengths — done (#11, merged).** Type to resize; angle preserved.
 - **Auto-follow connected walls on move/resize — done (#19, merged).** Moving a
@@ -204,14 +208,14 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-15): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-16): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
 junction), #33 (SVG export), #45 (dispatcher can't recover an orphaned
 in-flight label — human-authored automation issue, not a floor-plan product
-feature; not this agent's spec to write, left as-is), #48 (connection-point
-drag snaps onto unrelated overlapping junctions). #34 and #46 have **merged/
-closed**; #48's fix has landed as **PR #49**, labeled `agent:accepted` and
-awaiting a human merge. Do **not** re-propose any of these.
+feature; not this agent's spec to write, left as-is), #51 (toolbar icon+label
+buttons, PR #53 open awaiting merge/acceptance), #52 (custom door swing glyph,
+follow-up to #51). #34, #46, and #48 have all **merged/closed** (#48 via PR
+#49). Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -249,6 +253,20 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-16 — Seventh Product Agent run. Reconciled state with GitHub: #48's
+  fix has merged (PR #49). Two new issues appeared since the last run, #51
+  (toolbar icon+label buttons) and #52 (custom door swing glyph, a follow-up
+  to #51), with #51's implementation already on branch `feat/toolbar-icons`
+  as open PR #53 (mergeable, not yet merged) — added both to "Known gaps" and
+  "focus next" so they aren't re-proposed. Note: `feat/toolbar-icons` carries
+  its own edited copy of this file (documenting #51/#52 as if already
+  shipped on `main`) — per this file's own contract it must live only on
+  `main` and only the Product Agent writes it, so that branch copy is stale/
+  out of process and was **not** used as a source here; `main`'s copy (this
+  one) is authoritative. Created no new issues this cycle: #10, #20, #21,
+  #30, #33 remain well-scoped and untouched by any in-flight PR, and both
+  standing blockers — rooms scope, and whether whole-wall moves should
+  cascade through a connected chain — still have no human answer.
 - 2026-07-15 — Sixth Product Agent run. Reconciled state with GitHub: #46
   (dead `wedgePoints` cleanup) has closed, and #48's fix has landed as PR #49
   (labeled `agent:accepted`, awaiting a human merge). Noted new issue #45

@@ -151,27 +151,29 @@ LABEL_GAP_PX`: it clears the wall's *drawn edge* by a constant `LABEL_GAP_PX`
 (8px) at every zoom. (Inner units are screen pixels because the net scale inside
 the counter-scaled group is 1.)
 
-## Toolbar icons: lucide-react + a few in-house domain glyphs
+## Toolbar icons: all from lucide-react
 
-**Decision.** Use `lucide-react` (MIT, tree-shakeable) for generic toolbar
-icons, and hand-draw only the domain glyphs no generic set covers (Wall,
-Window) as inline SVG in `src/features/toolbar/icons.tsx`. Buttons keep their
-visible text label (icon + label, not icon-only).
+**Decision.** Use `lucide-react` (MIT, tree-shakeable) for every toolbar icon,
+including the floor-plan tools — Wall (`BrickWall`), Window (`Grid2x2`), Door
+(`DoorOpen`). Buttons keep their visible text label (icon + label, not
+icon-only).
 
-**Why a package over fully in-house.** The generic controls (select, pan, fit,
-undo/redo, import/export) are solved problems; hand-rolling them wastes effort
-and drifts in stroke weight and optical sizing. Lucide is a maintained fork of
-Feather — the same lineage Excalidraw's own icons descend from — so depending
-on it gives that curated look without the upkeep. It ships as tree-shakeable
-React components, so only the icons we import land in the bundle (no icon font
-or sprite runtime). The in-house glyphs are drawn on lucide's grid (24×24
-viewBox, `currentColor`, `stroke-width: 2`, round caps/joins) so they sit
-consistently beside the library icons and inherit light/dark theming for free.
+**Why a package over in-house glyphs.** The generic controls (select, pan, fit,
+undo/redo, import/export) are solved problems, and lucide turns out to cover the
+domain tools too — `BrickWall` reads as a wall, `Grid2x2` as a four-pane window.
+An earlier draft hand-drew custom Wall/Window glyphs in an `icons.tsx`, but they
+were essentially re-implementations of those two lucide icons, so the file was
+dropped in favour of the library ones: one consistent set, less code, no
+stroke-weight/optical drift to maintain. Lucide is a maintained fork of Feather
+— the same lineage Excalidraw's own icons descend from — and ships as
+tree-shakeable React components, so only the icons we import land in the bundle
+(no icon font or sprite runtime).
 
 **Why keep labels.** Spacory targets non-CAD users; icon-only toolbars hurt
 discoverability. Icon + visible label is the safer default at this stage.
 
-**Notes.** The Door tool temporarily borrows lucide's `DoorOpen` pending a
-custom plan-view swing glyph (tracked separately). The Export PNG icon is
-imported as `Image as ImageIcon` so it can't shadow the global `Image`
-constructor the PNG exporter relies on.
+**Notes.** `Grid2x2` is named for "grid" but visually matches a four-pane
+window; a bespoke plan-view glyph (e.g. a proper door swing) can replace the
+borrowed ones later if the toolbar wants a more architectural look. The Export
+PNG icon is imported as `Image as ImageIcon` so it can't shadow the global
+`Image` constructor the PNG exporter relies on.
