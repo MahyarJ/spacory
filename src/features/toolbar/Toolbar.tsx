@@ -12,14 +12,13 @@ import {
   Undo2,
 } from "lucide-react";
 import type { ComponentType } from "react";
+import { ICON_SIZE } from "./constants";
 import { HintBar } from "./HintBar";
 import { ProjectActions } from "./ProjectActions";
 import { ThemeSwitch } from "./ThemeSwitch";
 import styles from "./Toolbar.module.css";
 
 type IconComponent = ComponentType<{ size?: string | number }>;
-
-const ICON_SIZE = 18;
 
 export function Toolbar() {
   const tool = useApp((s) => s.tool);
