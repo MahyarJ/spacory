@@ -66,6 +66,10 @@
 #                         acceptEdits; use bypassPermissions for fully unattended if
 #                         a needed command isn't allowlisted).
 #   CLAUDE_MODEL          passed through to the run-*.sh scripts.
+#   SPACORY_CYCLE_LOCK_WAIT_SECS
+#                         how long a once-a-day `cycle` waits for the shared lock
+#                         before forfeiting its slot (default 1800 = 30m). A `tick`
+#                         never waits — it fires every ~10 min, so it just skips.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -456,24 +460,63 @@ main() {
     status) print_status;  exit 0 ;;
     cycle)
       log "→ product cycle"
-      if run_product; then log "✓ product cycle complete"; else notify "⚠️ Spacory agents: product cycle failed."; fi
+      local ok=1
+      run_product && log "✓ product cycle complete" || ok=0
       commit_memory
+      # Deterministic wrap-up, like every do_* action: the agent is *supposed* to
+      # self-notify (spacory-notify), but that's a soft instruction it can skip —
+      # notably on a no-op cycle — so the dispatcher guarantees the human hears the
+      # cycle ran regardless.
+      if [ "$ok" = 1 ]; then
+        notify "🪐 Spacory agents: product cycle complete — check GitHub for any new or refined issues."
+      else
+        notify "⚠️ Spacory agents: product cycle failed."
+      fi
       exit 0 ;;
     tick)   dispatch_once ;;
     *)      die "unknown command: $1 (use: setup | status | cycle | tick)" ;;
   esac
 }
 
-# A mkdir-based lock: portable (macOS has no `flock`) and atomic. A stale lock
-# older than 2h is reclaimed so a crashed tick can't wedge the loop forever.
+# A mkdir-based lock: portable (macOS has no `flock`) and atomic. cycle and tick
+# share ONE lock on purpose — both run headless agents and git operations
+# (commit_memory switches branches), which would corrupt each other if run at
+# once. A stale lock older than 2h is reclaimed so a crashed run can't wedge the
+# loop forever.
 LOCK="${TMPDIR:-/tmp}/spacory-dispatch.lock.d"
-if [ -d "$LOCK" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +120 2>/dev/null)" ]; then
-  log "Reclaiming stale lock (>2h old)."
-  rmdir "$LOCK" 2>/dev/null || true
-fi
-if ! mkdir "$LOCK" 2>/dev/null; then
-  log "Another dispatch is still running; skipping this tick."
-  exit 0
+
+reclaim_stale_lock() {
+  if [ -d "$LOCK" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +120 2>/dev/null)" ]; then
+    log "Reclaiming stale lock (>2h old)."
+    rmdir "$LOCK" 2>/dev/null || true
+  fi
+}
+
+# The two jobs have very different stakes when they can't get the lock:
+#   - the tick fires every ~10 min, so a skipped tick just retries shortly → skip.
+#   - the cycle fires once a day, so losing its slot to a concurrent tick would
+#     stall issue creation for ~24h → wait (bounded) for the lock instead of
+#     silently forfeiting the day. If it still can't get it, say so (and notify).
+CYCLE_LOCK_WAIT_SECS="${SPACORY_CYCLE_LOCK_WAIT_SECS:-1800}"  # 30 min
+
+if [ "${1:-tick}" = "cycle" ]; then
+  waited=0
+  until { reclaim_stale_lock; mkdir "$LOCK" 2>/dev/null; }; do
+    if [ "$waited" -ge "$CYCLE_LOCK_WAIT_SECS" ]; then
+      log "Dispatch stayed busy for >${CYCLE_LOCK_WAIT_SECS}s; skipping this cycle."
+      notify "⚠️ Spacory agents: product cycle skipped — dispatcher busy for >$((CYCLE_LOCK_WAIT_SECS / 60))m."
+      exit 0
+    fi
+    [ "$waited" -eq 0 ] && log "Dispatch busy; waiting up to ${CYCLE_LOCK_WAIT_SECS}s for the lock…"
+    sleep 10
+    waited=$((waited + 10))
+  done
+else
+  reclaim_stale_lock
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    log "Another dispatch is still running; skipping this tick."
+    exit 0
+  fi
 fi
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 

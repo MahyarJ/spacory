@@ -364,13 +364,22 @@ Once resolved, re-label \`agent:triage\` and I'll pick it up."
 ## Finishing up (every mode)
 
 Send ONE short wrap-up via the **`spacory-notify`** skill (`.agents/notify.sh`).
-Use the message for the mode you ran:
+**Always send it — including a no-op cycle that created zero issues.** A silent
+run is indistinguishable from a cron that never fired, so a "nothing to create,
+here's why" ping is exactly as important as a "created N issues" one. Use the
+message for the mode you ran:
 
 ```bash
 # cycle — one "• #<n> <title> — <url>" line per issue you ACTUALLY created:
 .agents/notify.sh "🪐 *Spacory Product Agent*
 Created <N> issue(s):
 • #<n> <title> — <url>
+Open questions for you: <…or 'none'>"
+
+# cycle, no-op — you created nothing; say so and why (backlog full, blocked on a
+# human decision, nothing changed since last run, …):
+.agents/notify.sh "🪐 *Spacory Product Agent*
+Cycle ran — no new issues (<one-line reason>).
 Open questions for you: <…or 'none'>"
 
 # acceptance — done:
