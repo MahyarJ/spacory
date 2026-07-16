@@ -118,6 +118,15 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No editable units / unit switching** — changing `plan.meta.units` from the UI is
   not yet scoped (explicitly out of scope of #11).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
+- **Openings can only be placed click-click — in flight (#55, triaged from a
+  human-submitted idea).** Walls already support *both* click-to-chain and
+  click-drag creation (`FloorPlan.tsx`), but doors/windows support only the
+  two-click flow (first `onPointerDown` starts the opening, second finalizes via
+  `addItem`); there is no press-drag-release gesture. The idea's body mentioned
+  walls (which already drag), but its title named the real gap — openings. #55
+  adds drag-creation for openings mirroring the wall tool's dual-gesture pattern,
+  keeping the existing click-click flow intact; reuses the existing preview,
+  grid snapping, 30 cm tolerance, and 5 cm min-width.
 - **Undo/redo keyboard shortcuts — done (#3, merged).**
 - **Selection not pruned after undo/redo — in flight (#10).** A stored
   `selectedWalls`/`selectedItems` can reference walls/items that no longer exist
@@ -212,10 +221,11 @@ Current open issues (as of 2026-07-16): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
 junction), #33 (SVG export), #45 (dispatcher can't recover an orphaned
 in-flight label — human-authored automation issue, not a floor-plan product
-feature; not this agent's spec to write, left as-is), #51 (toolbar icon+label
-buttons, PR #53 open awaiting merge/acceptance), #52 (custom door swing glyph,
-follow-up to #51). #34, #46, and #48 have all **merged/closed** (#48 via PR
-#49). Do **not** re-propose any of these.
+feature; not this agent's spec to write, left as-is), #52 (custom door swing glyph,
+follow-up to #51), #55 (drag-creation for openings — triaged & enriched this run,
+awaiting a human to promote to `agent:ready`). #34, #46, #48, and #51 have all
+**merged/closed** (#48 via PR #49, #51 via PR #53). Do **not** re-propose any of
+these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -253,6 +263,17 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-16 — Triage run on human-submitted idea #55 ("Drag-creation for
+  openings"). The idea's body claimed "walls and doors can only be made by
+  click-click," but verifying `FloorPlan.tsx` showed walls **already** support
+  click-drag creation (the `dragging` flag + `onPointerUp` build path) — so the
+  real, unaddressed gap is the one the *title* names: doors/windows can only be
+  placed via two clicks, with no drag gesture. Accepted and enriched #55 into a
+  full spec: add drag-creation for openings mirroring the wall tool's dual-gesture
+  pattern, keep the existing click-click flow, reuse the existing preview / grid
+  snapping / 30 cm tolerance / 5 cm min-width. Retitled to "Create a door/window
+  opening by click-dragging along a wall." Also reconciled state: #51 (toolbar
+  icons) has merged via PR #53. Did not add `agent:ready` (a human promotes it).
 - 2026-07-16 — Seventh Product Agent run. Reconciled state with GitHub: #48's
   fix has merged (PR #49). Two new issues appeared since the last run, #51
   (toolbar icon+label buttons) and #52 (custom door swing glyph, a follow-up
