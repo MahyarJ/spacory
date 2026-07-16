@@ -90,8 +90,13 @@ Unparseable → blocked.
 5. `agent:ready` issue with no PR → **implement**
 
 One action per tick, so a short interval can never stampede a stack of expensive
-agent runs. A `mkdir` lock (macOS has no `flock`) makes overlapping ticks skip;
-stale locks >2h are reclaimed.
+agent runs. A single `mkdir` lock (macOS has no `flock`) is shared by the tick
+and the daily `cycle` — they can't run at once because both touch git
+(`commit_memory` switches branches). An overlapping **tick** just skips (it fires
+again in ~10 min), but the once-a-day **cycle** instead *waits* for the lock up to
+`SPACORY_CYCLE_LOCK_WAIT_SECS` (30 min) so a concurrent tick can't cost it a whole
+day — and if it still can't get in, it says so and pings. Stale locks >2h are
+reclaimed.
 
 ## Running it
 
@@ -116,6 +121,7 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 |-----|---------|---------|
 | `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the spec last changed** before a PR is blocked (editing the linked issue body — directly or via `agent:clarify` — resets the count) |
 | `SPACORY_AUTOMERGE` | `0` | `1` = squash-merge an accepted PR once CI is green |
+| `SPACORY_CYCLE_LOCK_WAIT_SECS` | `1800` | how long the daily `cycle` waits for the shared lock before forfeiting its slot (the fast tick never waits) |
 | `CLAUDE_PERMISSION_MODE` | `acceptEdits` | passed to run-\*.sh; use `bypassPermissions` for fully unattended if a command isn't allowlisted |
 | `CLAUDE_MODEL` | session default | passed to run-\*.sh |
 
