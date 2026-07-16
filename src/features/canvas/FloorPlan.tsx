@@ -3,6 +3,10 @@ import { useApp } from "@app/store";
 import { clampScale } from "@app/viewport";
 import { getConnectionPoints } from "@geometry/connectivity";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
+import {
+  MIN_OPENING_WIDTH,
+  openingPlacementFromOffsets,
+} from "@geometry/opening";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
 import { applyInverseViewTransform, snapToGrid } from "@geometry/snap";
 import {
@@ -202,6 +206,34 @@ export function FloorPlan() {
     );
   };
 
+  // Build and commit an opening item from a resolved offset/length. Shared by
+  // both creation gestures (click-click and drag) so they produce identical
+  // items given the same placement.
+  const commitOpening = (o: Opening, offset: number, length: number) => {
+    switch (o.type) {
+      case "window":
+        addItem({
+          id: uid(o.type),
+          type: o.type,
+          wallAttach: { wallId: o.wallId, offset, length },
+          thickness: o.thickness,
+          props: {},
+        });
+        break;
+      case "door":
+        addItem({
+          id: uid(o.type),
+          type: o.type,
+          wallAttach: { wallId: o.wallId, offset, length },
+          thickness: o.thickness,
+          props: { hingeEdge: "start", swingSide: "outside" },
+        });
+        break;
+      default:
+        assertNever(o as never); // TS forces to handle new kinds later
+    }
+  };
+
   const onPointerDown: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
     // Capture on the <svg> itself (currentTarget), not e.target — a clicked
@@ -293,34 +325,15 @@ export function FloorPlan() {
           thickness: near.wall.thickness + 8, // +8cm for visual thickness
         });
       } else {
-        // finalize
+        // finalize (click-click): clamp up to the minimum width, so a second
+        // click at (or near) the start still produces a real opening.
         if (opening.wallId !== near.wall.id) return; // force same wall for now
-        const endOffset =
-          Math.round(near.offset / plan.meta.gridSize) * plan.meta.gridSize;
-        const offset = Math.min(opening.startOffset, endOffset);
-        const length = Math.max(5, Math.abs(endOffset - opening.startOffset)); // min 5cm width
-        switch (opening.type) {
-          case "window":
-            addItem({
-              id: uid(opening.type),
-              type: opening.type,
-              wallAttach: { wallId: opening.wallId, offset, length },
-              thickness: opening.thickness,
-              props: {},
-            });
-            break;
-          case "door":
-            addItem({
-              id: uid(opening.type),
-              type: opening.type,
-              wallAttach: { wallId: opening.wallId, offset, length },
-              thickness: opening.thickness,
-              props: { hingeEdge: "start", swingSide: "outside" },
-            });
-            break;
-          default:
-            assertNever(opening as never); // TS forces to handle new kinds later
-        }
+        const offset = Math.min(opening.startOffset, startOffset);
+        const length = Math.max(
+          MIN_OPENING_WIDTH,
+          Math.abs(startOffset - opening.startOffset),
+        );
+        commitOpening(opening, offset, length);
         setOpening(null);
       }
       return;
@@ -343,8 +356,11 @@ export function FloorPlan() {
       }));
     }
 
-    // start dragging wall
-    if (e.buttons === 1 && tool === "wall") {
+    // start dragging (wall creation, or opening creation along a wall)
+    if (
+      e.buttons === 1 &&
+      (tool === "wall" || tool === "window" || tool === "door")
+    ) {
       setDragging(true);
     }
 
@@ -442,6 +458,25 @@ export function FloorPlan() {
       if (getWallLength(w) >= MIN_WALL_LENGTH) addWall(w);
       setDrawingWall(null);
       setDragging(false);
+    }
+    // Opening drag finalize: press → drag along a wall → release makes one
+    // opening in a single gesture. A press-release with no move never sets
+    // `dragging`, so it falls through to the click-click path (opening stays
+    // "started" for a second click). `currentOffset` already tracks the live
+    // preview on the starting wall, so the created opening matches the preview.
+    if (dragging && (tool === "window" || tool === "door")) {
+      if (opening) {
+        const placement = openingPlacementFromOffsets(
+          opening.startOffset,
+          opening.currentOffset,
+        );
+        if (placement) {
+          commitOpening(opening, placement.offset, placement.length);
+        }
+        setOpening(null);
+      }
+      setDragging(false);
+      return;
     }
     if (marquee) {
       const r = rectFrom(marquee.x0, marquee.y0, marquee.x1, marquee.y1);
