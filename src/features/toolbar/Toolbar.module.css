@@ -14,12 +14,19 @@
   }
 
   .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: var(--sp-grid);
     color: var(--sp-text);
     border: none;
     padding: 6px 10px;
     border-radius: 6px;
     cursor: pointer;
+  }
+
+  .button svg {
+    flex: none;
   }
 
   .active {

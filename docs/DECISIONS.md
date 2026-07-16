@@ -150,3 +150,11 @@ the more you zoom. So the perpendicular offset is `thickness/2 * scale +
 LABEL_GAP_PX`: it clears the wall's *drawn edge* by a constant `LABEL_GAP_PX`
 (8px) at every zoom. (Inner units are screen pixels because the net scale inside
 the counter-scaled group is 1.)
+
+## Toolbar icons: all from lucide-react
+
+**Decision.** Use `lucide-react` (MIT, tree-shakeable) for every toolbar icon,
+including the floor-plan tools — Wall (`BrickWall`), Window (`Grid2x2`), Door
+(`DoorOpen`). Buttons keep their visible text label (icon + label, not
+icon-only). No in-house glyphs — lucide covers the domain tools well enough, so
+there's one consistent set and nothing to hand-maintain.

@@ -1,7 +1,9 @@
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
 import { useApp } from "@app/store";
 import { buildExportSvg } from "@geometry/exportSvg";
+import { Download, Image as ImageIcon, Upload } from "lucide-react";
 import { useRef } from "react";
+import { ICON_SIZE } from "./constants";
 import styles from "./Toolbar.module.css";
 
 function sanitizeFilename(name: string): string {
@@ -95,12 +97,15 @@ export function ProjectActions() {
   return (
     <>
       <button type="button" className={styles.button} onClick={onImportClick}>
+        <Download size={ICON_SIZE} />
         Import
       </button>
       <button type="button" className={styles.button} onClick={onExport}>
+        <Upload size={ICON_SIZE} />
         Export
       </button>
       <button type="button" className={styles.button} onClick={onExportPng}>
+        <ImageIcon size={ICON_SIZE} />
         Export PNG
       </button>
       <input
