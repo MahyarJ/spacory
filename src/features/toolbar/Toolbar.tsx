@@ -2,7 +2,9 @@ import { useApp } from "@app/store";
 
 import clsx from "clsx";
 import {
+  BrickWall,
   DoorOpen,
+  Grid2x2,
   Maximize,
   MousePointer2,
   Move,
@@ -11,12 +13,10 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { HintBar } from "./HintBar";
-import { WallIcon, WindowIcon } from "./icons";
 import { ProjectActions } from "./ProjectActions";
 import { ThemeSwitch } from "./ThemeSwitch";
 import styles from "./Toolbar.module.css";
 
-/** Shared props between lucide-react icons and our domain glyphs. */
 type IconComponent = ComponentType<{ size?: string | number }>;
 
 const ICON_SIZE = 18;
@@ -53,8 +53,8 @@ export function Toolbar() {
       <div className={styles.toolbar}>
         <h1 className={styles.brand}>Spacory</h1>
         <ToolbarButton tool="select" label="Select" icon={MousePointer2} />
-        <ToolbarButton tool="wall" label="Wall" icon={WallIcon} />
-        <ToolbarButton tool="window" label="Window" icon={WindowIcon} />
+        <ToolbarButton tool="wall" label="Wall" icon={BrickWall} />
+        <ToolbarButton tool="window" label="Window" icon={Grid2x2} />
         <ToolbarButton tool="door" label="Door" icon={DoorOpen} />
         <ToolbarButton tool="pan" label="Pan" icon={Move} />
         <button
