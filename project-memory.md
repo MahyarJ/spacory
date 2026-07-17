@@ -62,6 +62,14 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   any other wall sharing that point, so junctions stay intact (#19, merged;
   `translateSelectedWallsFollowing` in `src/app/store.ts`).
 - **Zero-length walls rejected when drawing** (#29, merged).
+- **Toolbar icon + label buttons** — every toolbar button pairs its text label with
+  an icon (`lucide-react` for generic controls, hand-drawn inline-SVG for Wall/Window
+  in `src/features/toolbar/icons.tsx`); Door temporarily borrows lucide's `DoorOpen`
+  pending a custom swing glyph (#52) (#51, merged as PR #53).
+- **Drag-creation for openings** — doors/windows can be placed by press-drag-release
+  along a wall (mirroring the wall tool's dual-gesture pattern), alongside the
+  existing click-click flow; reuses the preview, grid snapping, 30 cm tolerance, and
+  5 cm min-width (#55, merged as PR #56).
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -99,14 +107,11 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No rooms/areas as first-class objects** — walls and openings exist, but there is
   no notion of an enclosed room, area measurement, or labels. (Needs human product
   input before scoping — see open questions.)
-- **Toolbar icon + label buttons — in flight (#51), PR #53 open, not yet merged
-  to `main`.** Pairs every toolbar button's existing text label with an icon
-  (`lucide-react` for generic controls, hand-drawn inline-SVG for Wall/Window in
-  `src/features/toolbar/icons.tsx`), per `docs/DECISIONS.md`. Written up
-  retroactively — the implementation and PR came first. Door temporarily borrows
-  lucide's `DoorOpen`; **#52** (open) tracks its replacement with a custom
-  plan-view swing glyph once #51 lands. Do not list this under "Current state"
-  as shipped until PR #53 actually merges.
+- **Toolbar icon + label buttons — done (#51, merged as PR #53).** Every toolbar
+  button pairs its text label with an icon (`lucide-react` for generic controls,
+  hand-drawn inline-SVG for Wall/Window in `src/features/toolbar/icons.tsx`), per
+  `docs/DECISIONS.md`. Door temporarily borrows lucide's `DoorOpen`; **#52** (open)
+  tracks its replacement with a custom plan-view swing glyph.
 - **On-canvas wall-length labels — done (#5, merged).**
 - **Editable wall lengths — done (#11, merged).** Type to resize; angle preserved.
 - **Auto-follow connected walls on move/resize — done (#19, merged).** Moving a
@@ -118,15 +123,12 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No editable units / unit switching** — changing `plan.meta.units` from the UI is
   not yet scoped (explicitly out of scope of #11).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
-- **Openings can only be placed click-click — in flight (#55, triaged from a
-  human-submitted idea).** Walls already support *both* click-to-chain and
-  click-drag creation (`FloorPlan.tsx`), but doors/windows support only the
-  two-click flow (first `onPointerDown` starts the opening, second finalizes via
-  `addItem`); there is no press-drag-release gesture. The idea's body mentioned
-  walls (which already drag), but its title named the real gap — openings. #55
-  adds drag-creation for openings mirroring the wall tool's dual-gesture pattern,
-  keeping the existing click-click flow intact; reuses the existing preview,
-  grid snapping, 30 cm tolerance, and 5 cm min-width.
+- **Drag-creation for openings — done (#55, merged as PR #56).** Doors/windows can
+  now be placed by press-drag-release along a wall (mirroring the wall tool's
+  dual-gesture pattern), and the existing click-click flow is intact; reuses the
+  existing preview, grid snapping, 30 cm tolerance, and 5 cm min-width. Triaged from
+  a human-submitted idea whose body mentioned walls (which already dragged) but whose
+  title named the real gap — openings.
 - **Undo/redo keyboard shortcuts — done (#3, merged).**
 - **Selection not pruned after undo/redo — in flight (#10).** A stored
   `selectedWalls`/`selectedItems` can reference walls/items that no longer exist
@@ -217,15 +219,14 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-16): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-17): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction), #33 (SVG export), #45 (dispatcher can't recover an orphaned
-in-flight label — human-authored automation issue, not a floor-plan product
-feature; not this agent's spec to write, left as-is), #52 (custom door swing glyph,
-follow-up to #51), #55 (drag-creation for openings — triaged & enriched this run,
-awaiting a human to promote to `agent:ready`). #34, #46, #48, and #51 have all
-**merged/closed** (#48 via PR #49, #51 via PR #53). Do **not** re-propose any of
-these.
+junction — now `agent:implementing`, Engineer Agent building it; no PR open yet),
+#33 (SVG export), #45 (dispatcher can't recover an orphaned in-flight label —
+human-authored automation issue, not a floor-plan product feature; not this agent's
+spec to write, left as-is), #52 (custom door swing glyph, follow-up to #51). #51
+(toolbar icons, via PR #53) and #55 (drag-creation for openings, via PR #56) have
+both **merged** since the last run. Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -263,6 +264,17 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-17 — Eighth Product Agent run. Reconciled state with GitHub: #55
+  (drag-creation for openings) merged via PR #56, and #51 (toolbar icons) merged
+  via PR #53 — moved both from "Known gaps"/"in flight" to "Current state" as
+  shipped. #30 (detach a wall's endpoint from a junction) is now
+  `agent:implementing` (the Engineer Agent is building it; no PR open yet). No open
+  PRs to acceptance-test. Created no new issues this cycle: the backlog is healthy —
+  #10, #20, #21, #33, and #52 are all well-scoped, unclaimed, and untouched by any
+  in-flight PR — and the two next-tier features (rooms/enclosed areas, and whether
+  whole-wall moves should cascade through a connected chain) both still need a human
+  product/UX call before they can be scoped. Nothing new to scope against, so held
+  off inventing work.
 - 2026-07-16 — Triage run on human-submitted idea #55 ("Drag-creation for
   openings"). The idea's body claimed "walls and doors can only be made by
   click-click," but verifying `FloorPlan.tsx` showed walls **already** support
