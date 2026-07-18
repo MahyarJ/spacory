@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   findConnectedEndpoints,
   getConnectionPoints,
+  pickWallEndpoint,
   pointsEqual,
   translateEndpoints,
   translateEndpointsAt,
+  translateWallEndpoint,
 } from "./connectivity";
 
 const wall = (
@@ -131,6 +133,72 @@ describe("translateEndpointsAt", () => {
       b: { x: 7, y: 8 },
       thickness: 10,
     });
+  });
+});
+
+describe("translateWallEndpoint", () => {
+  it("moves only the one wall's chosen endpoint, splitting the junction", () => {
+    // w1.b, w2.a and w3.a all sit at (100,0). Detaching w1.b must leave w2/w3.
+    const walls = [
+      wall("w1", 0, 0, 100, 0),
+      wall("w2", 100, 0, 200, 0),
+      wall("w3", 100, 0, 100, 100),
+    ];
+    const moved = translateWallEndpoint(
+      walls,
+      { wallId: "w1", end: "b" },
+      5,
+      -5,
+    );
+    expect(moved[0].b).toEqual({ x: 105, y: -5 });
+    expect(moved[1]).toBe(walls[1]); // w2 left at the old junction
+    expect(moved[2]).toBe(walls[2]); // w3 left at the old junction
+  });
+
+  it("moves endpoint `a` while leaving `b` fixed", () => {
+    const walls = [wall("w1", 0, 0, 100, 0)];
+    const moved = translateWallEndpoint(
+      walls,
+      { wallId: "w1", end: "a" },
+      10,
+      20,
+    );
+    expect(moved[0]).toEqual({
+      id: "w1",
+      a: { x: 10, y: 20 },
+      b: { x: 100, y: 0 },
+      thickness: 10,
+    });
+  });
+
+  it("is a no-op for a zero delta, returning the same array reference", () => {
+    const walls = [wall("w1", 0, 0, 100, 0)];
+    expect(translateWallEndpoint(walls, { wallId: "w1", end: "b" }, 0, 0)).toBe(
+      walls,
+    );
+  });
+});
+
+describe("pickWallEndpoint", () => {
+  const w = wall("w1", 0, 0, 100, 0);
+
+  it("returns the endpoint within tolerance", () => {
+    expect(pickWallEndpoint(w, { x: 3, y: 4 }, 10)).toBe("a");
+    expect(pickWallEndpoint(w, { x: 98, y: 0 }, 10)).toBe("b");
+  });
+
+  it("returns null when neither endpoint is within tolerance", () => {
+    expect(pickWallEndpoint(w, { x: 50, y: 0 }, 10)).toBeNull();
+  });
+
+  it("prefers the nearer endpoint when both are in range", () => {
+    const shortWall = wall("w1", 0, 0, 8, 0);
+    expect(pickWallEndpoint(shortWall, { x: 5, y: 0 }, 10)).toBe("b");
+    expect(pickWallEndpoint(shortWall, { x: 3, y: 0 }, 10)).toBe("a");
+  });
+
+  it("favours `a` on an exact tie", () => {
+    expect(pickWallEndpoint(w, { x: 50, y: 0 }, 100)).toBe("a");
   });
 });
 

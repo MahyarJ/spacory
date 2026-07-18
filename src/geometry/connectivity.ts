@@ -59,6 +59,38 @@ export function translateEndpointsAt(
 }
 
 /**
+ * Move a single wall's chosen endpoint by (dx, dy) — the "detach one wall from a
+ * junction" primitive. Unlike `translateEndpointsAt` (which moves *every*
+ * co-located endpoint to keep a corner welded), this touches only the one
+ * `{ wallId, end }`, so any other walls that shared the coordinate are left
+ * behind and the junction splits. Pure: other walls keep their object identity.
+ */
+export function translateWallEndpoint(
+  walls: Wall[],
+  ref: WallEndpointRef,
+  dx: number,
+  dy: number,
+): Wall[] {
+  return translateEndpoints(walls, [ref], dx, dy);
+}
+
+/**
+ * Which of `wall`'s two endpoints lies within `tolerance` of `point`, or `null`
+ * if neither does. When both are in range the nearer one wins (a tie favours
+ * `"a"`). Used to decide which end a pointer grabbed on a selected wall.
+ */
+export function pickWallEndpoint(
+  wall: Wall,
+  point: Point,
+  tolerance: number,
+): WallEndpointRef["end"] | null {
+  const da = Math.hypot(point.x - wall.a.x, point.y - wall.a.y);
+  const db = Math.hypot(point.x - wall.b.x, point.y - wall.b.y);
+  const nearest = da <= db ? "a" : "b";
+  return Math.min(da, db) <= tolerance ? nearest : null;
+}
+
+/**
  * Move exactly the given wall endpoints by (dx, dy) — a fixed-membership
  * junction drag. Unlike `translateEndpointsAt`, membership isn't re-derived
  * from the live coordinate on each call, so transiting over an unrelated

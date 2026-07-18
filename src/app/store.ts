@@ -5,10 +5,15 @@ import {
   pointsEqual,
   translateEndpoints,
   translateEndpointsAt,
+  translateWallEndpoint,
   type WallEndpointRef,
 } from "@geometry/connectivity";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
-import { MIN_WALL_LENGTH, resizeWallToLength } from "@geometry/wall";
+import {
+  getWallLength,
+  MIN_WALL_LENGTH,
+  resizeWallToLength,
+} from "@geometry/wall";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
 import {
@@ -108,6 +113,17 @@ interface AppState {
   translateSelectedConnectionPoint: (dx: number, dy: number) => void;
   /** Same, but without writing to history (live drag preview). */
   translateSelectedConnectionPointLive: (dx: number, dy: number) => void;
+  /**
+   * Move a single wall's endpoint (`a` or `b`) to an absolute target
+   * coordinate, without writing history (live drag preview) — the "detach one
+   * wall from a junction" gesture. Absolute targeting (rather than an
+   * accumulated delta) keeps the preview drift-free and lets the
+   * MIN_WALL_LENGTH guard simply reject a tick that would collapse the wall,
+   * since the next tick recomputes the delta from the wall's true endpoint.
+   * Commit the result via `commitPlan` — the same live-then-commit pattern as
+   * the connection-point drag.
+   */
+  moveWallEndpointLive: (ref: WallEndpointRef, target: Point) => void;
   /**
    * Snapshot of `plan.items` as they stood when a live drag gesture started, or
    * `null` when no gesture is in progress. The `*Live` functions reconcile this
@@ -518,6 +534,32 @@ export const useApp = create<AppState>((set, get) => ({
       selectedConnectionPoint: {
         x: selectedConnectionPoint.x + dx,
         y: selectedConnectionPoint.y + dy,
+      },
+    });
+  },
+  moveWallEndpointLive: (ref, target) => {
+    const { plan, liveDragItems } = get();
+    const wall = plan.walls.find((w) => w.id === ref.wallId);
+    if (!wall) return;
+    const cur = wall[ref.end];
+    const dx = target.x - cur.x;
+    const dy = target.y - cur.y;
+    if (dx === 0 && dy === 0) return;
+    // Reject a tick that would collapse the wall onto its other endpoint — the
+    // same MIN_WALL_LENGTH guard drawing/resize use. Because targeting is
+    // absolute, skipping this tick can't drift: the next tick recomputes the
+    // delta from the wall's true current endpoint.
+    const movedWall: Wall = { ...wall, [ref.end]: target };
+    if (getWallLength(movedWall) < MIN_WALL_LENGTH) return;
+    const walls = translateWallEndpoint(plan.walls, ref, dx, dy);
+    // Reconcile the pre-drag item snapshot (if a gesture is in progress) against
+    // the live walls, so attached openings keep their offsets / a mid-drag
+    // regrow restores them (see translateSelectedConnectionPointLive).
+    set({
+      plan: {
+        ...plan,
+        walls,
+        items: reconcileItemsToWalls(walls, liveDragItems ?? plan.items),
       },
     });
   },

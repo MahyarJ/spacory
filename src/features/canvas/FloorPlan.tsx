@@ -1,7 +1,11 @@
 import { assertNever, type Point, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
 import { clampScale } from "@app/viewport";
-import { getConnectionPoints } from "@geometry/connectivity";
+import {
+  getConnectionPoints,
+  pickWallEndpoint,
+  type WallEndpointRef,
+} from "@geometry/connectivity";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
 import {
   MIN_OPENING_WIDTH,
@@ -26,6 +30,7 @@ import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
 import { SelectionLayer } from "./SelectionLayer";
+import { WallEndpointsLayer } from "./WallEndpointsLayer";
 import { WallsLayer } from "./WallsLayer";
 
 function uid(prefix = "id") {
@@ -71,6 +76,15 @@ export function FloorPlan() {
   const [movingPoint, setMovingPoint] = useState<null | {
     start: Point; // pointer position where drag began
     last: Point; // last applied pointer position
+    snap: boolean; // snap-to-grid on this drag
+  }>(null);
+  // Dragging a single wall's endpoint (detach-from-junction). Driven by an
+  // absolute target each tick (see moveWallEndpointLive), so we only need the
+  // grab-time anchors, not an accumulated `last`.
+  const [movingEndpoint, setMovingEndpoint] = useState<null | {
+    ref: WallEndpointRef;
+    startCoord: Point; // the endpoint's coordinate at grab time
+    grabWorld: Point; // pointer world position at grab time
     snap: boolean; // snap-to-grid on this drag
   }>(null);
 
@@ -141,6 +155,7 @@ export function FloorPlan() {
           setDragging(false);
           setMoving(null);
           setMovingPoint(null);
+          setMovingEndpoint(null);
           break;
         case "delete":
         case "backspace":
@@ -259,6 +274,26 @@ export function FloorPlan() {
         return;
       }
 
+      // then, when exactly one wall is selected, its own endpoint handles —
+      // grabbing one detaches just that wall's end from any junction. Tested
+      // before connection points so an endpoint sitting on a junction grabs the
+      // single-wall handle (the reason the wall was selected) over the shared one.
+      if (selectedWalls.size === 1) {
+        const [selId] = selectedWalls;
+        const selWall = plan.walls.find((w) => w.id === selId);
+        const end = selWall ? pickWallEndpoint(selWall, world, 10) : null;
+        if (selWall && end) {
+          setMovingEndpoint({
+            ref: { wallId: selWall.id, end },
+            startCoord: selWall[end],
+            grabWorld: world,
+            snap: !e.altKey,
+          });
+          useApp.getState().beginLiveDrag();
+          return;
+        }
+      }
+
       // then connection points (corner/junction handles)
       const hitP = getConnectionPoints(plan.walls).find((p) =>
         hitConnectionPoint(world, p, 10),
@@ -362,6 +397,25 @@ export function FloorPlan() {
       (tool === "wall" || tool === "window" || tool === "door")
     ) {
       setDragging(true);
+    }
+
+    // start moving a single wall's endpoint (detach). Drive an absolute target
+    // from the grab anchors so the preview is drift-free even if a tick is
+    // rejected by the zero-length guard.
+    if (e.buttons === 1 && tool === "select" && movingEndpoint) {
+      let tx =
+        movingEndpoint.startCoord.x + (world.x - movingEndpoint.grabWorld.x);
+      let ty =
+        movingEndpoint.startCoord.y + (world.y - movingEndpoint.grabWorld.y);
+      if (movingEndpoint.snap) {
+        const grid = plan.meta.gridSize;
+        tx = Math.round(tx / grid) * grid;
+        ty = Math.round(ty / grid) * grid;
+      }
+      useApp
+        .getState()
+        .moveWallEndpointLive(movingEndpoint.ref, { x: tx, y: ty });
+      return;
     }
 
     // start moving a connection point
@@ -517,6 +571,20 @@ export function FloorPlan() {
       setMovingPoint(null);
       return;
     }
+    if (movingEndpoint) {
+      // Same live-drag-then-commit pattern; the endpoint's live coordinate tells
+      // us whether it actually moved (a rejected/no-op drag never committed).
+      const wall = plan.walls.find((w) => w.id === movingEndpoint.ref.wallId);
+      const cur = wall?.[movingEndpoint.ref.end];
+      const moved =
+        !!cur &&
+        (cur.x !== movingEndpoint.startCoord.x ||
+          cur.y !== movingEndpoint.startCoord.y);
+      if (moved) useApp.getState().commitPlan();
+      else useApp.getState().endLiveDrag();
+      setMovingEndpoint(null);
+      return;
+    }
   };
 
   const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
@@ -601,6 +669,7 @@ export function FloorPlan() {
           <DimensionsLayer />
           <SelectionLayer />
           <ConnectionPointsLayer />
+          <WallEndpointsLayer />
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}
