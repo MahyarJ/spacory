@@ -70,6 +70,12 @@
 #                         how long a once-a-day `cycle` waits for the shared lock
 #                         before forfeiting its slot (default 1800 = 30m). A `tick`
 #                         never waits — it fires every ~10 min, so it just skips.
+#   SPACORY_INFLIGHT_STALE_MINS
+#                         how old (minutes) a transient `agent:*ing` in-flight label
+#                         must be before a tick treats it as orphaned by a dead run
+#                         and returns the ticket to its queue label (default 120 =
+#                         2h, mirroring the stale-lock reclaim window). Must clearly
+#                         exceed a healthy run so a live run is never yanked out.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -87,6 +93,7 @@ fi
 
 MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-5}"
 AUTOMERGE="${SPACORY_AUTOMERGE:-0}"
+INFLIGHT_STALE_MINS="${SPACORY_INFLIGHT_STALE_MINS:-120}"
 
 # ── logging ────────────────────────────────────────────────────────────────
 log()  { printf '%s  %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
@@ -422,9 +429,64 @@ do_implement() {  # $1=issue
   log "✓ implemented issue #$issue → PR #$pr (agent:review)"
 }
 
+# ── self-healing: reclaim in-flight labels orphaned by a dead run ────────────
+# Each do_* swaps a queue label to its transient `agent:*ing` twin, runs an agent,
+# then swaps to the next state. If a run dies mid-flight (machine sleeps, process
+# killed, timeout, crash) that final swap never happens and the ticket is stranded
+# on the in-flight label — which no queue scan in dispatch_once ever picks up, so it
+# is silently orphaned. This sweep, run at the top of every tick, returns any ticket
+# whose in-flight label has been sitting there longer than a safe threshold to its
+# originating queue label, where a later tick re-runs it (every do_* action is
+# idempotent). The threshold must clearly exceed a healthy run so a genuinely
+# in-progress run is never yanked out from under itself; it mirrors the stale-lock
+# reclaim window. The sweep only ever swaps labels, so `status` keeps reflecting
+# reality and each recovery is logged + notified.
+
+# ISO-8601 Z timestamp that many minutes in the past. Tries BSD (macOS) `date`
+# first, then GNU (Linux) — the loop runs on the launchd host but stays portable.
+iso_minutes_ago() {  # $1=minutes
+  date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+    || date -u -d "-$1 minutes" +%Y-%m-%dT%H:%M:%SZ
+}
+
+# ISO time a label was most recently applied to issue/PR #$1, or "" (never / lookup
+# failed). Timeline events are chronological, so the last matching one is the current
+# application; --paginate + tail survives a long timeline. PRs work via /issues/.
+label_applied_at() {  # $1=number $2=label
+  gh api "repos/{owner}/{repo}/issues/$1/timeline" --paginate \
+    --jq ".[] | select(.event==\"labeled\" and .label.name==\"$2\") | .created_at" \
+    2>/dev/null | tail -1 || true
+}
+
+# reclaim one in-flight label on one artifact kind past the staleness cutoff.
+reclaim_inflight() {  # $1=issue|pr $2=in-flight label $3=queue label $4=cutoff-iso
+  local kind="$1" label="$2" queue="$3" cutoff="$4" num applied
+  for num in $(gh "$kind" list --state open --label "$label" --json number --jq '.[].number' 2>/dev/null); do
+    applied="$(label_applied_at "$num" "$label")"
+    [ -z "$applied" ] && continue                 # no timeline data → leave it be
+    [[ "$applied" < "$cutoff" ]] || continue      # younger than the threshold → still healthy
+    log "↩︎ recovering $kind #$num: stale $label (applied $applied, >${INFLIGHT_STALE_MINS}m) → $queue"
+    swap_label "$kind" "$num" "$label" "$queue"
+    notify "♻️ Spacory agents: recovered $kind #$num — orphaned on $label by a dead run → $queue."
+  done
+}
+
+sweep_stale_inflight() {
+  local cutoff; cutoff="$(iso_minutes_ago "$INFLIGHT_STALE_MINS")"
+  reclaim_inflight issue agent:triaging     agent:triage  "$cutoff"
+  reclaim_inflight issue agent:implementing agent:ready   "$cutoff"
+  reclaim_inflight pr    agent:reviewing    agent:review  "$cutoff"
+  reclaim_inflight pr    agent:resolving    agent:changes "$cutoff"
+  # agent:clarify can sit on either an issue or a PR, so its in-flight twin can too.
+  reclaim_inflight pr    agent:clarifying   agent:clarify "$cutoff"
+  reclaim_inflight issue agent:clarifying   agent:clarify "$cutoff"
+}
+
 # ── the tick: one action, highest priority first ────────────────────────────
 dispatch_once() {
   local n
+  # First, self-heal any ticket stranded on an in-flight label by a dead run.
+  sweep_stale_inflight
   for n in $(list_prs "agent:changes"); do do_resolve "$n"; return; done
   # Human questions/refinements come next — answer them before more review or
   # implement churn. agent:clarify can sit on either an issue or a PR.
