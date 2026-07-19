@@ -161,6 +161,18 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   handles on a single selected wall; best landed after #19. Implemented on branch
   `feat/issue-30-detach-wall-endpoint` and opened as PR #58 (awaiting review /
   acceptance — not yet merged).
+- **Follow-up to #30: Cmd+drag to detach an endpoint without pre-selecting the
+  wall — needs an issue.** Raised by the owner on PR #58 (2026-07-19). The shipped
+  #58 gesture requires selecting the wall first to show its square endpoint
+  handles; this follow-up adds an *accelerator* — hold Cmd/Ctrl and drag any
+  wall's endpoint directly, no selection needed. Cmd/Ctrl is free (unused as a
+  canvas drag modifier; only Cmd+Z/Y for undo/redo), so #30's "modifiers are
+  contended" objection doesn't apply. Product resolution of the disambiguation
+  question: grab the nearest endpoint under the cursor; on a genuine tie at a
+  junction fall back to the selection-first square-handle path. Open technical
+  question for the Engineer Agent: hit-testing any endpoint without pre-selection,
+  and any Cmd/Ctrl+drag OS/browser collision on the canvas. Groom into a thin,
+  standalone issue in a future cycle (do not fold into #58).
 - **Connection-point drag can snap onto an unrelated overlapping junction —
   in flight (#48, triaged from a human-submitted bug report).** The live
   connection-point drag (#22/#27) re-derives which wall endpoints belong to
@@ -267,6 +279,20 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-19 — Clarify run on PR #58 (detach a wall's endpoint, closes #30). The
+  owner asked whether we could add a **Cmd+drag to detach a single wall's endpoint
+  without pre-selecting the wall** ("the combinations we considered"). Product
+  decision: **yes as a follow-up, not in #58** — #58 fully delivers #30's accepted
+  selection-first square-handle spec and should merge unchanged; Cmd+drag is a
+  power-user *accelerator* on top of that discoverable default. #30 had rejected a
+  *modifier*-drag only because Shift/Alt are taken — that doesn't apply to
+  Cmd/Ctrl (unused as a canvas drag modifier today), so it's genuinely available.
+  Wrinkle to settle in the follow-up issue: with no pre-selection, at a 3+-wall
+  junction the gesture must pick *which* wall's endpoint — decided to grab the
+  nearest endpoint under the cursor and fall back to the selection-first path on a
+  true tie. Feasibility (hit-testing any endpoint without selection; Cmd+drag OS
+  collisions) deferred to the Engineer Agent. Recorded as a new follow-up in Known
+  gaps for a future cycle to groom; no change to #58's scope.
 - 2026-07-19 — Ninth Product Agent run. Reconciled state with GitHub: the
   Engineer Agent has opened two PRs since the last run — **PR #58** implements
   #30 (detach a single wall's endpoint from a junction, branch
