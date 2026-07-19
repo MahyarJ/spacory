@@ -153,12 +153,14 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   point moves) — and could mean dragging one wall of a large connected floor
   plan drags much of the building with it. Don't scope an issue for this until a
   human confirms which behavior is wanted (see open questions below).
-- **No way to detach a wall from a junction — in flight (#30).** #22 welds and #19
-  follows co-located endpoints, but there is no way to pull a **single** wall's
-  endpoint out of a shared junction. Since connectivity is implicit in coordinate
-  equality, detach = moving that one wall's endpoint to a distinct coordinate (not
-  a persistent flag). #30 proposes per-wall endpoint handles on a single selected
-  wall; best landed after #19.
+- **No way to detach a wall from a junction — in flight (#30, PR #58 open).** #22
+  welds and #19 follows co-located endpoints, but there is no way to pull a
+  **single** wall's endpoint out of a shared junction. Since connectivity is
+  implicit in coordinate equality, detach = moving that one wall's endpoint to a
+  distinct coordinate (not a persistent flag). #30 proposes per-wall endpoint
+  handles on a single selected wall; best landed after #19. Implemented on branch
+  `feat/issue-30-detach-wall-endpoint` and opened as PR #58 (awaiting review /
+  acceptance — not yet merged).
 - **Connection-point drag can snap onto an unrelated overlapping junction —
   in flight (#48, triaged from a human-submitted bug report).** The live
   connection-point drag (#22/#27) re-derives which wall endpoints belong to
@@ -219,14 +221,15 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-17): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-19): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction — now `agent:implementing`, Engineer Agent building it; no PR open yet),
-#33 (SVG export), #45 (dispatcher can't recover an orphaned in-flight label —
-human-authored automation issue, not a floor-plan product feature; not this agent's
-spec to write, left as-is), #52 (custom door swing glyph, follow-up to #51). #51
-(toolbar icons, via PR #53) and #55 (drag-creation for openings, via PR #56) have
-both **merged** since the last run. Do **not** re-propose any of these.
+junction — now has **open PR #58** from the Engineer Agent, awaiting
+review/acceptance), #33 (SVG export), #45 (dispatcher can't recover an orphaned
+in-flight label — human-authored automation issue, not a floor-plan product
+feature; not this agent's spec to write, left as-is; now has **open PR #57**),
+#52 (custom door swing glyph, follow-up to #51). #51 (toolbar icons, via PR #53)
+and #55 (drag-creation for openings, via PR #56) merged in earlier runs. Do
+**not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -264,6 +267,19 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-19 — Ninth Product Agent run. Reconciled state with GitHub: the
+  Engineer Agent has opened two PRs since the last run — **PR #58** implements
+  #30 (detach a single wall's endpoint from a junction, branch
+  `feat/issue-30-detach-wall-endpoint`) and **PR #57** implements #45 (the
+  human-authored dispatcher self-heal automation issue). Both are open and
+  awaiting review/acceptance; moved #30 to "PR open" in Known gaps and focus-next.
+  No PRs were ready for a product acceptance pass this run (cycle mode only).
+  Created no new issues: the backlog is healthy — #10, #20, #21, #33, and #52 are
+  well-scoped, unclaimed, and untouched by any in-flight PR — and the two
+  next-tier features (rooms/enclosed areas, and whether whole-wall moves should
+  cascade through a connected chain) both still need a human product/UX call
+  before they can be scoped. Nothing new to scope against, so held off inventing
+  work.
 - 2026-07-17 — Eighth Product Agent run. Reconciled state with GitHub: #55
   (drag-creation for openings) merged via PR #56, and #51 (toolbar icons) merged
   via PR #53 — moved both from "Known gaps"/"in flight" to "Current state" as
