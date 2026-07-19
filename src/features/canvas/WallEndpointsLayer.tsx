@@ -1,13 +1,17 @@
 import { useApp } from "@app/store";
 
 /** Side length of a wall-endpoint handle, in world (cm) units at scale 1. */
-const HANDLE_SIZE = 9;
+const HANDLE_SIZE = 12;
+/** Border weight of an endpoint handle — matches the selected-wall highlight. */
+const HANDLE_STROKE = 4;
 
 /**
  * Per-wall endpoint handles, shown only when exactly one wall is selected. Drawn
  * as squares to read distinctly from the round connection-point (junction)
  * handles — a square means "move just this wall's end (detach it)", a circle
- * means "move the whole junction". Dragging one is wired in FloorPlan.
+ * means "move the whole junction". Their border matches the selected wall's
+ * highlight weight so they read clearly as grabbable. Dragging one is wired in
+ * FloorPlan.
  */
 export function WallEndpointsLayer() {
   const walls = useApp((s) => s.plan.walls);
@@ -31,7 +35,7 @@ export function WallEndpointsLayer() {
             height={HANDLE_SIZE}
             fill="var(--sp-bg)"
             stroke="var(--sp-accent)"
-            strokeWidth={2}
+            strokeWidth={HANDLE_STROKE}
             vectorEffect="non-scaling-stroke"
           />
         );
