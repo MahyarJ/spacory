@@ -344,6 +344,18 @@ output instead.
   review/resolve it's the PR (and the issue it closes). Never read
   `project-memory.md`.
 - **No assumptions.** Ambiguity → ask (on the issue or PR) and stop, never guess.
+- **Read the inline comments — you can now.** `gh api repos/{owner}/{repo}/pulls/<N>/comments`
+  is allowlisted for headless runs; a reviewer's real feedback (including
+  ` ```suggestion ` blocks) is usually line-anchored there, invisible to
+  `gh pr view --comments`. Address each inline thread, and reply on the thread
+  (`gh api .../pulls/<N>/comments/<id>/replies -f body=…`) so the human gets an answer.
+- **Public comments reflect committed/pushed state only.** When you write anything
+  public (a review, a resolve summary, a clarify reply), reason from `gh pr diff` /
+  the pushed branch — **never** describe the local **uncommitted working tree**. A
+  dirty working tree may be the human's private experiment; do not surface, quote, or
+  characterize it in a public thread. If an uncommitted change looks intentional and
+  in scope, in `resolve` mode commit it (that's your job); otherwise ignore it — never
+  narrate "there are stray local edits" back onto the PR.
 - **Stay in scope.** Implement/resolve only what's asked; don't refactor for fun.
 - **Green before you push or open a PR** (`spacory-verify`).
 - **Never self-merge**, never add AI/Claude attribution to commits or PRs.

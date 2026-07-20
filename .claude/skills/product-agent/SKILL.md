@@ -417,6 +417,16 @@ final output instead.
   triage-enrich, put *everything* the engineer needs into the issue.
 - **Thin, shippable, unambiguous.** When unsure about product direction, record the
   question rather than guessing. Rejecting an idea in triage is a valid outcome.
+- **Read the inline comments — you can now.** `gh api repos/{owner}/{repo}/pulls/<N>/comments`
+  is allowlisted for headless runs; line-anchored review feedback (including
+  ` ```suggestion ` blocks) is invisible to `gh pr view --comments`. Factor it into
+  acceptance/clarify.
+- **Public comments reflect committed/pushed state only.** When you write a public
+  acceptance verdict or clarify reply, judge the **pushed** PR (`gh pr diff`) —
+  **never** describe the local **uncommitted working tree**. A dirty working tree may
+  be the human's private experiment; do not surface or characterize it in a public
+  thread. If a not-yet-pushed change matters to the verdict, ask that it be pushed
+  rather than narrating "there's an uncommitted local edit" onto the PR.
 - **Don't touch `agent:*` labels.** The dispatcher owns the pipeline labels and reads
   your verdict comment to move them; you never set `agent:ready` yourself. (A human
   promotes a groomed idea to `agent:ready`.)
