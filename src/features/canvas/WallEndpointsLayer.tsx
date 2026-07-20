@@ -1,16 +1,18 @@
 import { useApp } from "@app/store";
 
 /** Radius of a wall-endpoint handle, in world (cm) units at scale 1. */
-const HANDLE_RADIUS = 6;
+const HANDLE_RADIUS = 8;
 /** Border weight of an endpoint handle — matches the selected-wall highlight. */
-const HANDLE_STROKE = 4;
+const HANDLE_STROKE = 8;
 
 /**
  * Per-wall endpoint handles, shown only when exactly one wall is selected. Drawn
- * as circles like the connection-point (junction) handles, but larger (⌀12 vs
- * ⌀10) with the selected wall's heavier highlight border so they read clearly as
- * grabbable "pull just this wall's end (detach it)" targets. Dragging one is
- * wired in FloorPlan.
+ * as circles like the connection-point (junction) handles, but markedly larger
+ * (⌀16 vs ⌀10) with a much heavier accent border (8px vs 2px) so they read
+ * clearly as grabbable "pull just this wall's end (detach it)" targets and stay
+ * distinct from the round junction dots even where the two overlap at a shared
+ * junction. The larger opaque fill also covers the wall's sharp corner tips that
+ * poke through the selection highlight. Dragging one is wired in FloorPlan.
  */
 export function WallEndpointsLayer() {
   const walls = useApp((s) => s.plan.walls);
