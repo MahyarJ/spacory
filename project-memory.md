@@ -123,6 +123,16 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **No editable units / unit switching** — changing `plan.meta.units` from the UI is
   not yet scoped (explicitly out of scope of #11).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
+- **Openings can't be resized, and their width isn't shown — in flight (#60,
+  triaged from a human-submitted idea 2026-07-26).** An opening's width
+  (`wallAttach.length`) is fixed at creation; the only way to change it is
+  delete-and-redraw, and there's no readout of how wide a placed door/window is.
+  Accepted and enriched into the wall-work analogue: a pure, tested resize helper
+  in `src/geometry/opening.ts` (clamp to `MIN_OPENING_WIDTH`, keep the opening on
+  its wall by shifting `offset`/clamping `length`), a store action modeled on
+  `setSelectedWallLength` through `commit()`, and an options-bar width field
+  mirroring the wall-length field (#11). On-canvas always-on width labels (the
+  #5 analogue) and drag-handle resize are explicit out-of-scope follow-ups.
 - **Drag-creation for openings — done (#55, merged as PR #56).** Doors/windows can
   now be placed by press-drag-release along a wall (mirroring the wall tool's
   dual-gesture pattern), and the existing click-click flow is intact; reuses the
@@ -279,6 +289,18 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-26 — Triage run on human-submitted idea #60 ("Resize openings"). The
+  idea: openings (doors/windows) can only be removed/redrawn, never resized, and
+  their width is never shown. Confirmed against the code — an opening's width is
+  `wallAttach.length` (cm) with no read or edit path, while walls already have both
+  (labels #5, type-to-resize #11). Accepted as a thin, high-value parallel and
+  enriched #60 into a full spec: a pure/tested resize helper in
+  `src/geometry/opening.ts` (clamp ≥ `MIN_OPENING_WIDTH`, keep the opening on its
+  wall), a `setSelectedWallLength`-style store action through `commit()`, and an
+  options-bar width field for a single selected opening (mirroring
+  `WallOptions`/`WallLengthField`). Retitled to "Resize a door/window opening and
+  show its width." Left on-canvas always-on width labels and canvas drag-resize as
+  explicit out-of-scope follow-ups. Did not add `agent:ready` (a human promotes it).
 - 2026-07-19 — Clarify run on PR #58 (detach a wall's endpoint, closes #30). The
   owner asked whether we could add a **Cmd+drag to detach a single wall's endpoint
   without pre-selecting the wall** ("the combinations we considered"). Product
