@@ -9,7 +9,10 @@
 # does AT MOST ONE pipeline action (highest priority first), so a short tick can
 # never stampede a stack of expensive agent runs. A flock guarantees overlapping
 # ticks don't pile up; `agent:*` in-flight labels make double-firing visible and
-# survive restarts.
+# survive restarts. Engineer runs (which create branches and edit files) execute in
+# a throwaway git worktree, never the primary checkout — so a concurrent
+# manual/interactive run in the primary tree can't have its HEAD or working files
+# yanked out mid-run (see run-engineer.sh, which self-isolates).
 #
 #   The label state machine (this script owns every transition):
 #
@@ -255,8 +258,20 @@ pr_for_issue() {  # $1=issue number
 }
 
 # ── agent runners (headless) ─────────────────────────────────────────────────
-run_engineer() { "$SCRIPT_DIR/run-engineer.sh" "$@"; }
+# Product runs stay in the primary checkout on purpose: they commit
+# project-memory.md to main (see commit_memory) and only post comments — they never
+# create a feature branch.
 run_product()  { "$SCRIPT_DIR/run-product.sh"  "$@"; }
+
+# Engineer runs create branches, switch HEAD, and edit files — the exact thing that
+# corrupts a concurrent run (a manual/interactive session, or the parallel
+# review+acceptance in do_review) sharing one working tree. run-engineer.sh
+# self-isolates in a throwaway git worktree (detached at origin/main), so there is
+# nothing to wrap here; we just call it. The base dir is shared with run-engineer.sh
+# (same default + SPACORY_WORKTREE_BASE override) so prune_stale_worktrees below can
+# reclaim any worktree a killed run leaked before its own cleanup ran.
+SPACORY_WORKTREE_BASE="${SPACORY_WORKTREE_BASE:-${TMPDIR:-/tmp}/spacory-agent-worktrees}"
+run_engineer() { "$SCRIPT_DIR/run-engineer.sh" "$@"; }
 
 # Safety net: project-memory.md is the Product Agent's shared memory and belongs on
 # main (the Engineer never reads it). The agent is supposed to commit+push it itself
@@ -482,11 +497,32 @@ sweep_stale_inflight() {
   reclaim_inflight issue agent:clarifying   agent:clarify "$cutoff"
 }
 
+# Remove per-run git worktrees leaked by an engineer run that died before its own
+# cleanup ran (machine slept, process killed, crash). `git worktree prune` clears
+# metadata for vanished dirs; we also delete any run-* dir older than the same
+# staleness window a stranded in-flight label uses, so crashes can't accumulate
+# 200 MB checkouts. Best-effort; never fails the tick.
+prune_stale_worktrees() {
+  git worktree prune 2>/dev/null || true
+  [ -d "$SPACORY_WORKTREE_BASE" ] || return 0
+  local d
+  for d in "$SPACORY_WORKTREE_BASE"/run-*; do
+    [ -d "$d" ] || continue
+    if [ -n "$(find "$d" -maxdepth 0 -mmin +"$INFLIGHT_STALE_MINS" 2>/dev/null)" ]; then
+      log "↩︎ pruning stale agent worktree ${d##*/} (>${INFLIGHT_STALE_MINS}m old)"
+      git worktree remove --force "$d" 2>/dev/null || rm -rf "$d"
+    fi
+  done
+  git worktree prune 2>/dev/null || true
+}
+
 # ── the tick: one action, highest priority first ────────────────────────────
 dispatch_once() {
   local n
-  # First, self-heal any ticket stranded on an in-flight label by a dead run.
+  # First, self-heal any ticket stranded on an in-flight label by a dead run, and
+  # clean up any worktree an engineer run leaked when it died.
   sweep_stale_inflight
+  prune_stale_worktrees
   for n in $(list_prs "agent:changes"); do do_resolve "$n"; return; done
   # Human questions/refinements come next — answer them before more review or
   # implement churn. agent:clarify can sit on either an issue or a PR.
@@ -541,10 +577,11 @@ main() {
 }
 
 # A mkdir-based lock: portable (macOS has no `flock`) and atomic. cycle and tick
-# share ONE lock on purpose — both run headless agents and git operations
-# (commit_memory switches branches), which would corrupt each other if run at
-# once. A stale lock older than 2h is reclaimed so a crashed run can't wedge the
-# loop forever.
+# share ONE lock on purpose — both touch the primary checkout's shared state (the
+# product runs commit project-memory.md to main; commit_memory switches branches),
+# which would corrupt each other if run at once. (Engineer runs no longer factor in
+# here — they're isolated in per-run worktrees; see run-engineer.sh.) A stale lock
+# older than 2h is reclaimed so a crashed run can't wedge the loop forever.
 LOCK="${TMPDIR:-/tmp}/spacory-dispatch.lock.d"
 
 reclaim_stale_lock() {
