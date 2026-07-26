@@ -95,7 +95,11 @@ issue/comments resolve the ambiguity.
 
 Follow the repo's workflow and the `spacory-conventions` skill:
 
-- Create a branch off `main`, e.g. `feat/issue-<n>-<short-slug>`.
+- Create a branch off `main` **directly** with `git switch -c feat/issue-<n>-<short-slug>`
+  (it branches from your current `main`/`origin/main`). Do **not** `git switch main`
+  / `git checkout main` first: a headless run may execute in an isolated git
+  worktree where `main` is already checked out elsewhere, so switching onto it
+  fails — branch straight from where you are instead.
 - Match existing style/architecture; every plan edit goes through `commit()` in the
   single Zustand store; pure logic goes in tested modules; let Biome format
   (`npm run check:fix`); coordinates are cm.
