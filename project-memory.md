@@ -207,12 +207,14 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   bounds), remove only as a last resort (opening no longer fits at any
   offset). PR #39 implements this at the `commit()` chokepoint, but the
   reporter clarified (2026-07-13) that the same clamp/remove must also apply
-  **live**, during an in-progress connection-point/wall drag — today's fix
-  only reconciles once the drag is committed, since `translateSelected*Live`
+  **live**, during an in-progress connection-point/wall drag — the initial fix
+  only reconciled once the drag was committed, since `translateSelected*Live`
   intentionally bypasses `commit()` to avoid spamming undo history. Spec
-  updated on #38 to require live parity (reuse
-  `reconcileItemsToWalls`/`itemGeometry.ts` from the `*Live` store functions
-  too, without pushing a history entry) — this is still open work.
+  updated on #38 to require live parity, and that follow-up **shipped**: all
+  three `*Live` store functions (`translateSelectedWallsLive`,
+  `translateSelectedConnectionPointLive`, `moveWallEndpointLive`) now reconcile
+  the pre-drag item snapshot against the live walls via `reconcileItemsToWalls`
+  (no history entry). #38 is fully done and closed.
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
