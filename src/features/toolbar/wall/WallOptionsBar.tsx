@@ -14,9 +14,12 @@ import styles from "./WallOptions.module.css";
 export function WallOptionsBar() {
   const tool = useApp((s) => s.tool);
   const selectedWalls = useApp((s) => s.selectedWalls);
+  const selectedItems = useApp((s) => s.selectedItems);
 
   const show =
-    tool === "wall" || (tool === "select" && selectedWalls.size === 1);
+    tool === "wall" ||
+    (tool === "select" &&
+      (selectedWalls.size === 1 || selectedItems.size === 1));
   if (!show) return null;
 
   return (

@@ -21,3 +21,30 @@ export function openingPlacementFromOffsets(
   if (length < minWidth) return null;
   return { offset, length };
 }
+
+/**
+ * Resize an existing opening to a requested width along its wall, keeping it on
+ * the wall. Given the opening's current placement (`{ offset, length }`), the
+ * host wall's length, and a requested width, return the new `{ offset, length }`
+ * obeying:
+ *
+ * - the width is clamped to at least `minWidth` and at most `wallLength` (so an
+ *   over-long request that can't fit even at `offset 0` shrinks to the wall's
+ *   length);
+ * - the opening stays fully on its wall (`offset ≥ 0` and
+ *   `offset + length ≤ wallLength`): the current offset is held where possible,
+ *   and shifted back toward endpoint `a` only as far as needed to make the new
+ *   width fit against the far end.
+ */
+export function resizeOpeningWidth(
+  attach: { offset: number; length: number },
+  wallLength: number,
+  requestedWidth: number,
+  minWidth = MIN_OPENING_WIDTH,
+): { offset: number; length: number } {
+  const length = Math.max(minWidth, Math.min(requestedWidth, wallLength));
+  // Hold the current offset, but shift back so the opening's far end lands on
+  // (or before) the wall's end. `Math.max(0, …)` keeps `offset ≥ 0`.
+  const offset = Math.max(0, Math.min(attach.offset, wallLength - length));
+  return { offset, length };
+}

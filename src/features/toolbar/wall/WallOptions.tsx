@@ -1,5 +1,6 @@
-import type { Units, Wall } from "@app/schema";
+import type { Item, Units, Wall } from "@app/schema";
 import { useApp } from "@app/store";
+import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
@@ -12,7 +13,9 @@ export function WallOptions() {
   const currentWallThickness = useApp((s) => s.currentWallThickness);
   const setThickness = useApp((s) => s.setCurrentWallThickness);
   const selectedWalls = useApp((s) => s.selectedWalls);
+  const selectedItems = useApp((s) => s.selectedItems);
   const walls = useApp((s) => s.plan.walls);
+  const items = useApp((s) => s.plan.items);
   const units = useApp((s) => s.plan.meta.units);
 
   // Length editing is a single-wall affair (see issue scope) and walls are only
@@ -22,6 +25,13 @@ export function WallOptions() {
   const selectedWall =
     tool === "select" && selectedWalls.size === 1
       ? walls.find((w) => selectedWalls.has(w.id))
+      : undefined;
+
+  // Width editing mirrors wall-length editing, but for a single selected opening
+  // (door/window). Same tool gate as above, for the same reason.
+  const selectedOpening =
+    tool === "select" && selectedItems.size === 1
+      ? items.find((i) => selectedItems.has(i.id))
       : undefined;
 
   return (
@@ -53,6 +63,15 @@ export function WallOptions() {
         <WallLengthField
           key={selectedWall.id}
           wall={selectedWall}
+          units={units}
+        />
+      )}
+
+      {selectedOpening && (
+        // Key by id so switching selection resets the field's local draft.
+        <OpeningWidthField
+          key={selectedOpening.id}
+          item={selectedOpening}
           units={units}
         />
       )}
