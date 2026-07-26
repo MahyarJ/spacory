@@ -70,6 +70,10 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   along a wall (mirroring the wall tool's dual-gesture pattern), alongside the
   existing click-click flow; reuses the preview, grid snapping, 30 cm tolerance, and
   5 cm min-width (#55, merged as PR #56).
+- **Detach a wall's endpoint from a junction** — when exactly one wall is selected,
+  square endpoint handles (`WallEndpointsLayer`) let you drag just that wall's end
+  out of a shared junction while co-located endpoints stay put (#30, merged as PR
+  #58; `pickWallEndpoint` in `src/geometry/connectivity.ts`).
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -163,26 +167,26 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   point moves) — and could mean dragging one wall of a large connected floor
   plan drags much of the building with it. Don't scope an issue for this until a
   human confirms which behavior is wanted (see open questions below).
-- **No way to detach a wall from a junction — in flight (#30, PR #58 open).** #22
-  welds and #19 follows co-located endpoints, but there is no way to pull a
-  **single** wall's endpoint out of a shared junction. Since connectivity is
-  implicit in coordinate equality, detach = moving that one wall's endpoint to a
-  distinct coordinate (not a persistent flag). #30 proposes per-wall endpoint
-  handles on a single selected wall; best landed after #19. Implemented on branch
-  `feat/issue-30-detach-wall-endpoint` and opened as PR #58 (awaiting review /
-  acceptance — not yet merged).
+- **Detach a single wall's endpoint from a junction — done (#30, merged as PR
+  #58).** #22 welds and #19 follows co-located endpoints; #30 adds the inverse —
+  pulling a **single** wall's endpoint out of a shared junction. Since connectivity
+  is implicit in coordinate equality, detach = moving that one wall's endpoint to a
+  distinct coordinate (not a persistent flag). Shipped as per-wall square endpoint
+  handles shown when exactly one wall is selected (`WallEndpointsLayer`), dragging
+  one detaches just that end (`pickWallEndpoint` + `moveWallEndpointLive` in
+  `store.ts`).
 - **Follow-up to #30: Cmd+drag to detach an endpoint without pre-selecting the
-  wall — needs an issue.** Raised by the owner on PR #58 (2026-07-19). The shipped
-  #58 gesture requires selecting the wall first to show its square endpoint
-  handles; this follow-up adds an *accelerator* — hold Cmd/Ctrl and drag any
-  wall's endpoint directly, no selection needed. Cmd/Ctrl is free (unused as a
-  canvas drag modifier; only Cmd+Z/Y for undo/redo), so #30's "modifiers are
-  contended" objection doesn't apply. Product resolution of the disambiguation
-  question: grab the nearest endpoint under the cursor; on a genuine tie at a
-  junction fall back to the selection-first square-handle path. Open technical
-  question for the Engineer Agent: hit-testing any endpoint without pre-selection,
-  and any Cmd/Ctrl+drag OS/browser collision on the canvas. Groom into a thin,
-  standalone issue in a future cycle (do not fold into #58).
+  wall — in flight (#61).** Raised by the owner on PR #58 (2026-07-19); scoped into
+  an issue this cycle (2026-07-26) now that #58 has merged. Adds an *accelerator* —
+  hold Cmd/Ctrl and drag any wall's endpoint directly, no selection needed. Cmd/Ctrl
+  is free (unused as a canvas drag modifier; only Cmd+Z/Y for undo/redo), so #30's
+  "modifiers are contended" objection doesn't apply. Product resolution of the
+  disambiguation question: grab the nearest endpoint under the cursor; on a genuine
+  tie at a junction fall back to the selection-first square-handle path. #61 folds
+  in a new pure endpoint-picker helper (pick nearest endpoint across all walls, or
+  signal a tie) in `connectivity.ts` with tests. Open technical question deferred to
+  the Engineer Agent in the issue: hit-testing any endpoint without pre-selection,
+  and any Cmd/Ctrl+drag OS/browser collision on the canvas.
 - **Connection-point drag can snap onto an unrelated overlapping junction —
   in flight (#48, triaged from a human-submitted bug report).** The live
   connection-point drag (#22/#27) re-derives which wall endpoints belong to
@@ -243,15 +247,14 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-19): #10 (prune stale selection), #20 (fit
-shortcut/zoom to selection), #21 (error boundary), #30 (detach a wall from a
-junction — now has **open PR #58** from the Engineer Agent, awaiting
-review/acceptance), #33 (SVG export), #45 (dispatcher can't recover an orphaned
-in-flight label — human-authored automation issue, not a floor-plan product
-feature; not this agent's spec to write, left as-is; now has **open PR #57**),
-#52 (custom door swing glyph, follow-up to #51). #51 (toolbar icons, via PR #53)
-and #55 (drag-creation for openings, via PR #56) merged in earlier runs. Do
-**not** re-propose any of these.
+Current open issues (as of 2026-07-26): #10 (prune stale selection), #20 (fit
+shortcut/zoom to selection), #21 (error boundary), #33 (SVG export), #52 (custom
+door swing glyph, follow-up to #51), #60 (resize a door/window opening & show its
+width — triaged/enriched, awaiting a human `agent:ready` promotion), and **#61**
+(Cmd/Ctrl+drag to detach an endpoint without pre-selecting — created this run). Both
+#30 (detach a wall's endpoint, via PR #58) and #45 (dispatcher self-heal, via PR
+#57) merged since the last run; #51/#55 merged earlier. Do **not** re-propose any of
+these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -289,6 +292,19 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-26 — Tenth Product Agent run (cycle). Reconciled state with GitHub:
+  **#30 merged** (detach a single wall's endpoint from a junction, via PR #58) and
+  **#45 merged** (dispatcher self-heal, via PR #57) since the last run — both now
+  closed; moved #30 to shipped in "Current state"/"Known gaps". No open PRs to
+  acceptance-test. Created **one** issue: **#61** — Cmd/Ctrl+drag any wall's
+  endpoint to detach it without pre-selecting the wall (enhancement). This is the
+  #30/#58 follow-up that was already product-groomed on PR #58 (2026-07-19) and
+  parked in Known gaps "for a future cycle"; now unblocked (#58 merged), so scoped
+  it into a thin, standalone issue as planned. The one open piece is technical
+  (hit-testing any endpoint without selection; Cmd/Ctrl+drag OS/browser collision)
+  and is deferred to the Engineer Agent inside the issue. Did not add `agent:ready`
+  (a human promotes it). Standing backlog (#10, #20, #21, #33, #52, plus triaged
+  #60) remains healthy; rooms and cascading-wall-follow still await a human call.
 - 2026-07-26 — Triage run on human-submitted idea #60 ("Resize openings"). The
   idea: openings (doors/windows) can only be removed/redrawn, never resized, and
   their width is never shown. Confirmed against the code — an opening's width is
