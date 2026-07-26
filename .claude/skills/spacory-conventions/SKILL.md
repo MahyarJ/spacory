@@ -23,6 +23,17 @@ the agents.
   tests, **not** inside components.
 - Add or update tests for any logic you add, especially in the pure modules.
 
+## Documentation
+
+- **Keep `README.md` in step with user-visible changes, in the same PR.** If your
+  change adds or alters something a user sees — a new feature, a keyboard
+  shortcut, or a capability that graduates from the README's "Not yet" list —
+  update `README.md` alongside the code (its Features list, shortcuts table,
+  and/or "Not yet" section). This is part of "done," **not** scope creep, so it
+  does not conflict with "stay in scope" below. The issue usually spells out the
+  exact README delta; follow it. Skip the README for purely internal work — bug
+  fixes with no visible behavior change, refactors, tests, or automation/tooling.
+
 ## Formatting & style
 
 - **Don't hand-format.** Let Biome do it: `npm run check:fix`. Only
