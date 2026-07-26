@@ -25,6 +25,19 @@
 #   .agents/run-product.sh  acceptance 14 &
 #   wait
 #
+# Isolation: an engineer run creates branches and edits files, so it must never
+# touch the caller's working tree (the primary checkout a human or a concurrent run
+# may be using). This script re-runs itself inside a throwaway git worktree detached
+# at the freshly-fetched origin/main and tears it down afterwards — so the same
+# safety holds whether it's fired by the dispatcher or by hand. Set
+# SPACORY_AGENT_ISOLATED=1 to skip that (the dispatcher relies on the guard to avoid
+# double-wrapping; CI/tests where the checkout is already disposable can too).
+#
+# Env overrides (isolation):
+#   SPACORY_AGENT_ISOLATED   set to skip the worktree wrapper and run in place.
+#   SPACORY_WORKTREE_BASE    where per-run worktrees live
+#                            (default: $TMPDIR/spacory-agent-worktrees).
+#
 # Env overrides:
 #   CLAUDE_PERMISSION_MODE   default: acceptEdits
 #                            (use "bypassPermissions" for fully unattended runs)
@@ -52,6 +65,10 @@ usage() {
   exit 2
 }
 
+# Keep the caller's exact argv so we can re-invoke ourselves verbatim inside the
+# isolation worktree below (preserving a multi-word extra-instruction argument).
+ORIG_ARGS=("$@")
+
 # First arg may be a mode word; otherwise it's the number and the mode is implement.
 MODE="implement"
 case "${1:-}" in
@@ -65,6 +82,36 @@ case "$NUM" in
 esac
 shift
 EXTRA="${*:-}"
+
+# ── isolation: run in a throwaway git worktree, never the caller's checkout ────
+# (args are validated above, so a bad invocation fails before we create anything.)
+SPACORY_WORKTREE_BASE="${SPACORY_WORKTREE_BASE:-${TMPDIR:-/tmp}/spacory-agent-worktrees}"
+if [ -z "${SPACORY_AGENT_ISOLATED:-}" ]; then
+  command -v git >/dev/null 2>&1 || { echo "error: git required to isolate the run" >&2; exit 1; }
+  git -C "$REPO_ROOT" fetch --quiet origin \
+    || { echo "error: git fetch failed; cannot isolate the run" >&2; exit 1; }
+  mkdir -p "$SPACORY_WORKTREE_BASE"
+  WORKTREE="$SPACORY_WORKTREE_BASE/run-$$-${RANDOM}"
+  git -C "$REPO_ROOT" worktree add --detach --quiet "$WORKTREE" origin/main \
+    || { echo "error: git worktree add failed ($WORKTREE)" >&2; exit 1; }
+  # Reuse the caller's installed deps so the verify gate runs without npm install.
+  if [ -d "$REPO_ROOT/node_modules" ] && [ ! -e "$WORKTREE/node_modules" ]; then
+    ln -s "$REPO_ROOT/node_modules" "$WORKTREE/node_modules"
+  fi
+  cleanup_worktree() {
+    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
+    git -C "$REPO_ROOT" worktree prune 2>/dev/null || true
+  }
+  trap cleanup_worktree EXIT
+  echo "→ isolating engineer run in worktree ${WORKTREE##*/} (detached at origin/main)" >&2
+  # Re-invoke the worktree's OWN copy so REPO_ROOT resolves to it; the guard stops
+  # that copy from isolating again (or the dispatcher from double-wrapping).
+  set +e
+  SPACORY_AGENT_ISOLATED=1 "$WORKTREE/.agents/run-engineer.sh" "${ORIG_ARGS[@]}"
+  rc=$?
+  set -e
+  exit "$rc"
+fi
 
 PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
 

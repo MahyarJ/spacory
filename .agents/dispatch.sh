@@ -12,7 +12,7 @@
 # survive restarts. Engineer runs (which create branches and edit files) execute in
 # a throwaway git worktree, never the primary checkout — so a concurrent
 # manual/interactive run in the primary tree can't have its HEAD or working files
-# yanked out mid-run (see run_engineer).
+# yanked out mid-run (see run-engineer.sh, which self-isolates).
 #
 #   The label state machine (this script owns every transition):
 #
@@ -263,38 +263,15 @@ pr_for_issue() {  # $1=issue number
 # create a feature branch.
 run_product()  { "$SCRIPT_DIR/run-product.sh"  "$@"; }
 
-# Engineer runs create branches, switch HEAD, and edit files, so they must NOT
-# share the primary working tree — that shared tree is exactly what a concurrent
-# run (a manual/interactive session, or the parallel review+acceptance in do_review)
-# gets yanked out from under it. Give every engineer run its own throwaway git
-# worktree, detached at the freshly-fetched origin/main, and tear it down after. The
-# worktree is a full checkout (it carries .agents/ and .claude/), so we invoke ITS
-# copy of run-engineer.sh, which then resolves REPO_ROOT to the worktree. The
-# primary checkout's node_modules is symlinked in so the verify gate (npm
-# check/tsc/test) runs without a slow reinstall; Telegram creds reach notify.sh via
-# the environment the dispatcher already exported. The dispatcher's own gh/label
-# bookkeeping stays in the primary checkout (it's all API, tree-independent).
-WORKTREE_BASE="${TMPDIR:-/tmp}/spacory-agent-worktrees"
-
-run_engineer() {  # <mode> <num> [extra] — same signature as run-engineer.sh
-  local wt rc=0
-  if ! git fetch --quiet origin 2>/dev/null; then
-    log "  git fetch failed; cannot isolate the engineer run"; return 1
-  fi
-  mkdir -p "$WORKTREE_BASE"
-  wt="$WORKTREE_BASE/run-$$-${RANDOM}"
-  if ! git worktree add --detach --quiet "$wt" origin/main 2>/dev/null; then
-    log "  git worktree add failed ($wt); skipping this engineer run"; return 1
-  fi
-  if [ -d "$REPO_ROOT/node_modules" ] && [ ! -e "$wt/node_modules" ]; then
-    ln -s "$REPO_ROOT/node_modules" "$wt/node_modules"
-  fi
-  log "  ↳ engineer run isolated in worktree ${wt##*/} (detached at origin/main)"
-  "$wt/.agents/run-engineer.sh" "$@" || rc=$?
-  git worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
-  git worktree prune 2>/dev/null || true
-  return "$rc"
-}
+# Engineer runs create branches, switch HEAD, and edit files — the exact thing that
+# corrupts a concurrent run (a manual/interactive session, or the parallel
+# review+acceptance in do_review) sharing one working tree. run-engineer.sh
+# self-isolates in a throwaway git worktree (detached at origin/main), so there is
+# nothing to wrap here; we just call it. The base dir is shared with run-engineer.sh
+# (same default + SPACORY_WORKTREE_BASE override) so prune_stale_worktrees below can
+# reclaim any worktree a killed run leaked before its own cleanup ran.
+SPACORY_WORKTREE_BASE="${SPACORY_WORKTREE_BASE:-${TMPDIR:-/tmp}/spacory-agent-worktrees}"
+run_engineer() { "$SCRIPT_DIR/run-engineer.sh" "$@"; }
 
 # Safety net: project-memory.md is the Product Agent's shared memory and belongs on
 # main (the Engineer never reads it). The agent is supposed to commit+push it itself
@@ -527,9 +504,9 @@ sweep_stale_inflight() {
 # 200 MB checkouts. Best-effort; never fails the tick.
 prune_stale_worktrees() {
   git worktree prune 2>/dev/null || true
-  [ -d "$WORKTREE_BASE" ] || return 0
+  [ -d "$SPACORY_WORKTREE_BASE" ] || return 0
   local d
-  for d in "$WORKTREE_BASE"/run-*; do
+  for d in "$SPACORY_WORKTREE_BASE"/run-*; do
     [ -d "$d" ] || continue
     if [ -n "$(find "$d" -maxdepth 0 -mmin +"$INFLIGHT_STALE_MINS" 2>/dev/null)" ]; then
       log "↩︎ pruning stale agent worktree ${d##*/} (>${INFLIGHT_STALE_MINS}m old)"
@@ -603,7 +580,7 @@ main() {
 # share ONE lock on purpose — both touch the primary checkout's shared state (the
 # product runs commit project-memory.md to main; commit_memory switches branches),
 # which would corrupt each other if run at once. (Engineer runs no longer factor in
-# here — they're isolated in per-run worktrees; see run_engineer.) A stale lock
+# here — they're isolated in per-run worktrees; see run-engineer.sh.) A stale lock
 # older than 2h is reclaimed so a crashed run can't wedge the loop forever.
 LOCK="${TMPDIR:-/tmp}/spacory-dispatch.lock.d"
 
