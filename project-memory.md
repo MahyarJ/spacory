@@ -124,8 +124,15 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   `src/app/store.ts`), reusing `src/geometry/connectivity.ts`'s primitives. Only
   the immediate endpoint follows — no cascading further through the connectivity
   graph (see "Cascading connected-wall follow" below).
-- **No editable units / unit switching** — changing `plan.meta.units` from the UI is
-  not yet scoped (explicitly out of scope of #11).
+- **No editable units / unit switching — in flight (#63).** The unit model already
+  exists (`Units` in `schema.ts`; `plan.meta.units`; `formatLength` converts cm →
+  cm/m/mm/in/ft) but is **unreachable** — no UI changes `plan.meta.units`, so it's
+  stuck at the `cm` default. #63 adds a units selector (through `commit()`), makes
+  the selected-wall length field convert both ways (it currently shows/parses raw cm
+  while mislabelling itself with `plan.meta.units` — a dormant bug that only a unit
+  switcher would expose), and adds the pure inverse of `formatLength`
+  (`lengthToCm`) in `format.ts` with tests. Was previously out of scope of #11.
+  Thickness presets and compound imperial entry left as explicit follow-ups.
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
 - **Openings can't be resized, and their width isn't shown — in flight (#60,
   triaged from a human-submitted idea 2026-07-26).** An opening's width
@@ -252,11 +259,11 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 Current open issues (as of 2026-07-26): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #33 (SVG export), #52 (custom
 door swing glyph, follow-up to #51), #60 (resize a door/window opening & show its
-width — triaged/enriched, awaiting a human `agent:ready` promotion), and **#61**
-(Cmd/Ctrl+drag to detach an endpoint without pre-selecting — created this run). Both
-#30 (detach a wall's endpoint, via PR #58) and #45 (dispatcher self-heal, via PR
-#57) merged since the last run; #51/#55 merged earlier. Do **not** re-propose any of
-these.
+width — triaged/enriched, awaiting a human `agent:ready` promotion), #61
+(Cmd/Ctrl+drag to detach an endpoint without pre-selecting), and **#63** (switch
+display units cm/m/mm/in/ft — created this run). Both #30 (detach a wall's endpoint,
+via PR #58) and #45 (dispatcher self-heal, via PR #57) merged in the prior run;
+#51/#55 merged earlier. Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -267,8 +274,10 @@ rough priority order) are:
    it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
    gaps" and the open question above. Do not write this issue until answered.
 
-Once #33 lands, the next cycle should reconcile GitHub state and look for the
-next thin, independently-shippable slice — nothing else is currently queued.
+The next cycle should reconcile GitHub state and look for the next thin,
+independently-shippable slice; with #63 taking the "editable units" gap, nothing
+else concrete is currently queued (rooms and cascading-follow both await a human
+call).
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
 pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
@@ -294,6 +303,23 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-26 — Eleventh Product Agent run (cycle). Reconciled state with GitHub:
+  no change since the tenth run — the same seven issues are open (#10, #20, #21,
+  #33, #52, #60, #61) and there are no open PRs to acceptance-test. Ran the README
+  backstop check: the README was synced to shipped reality earlier today (via the
+  now-merged docs PR #62), so no drift. Created **one** issue: **#63** — let the
+  user switch display units (cm / m / mm / in / ft). This completes a **half-built**
+  feature rather than inventing scope: `schema.ts`'s `Units`, `plan.meta.units`, and
+  `formatLength` (cm → all five units) already exist, but nothing exposes a unit
+  switch, so it's stuck at `cm`; and the selected-wall length field mislabels raw cm
+  with `plan.meta.units` (a dormant bug a switcher would expose). #63 adds the
+  selector via `commit()`, the pure inverse `lengthToCm` in `format.ts` with tests,
+  and fixes the field to convert both ways. Marked the "no editable units" gap
+  in flight (#63). Note: this is the first issue written under the updated
+  product-agent skill — its Technical context is plain self-contained prose (no
+  "the Engineer Agent reads only this issue" narration) and, being user-visible, it
+  carries a "README updated in the same PR" acceptance criterion with the exact
+  Features-bullet delta. Did not add `agent:ready` (a human promotes it).
 - 2026-07-26 — Tenth Product Agent run (cycle). Reconciled state with GitHub:
   **#30 merged** (detach a single wall's endpoint from a junction, via PR #58) and
   **#45 merged** (dispatcher self-heal, via PR #57) since the last run — both now
