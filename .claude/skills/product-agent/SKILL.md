@@ -96,6 +96,16 @@ List open issues (`gh issue list --state open`) and recently closed ones
 re-propose work already done or in flight. If an existing issue covers the area,
 skip or refine it rather than duplicating.
 
+While reconciling, also sanity-check that **`README.md` still matches shipped
+reality** — its user-facing feature list and its "Not yet" section drift as work
+merges (a feature ships but stays under "Not yet," or a new capability never gets
+listed). If it's drifted, don't let it rot silently: since README is a repo doc
+edited via a normal code PR (not the `project-memory.md`-only main commit, and
+not something you edit inside a product run), open a thin **docs issue** describing
+the specific drift for the Engineer Agent, or at minimum flag it in your wrap-up.
+Keep `project-memory.md`'s "Current state" as the authoritative shipped list; the
+README should mirror it for humans.
+
 ### Step 3 — Decide what to work on
 
 Use the **"What the Product Agent should focus on next"** section of
@@ -125,14 +135,19 @@ in this order:
 3. **Acceptance criteria** — a checklist of observable, testable conditions that
    define "done." Be concrete (inputs, outputs, edge cases, what the user sees).
    Where pure logic is involved, state that unit tests are expected.
-4. **Technical context** — everything the engineer needs, since they read
-   *nothing but this issue*: which files/modules are relevant and what they do, the
-   relevant data model (`Plan` / `Wall` / `Item`), the `commit()` chokepoint and
-   single-store rule, the pure-module-with-tests convention, and the project's
-   definition of done (`npm run check && npx tsc -b && npm test`). Link to repo
-   paths like `src/geometry/junction.ts`. Don't assume the engineer knows any of
-   this. (These conventions are captured in the `spacory-conventions` and
-   `spacory-verify` skills.)
+4. **Technical context** — write the issue to be **fully self-contained**, because
+   whoever implements it works from the issue text alone. Include: which
+   files/modules are relevant and what they do, the relevant data model (`Plan` /
+   `Wall` / `Item`), the `commit()` chokepoint and single-store rule, the
+   pure-module-with-tests convention, and the project's definition of done (`npm run
+   check && npx tsc -b && npm test`). Link to repo paths like
+   `src/geometry/junction.ts`. Assume no prior knowledge of the codebase.
+   (These conventions are captured in the `spacory-conventions` and
+   `spacory-verify` skills.) **Write this as plain technical prose about Spacory and
+   the code** — do **not** narrate the agent workflow or address the reader as "the
+   Engineer Agent" inside the issue (e.g. no "the Engineer Agent reads only this
+   issue, so…"). The self-containment is a constraint on *how you write*, not a
+   sentence that belongs in the ticket.
 5. **Out of scope** — explicitly list what this issue does NOT include, to prevent
    scope creep and keep the issue thin. Reference related/follow-up issues.
 
@@ -332,8 +347,11 @@ Enriched this idea into an implementable issue (rewrote the title & body).
 Use the exact issue structure from *cycle → Step 4* (User story; Acceptance
 criteria; Technical context incl. the relevant files/data model, the `commit()`
 chokepoint & single-store rule, the pure-module-with-tests convention, and the
-definition of done; Out of scope). The Engineer reads **nothing but this issue** —
-give it everything. Do **not** add `agent:ready` yourself; a human promotes it.
+definition of done; Out of scope). Make it fully self-contained — whoever
+implements it works from the issue text alone — but per Step 4, write the technical
+context as plain prose about Spacory and the code; do **not** narrate the agent
+workflow or name "the Engineer Agent" inside the issue body. Do **not** add
+`agent:ready` yourself; a human promotes it.
 
 **On reject** — comment the rationale and close:
 

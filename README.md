@@ -14,20 +14,28 @@ connected room structures.
 - 🧱 **Walls** — click-to-chain or drag to draw, with grid snapping and
   selectable thickness presets
 - 🔵 **Smart junctions** — where walls meet, their geometry is mitered so corners
-  and T/X junctions join seamlessly (no overlap patches, no gaps)
-- 🚪 **Openings** — place doors and windows along walls; toggle a door's hinge
-  edge and swing side
+  and T/X junctions join seamlessly (no overlap patches, no gaps); very acute
+  angles fall back to a clean bevel
+- 🚪 **Openings** — place doors and windows along a wall by click-click or by
+  dragging; toggle a door's hinge edge and swing side. Openings follow their
+  wall as it moves and resizes
+- 📏 **Dimensions** — every wall shows its length on-canvas; select a wall and
+  type an exact length to resize it
 - 🖱️ **Editing** — select / shift-multi-select / marquee-select, move walls by
-  drag or arrow keys, delete, nudge thickness
+  drag or arrow keys, delete, nudge thickness. Drag a junction to move every
+  wall meeting there, or pull a single wall's endpoint back out of a junction
 - 🔄 **Undo / redo** — diff-based history that also **survives a page refresh**
-- ♻️ **Autosave** — the working plan is persisted to `localStorage`
-- 💾 **Import / export** — save and load a plan as JSON
-- 🧭 **Canvas** — pan (right-drag or Pan tool) and zoom (wheel)
+- ♻️ **Autosave** — the working plan and the viewport (pan/zoom) are persisted to
+  `localStorage` and restored on reload
+- 💾 **Import / export** — save and load a plan as JSON, or export it as a PNG
+  image
+- 🧭 **Canvas** — pan (right-drag or Pan tool) and zoom (wheel); "Fit" frames the
+  whole plan in one click
 - 🎨 **Theming** — dark / light / system, via CSS variables
 - ⚡ Built with **Vite + React + TypeScript**
 
-Not yet: PNG/SVG image export, splitting a wall where another ends mid-span,
-persisting the viewport. See [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope
+Not yet: SVG (vector) image export, splitting a wall where another ends mid-span,
+and rooms / enclosed areas. See [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope
 notes.
 
 ---
@@ -63,6 +71,8 @@ Then open the printed local URL.
 
 | Key | Action |
 | --- | --- |
+| `Cmd/Ctrl+Z` | Undo |
+| `Cmd/Ctrl+Shift+Z` / `Cmd/Ctrl+Y` | Redo |
 | `Esc` | Cancel the current draw / drag |
 | `Delete` / `Backspace` | Remove the selection |
 | `[` / `]` | Decrease / increase selected wall thickness |
