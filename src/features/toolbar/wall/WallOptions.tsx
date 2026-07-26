@@ -129,3 +129,54 @@ function WallLengthField({ wall, units }: { wall: Wall; units: Units }) {
     </form>
   );
 }
+
+/** Numeric width editor for the currently selected opening (door/window). */
+function OpeningWidthField({ item, units }: { item: Item; units: Units }) {
+  const setSelectedOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
+  // Match the wall-length field: whole-centimetre precision.
+  const current = Math.round(item.wallAttach.length);
+  const [value, setValue] = useState(String(current));
+
+  // Re-sync the draft when the width changes underneath us — e.g. via undo/redo,
+  // or the on-resize reconcile clamp, while the opening stays selected.
+  useEffect(() => {
+    setValue(String(current));
+  }, [current]);
+
+  const commit = () => {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= MIN_OPENING_WIDTH) {
+      setSelectedOpeningWidth(parsed);
+    } else {
+      // Reject invalid input (non-numeric, zero, negative, below minimum):
+      // leave the opening untouched and revert the field.
+      setValue(String(current));
+    }
+  };
+
+  return (
+    <form
+      className={styles.lengthField}
+      onSubmit={(e) => {
+        e.preventDefault();
+        commit();
+      }}
+    >
+      <label className={styles.label} htmlFor="opening-width-input">
+        Width
+      </label>
+      <input
+        id="opening-width-input"
+        type="number"
+        inputMode="decimal"
+        min={MIN_OPENING_WIDTH}
+        step={1}
+        className={styles.lengthInput}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+      />
+      <span className={styles.unit}>{units}</span>
+    </form>
+  );
+}

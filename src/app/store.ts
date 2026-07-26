@@ -378,9 +378,7 @@ export const useApp = create<AppState>((set, get) => ({
     const next: Plan = {
       ...plan,
       items: plan.items.map((i) =>
-        i.id === id
-          ? { ...i, wallAttach: { ...i.wallAttach, ...resized } }
-          : i,
+        i.id === id ? { ...i, wallAttach: { ...i.wallAttach, ...resized } } : i,
       ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
