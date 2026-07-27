@@ -56,11 +56,15 @@
 #
 # Env knobs:
 #   SPACORY_MAX_ROUNDS    resolve↔review rounds before giving up → blocked (default 5).
-#                         Counted only SINCE the linked issue's body was last
-#                         edited, so a human amending the spec (directly or via an
-#                         agent:clarify run) resets the budget — the cap trips on
-#                         genuine agent-vs-agent non-convergence, not on legitimate
-#                         spec growth (see review_rounds / spec_reset_time).
+#                         Counted only SINCE the budget last reset, on either of two
+#                         principled signals: a FRESH ATTEMPT (the PR re-entered the
+#                         review loop from outside — a reopen from accepted/blocked, a
+#                         clarify, a rebase-relabel, the first implement) or a SPEC
+#                         EDIT (the linked issue body changed). So a converged PR
+#                         reopened for one more change, and evolving requirements, both
+#                         start fresh — the cap trips on genuine agent-vs-agent
+#                         non-convergence within a single attempt (see review_rounds /
+#                         budget_reset_time / loop_entry_time).
 #   SPACORY_AUTOMERGE     "1" to `gh pr merge --squash` an accepted PR once CI is
 #                         green. Default off — the agents never self-merge, and this
 #                         is infrastructure the human explicitly opted into, not an
@@ -226,28 +230,63 @@ issue_for_pr() {  # $1=pr
     2>/dev/null || true
 }
 
-# ISO time the linked issue's body was last edited, or "" (never edited / no
-# linked issue / lookup failed). This is the "spec changed" signal that resets
-# the review-round budget: both a human editing the issue and an agent:clarify
-# run edit the body, so legitimate spec growth doesn't count as non-convergence.
-# "" sorts before every ISO timestamp, so a missing value safely counts ALL
-# rounds (today's behaviour) rather than zeroing the guard.
-spec_reset_time() {  # $1=pr
-  local issue; issue="$(issue_for_pr "$1")"
-  [ -z "$issue" ] && { echo ""; return; }
-  local nwo owner name
-  nwo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)" || { echo ""; return; }
-  owner="${nwo%%/*}"; name="${nwo##*/}"
-  gh api graphql -f query="query{repository(owner:\"$owner\",name:\"$name\"){issue(number:$issue){lastEditedAt}}}" \
-    --jq '.data.repository.issue.lastEditedAt // ""' 2>/dev/null || echo ""
+# The resolve↔review "loop" labels — the ping-pong the round cap guards. Every other
+# agent:* state (accepted, blocked, clarify/clarifying, ready/implementing, triage…)
+# is OUTSIDE the loop: leaving for one and coming back is a NEW attempt.
+AGENT_LOOP_LABELS='agent:review agent:reviewing agent:changes agent:resolving'
+
+# ISO time the PR most recently (re)ENTERED the review loop from OUTSIDE it — the
+# "fresh attempt" signal. A `→ loop` label transition whose previous agent state was
+# a non-loop state (or none) counts: first implement (agent:review with no prior
+# agent label), a reopen from agent:accepted or agent:blocked, and a clarify round
+# (…→agent:clarifying→agent:review) all reset the clock; a within-loop resolve→review
+# does NOT. Read purely off the label timeline, which the dispatcher owns — so unlike
+# comment authorship there's no human-vs-agent ambiguity. Streams every agent:*
+# `labeled` event in chronological order (--paginate preserves order across pages)
+# and lets awk carry the prev-state across pages, since a jq reduce would reset its
+# accumulator per page and misfire.
+loop_entry_time() {  # $1=pr
+  gh api "repos/:owner/:repo/issues/$1/timeline" --paginate \
+    --jq '.[] | select(.event=="labeled" and (.label.name|startswith("agent:"))) | [.created_at, .label.name] | @tsv' \
+    2>/dev/null \
+  | awk -F'\t' -v loops="$AGENT_LOOP_LABELS" '
+      BEGIN { n=split(loops, a, " "); for (i=1;i<=n;i++) loop[a[i]]=1 }
+      { if (($2 in loop) && (prev=="" || !(prev in loop))) reset=$1; prev=$2 }
+      END { print reset }' \
+  || echo ""
 }
 
-# count Engineer-review rounds this PR has seen SINCE the spec last changed (loop
-# guard). Only reviews posted after the linked issue's last body edit count, so a
-# human amending the spec mid-PR (directly or via agent:clarify) resets the clock
-# — the cap trips on genuine agent-vs-agent stalling, not on evolving requirements.
+# ISO time the review-round budget was last reset — the LATER of two principled
+# "clean slate" signals (not a growing special-case list):
+#   (a) a FRESH ATTEMPT began — the PR re-entered the review loop from outside it
+#       (see loop_entry_time): a reopen from accepted/blocked, a clarify round, a
+#       rebase-then-relabel, or the first implement.
+#   (b) the SPEC MOVED — the linked issue's body was last edited (a human, directly
+#       or via agent:clarify); legitimate spec growth isn't non-convergence.
+# "" (no signal at all) sorts before every ISO timestamp, so a missing value safely
+# counts ALL rounds rather than zeroing the guard.
+budget_reset_time() {  # $1=pr
+  local edited="" entry=""
+  local issue; issue="$(issue_for_pr "$1")"
+  if [ -n "$issue" ]; then
+    local nwo; nwo="$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo "")"
+    if [ -n "$nwo" ]; then
+      edited="$(gh api graphql -f query="query{repository(owner:\"${nwo%%/*}\",name:\"${nwo##*/}\"){issue(number:$issue){lastEditedAt}}}" \
+        --jq '.data.repository.issue.lastEditedAt // ""' 2>/dev/null || echo "")"
+    fi
+  fi
+  entry="$(loop_entry_time "$1")"
+  # echo the later of the two ISO-8601 timestamps (they compare correctly as strings).
+  if [[ "$entry" > "$edited" ]]; then echo "$entry"; else echo "$edited"; fi
+}
+
+# count Engineer-review rounds this PR has seen SINCE its budget last reset (loop
+# guard). Only reviews posted after budget_reset_time count — so a fresh attempt (a
+# reopen from accepted/blocked, a clarify, a rebase-relabel) OR a spec edit resets the
+# clock. The cap trips on genuine agent-vs-agent stalling, not on evolving
+# requirements or on a converged PR being reopened for one more change.
 review_rounds() {  # $1=pr
-  local since; since="$(spec_reset_time "$1")"
+  local since; since="$(budget_reset_time "$1")"
   gh pr view "$1" --json comments \
     --jq "[.comments[] | select(.createdAt > \"$since\") | select(.body | test(\"Engineer review\"))] | length"
 }
