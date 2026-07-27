@@ -62,6 +62,27 @@ Keep depth **proportionate**: the comment that *opens* a topic is detailed and
 reasoned; follow-up replies — usually the resolve rounds — are concise and to the
 point (acknowledge, state the outcome, move on).
 
+**Close the loop *visibly*, and mind where the comment lives.** GitHub only threads
+**inline** (diff) review comments — a **top-level** conversation comment is a flat
+list entry with no reply primitive, so burying its answer in your summary reads as
+"ignored" even when you addressed it. So:
+
+- **Inline comment** → reply **on its thread**, where it nests naturally:
+  `gh api repos/{owner}/{repo}/pulls/<N>/comments/<id>/replies -f body="…"`.
+- **Top-level comment** → **quote it** in your run's comment (`> the comment…`) so the
+  acknowledgment is unmistakable, **and react on the original** to mark the outcome at
+  a glance: `+1` (👍) when you acted on it or agree, `eyes` (👀) when you considered it
+  but deliberately left the code unchanged (deferred / out of scope / disagreed).
+  Use 👀 rather than a more affirmative reaction when you didn't act — it marks "seen
+  and considered" without overstating agreement or a change that never happened. Never
+  leave a top-level human comment with neither a reply nor a reaction. Add one with:
+
+  ```bash
+  # find the id: gh api repos/{owner}/{repo}/issues/<N>/comments \
+  #   --jq '.[] | [.id, (.body|split("\n")[0])] | @tsv'
+  gh api repos/{owner}/{repo}/issues/comments/<COMMENT_ID>/reactions -f content=+1   # or: eyes
+  ```
+
 ---
 
 ## Mode: implement an issue
