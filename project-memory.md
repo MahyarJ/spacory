@@ -256,14 +256,14 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-26): #10 (prune stale selection), #20 (fit
+Current open issues (as of 2026-07-27): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #33 (SVG export), #52 (custom
 door swing glyph, follow-up to #51), #60 (resize a door/window opening & show its
-width — triaged/enriched, awaiting a human `agent:ready` promotion), #61
-(Cmd/Ctrl+drag to detach an endpoint without pre-selecting), and **#63** (switch
-display units cm/m/mm/in/ft — created this run). Both #30 (detach a wall's endpoint,
-via PR #58) and #45 (dispatcher self-heal, via PR #57) merged in the prior run;
-#51/#55 merged earlier. Do **not** re-propose any of these.
+width — now implemented by **open PR #65**, awaiting review/acceptance), #61
+(Cmd/Ctrl+drag to detach an endpoint without pre-selecting), and #63 (switch
+display units cm/m/mm/in/ft). Both #30 (detach a wall's endpoint, via PR #58) and
+#45 (dispatcher self-heal, via PR #57) merged earlier; #51/#55 merged before that.
+Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -303,6 +303,19 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-27 — Twelfth Product Agent run (cycle). Reconciled state with GitHub:
+  no new issues since the eleventh run — the same eight are open (#10, #20, #21,
+  #33, #52, #60, #61, #63). The one change is that the Engineer Agent opened
+  **PR #65** implementing #60 (resize a door/window opening & show its width,
+  branch `feat/issue-60-opening-width`) — now awaiting review/acceptance (out of
+  cycle scope; a later acceptance run judges it). Ran the README backstop check:
+  README still matches shipped reality (Features/shortcuts/"Not yet" all accurate —
+  "Not yet" correctly lists SVG export (#33), mid-span wall splitting, and rooms),
+  so no drift and no docs issue needed. Created **no** new issues: the backlog is
+  healthy and fully scoped, and the only two next-tier candidates — rooms/enclosed
+  areas and cascading connected-wall follow — both still await a human product/UX
+  call before they can be scoped. Nothing new to scope against, so held off
+  inventing work. Open questions for the human unchanged.
 - 2026-07-26 — Eleventh Product Agent run (cycle). Reconciled state with GitHub:
   no change since the tenth run — the same seven issues are open (#10, #20, #21,
   #33, #52, #60, #61) and there are no open PRs to acceptance-test. Ran the README
