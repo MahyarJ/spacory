@@ -133,6 +133,20 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   switcher would expose), and adds the pure inverse of `formatLength`
   (`lengthToCm`) in `format.ts` with tests. Was previously out of scope of #11.
   Thickness presets and compound imperial entry left as explicit follow-ups.
+- **Inline number fields don't commit on click-away to the canvas — not yet
+  scoped as an issue; confirmed as a real UX defect (clarify on PR #65,
+  2026-07-27).** The selected-wall length field (#11, shipped) and the new
+  opening-width field (#60/PR #65) both apply the typed value only on Enter/blur;
+  clicking on the canvas (rather than tabbing/Enter) silently discards what the
+  user just typed instead of committing it. Product decision: click-away **should**
+  commit — the field already commits on blur, so this is an inconsistency and a
+  silent-data-loss surprise, not intended behavior. It's a **pre-existing,
+  cross-cutting** issue (originated with #11; the opening-width field inherits it by
+  faithfully mirroring that field), so it is **not** a blocker for PR #65 — the fix
+  is a separate thin bug-fix follow-up covering **both** fields. The *why*/how
+  (likely: clicking the canvas deselects the item and unmounts the field before its
+  blur handler runs) is deferred to the Engineer Agent. Next cycle should groom this
+  into an issue (or a human can fast-track it).
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
 - **Openings can't be resized, and their width isn't shown — in flight (#60,
   triaged from a human-submitted idea 2026-07-26).** An opening's width
@@ -316,6 +330,18 @@ Newest first (reverse-chronological). Add each new entry at the **top** of this 
   areas and cascading connected-wall follow — both still await a human product/UX
   call before they can be scoped. Nothing new to scope against, so held off
   inventing work. Open questions for the human unchanged.
+- 2026-07-27 — Clarify run on PR #65 (opening-width field, closes #60). The owner
+  asked whether the length/width fields should apply a typed value when you click
+  on the canvas instead of pressing Enter/tab — today they don't. Product decision:
+  **yes, click-away should commit** — the field already commits on blur, so silently
+  discarding typed input on a canvas click is an inconsistency and a data-loss
+  surprise, not intended behavior. Scoped it as a **pre-existing, cross-cutting**
+  defect (started with the wall-length field #11; the opening-width field inherits
+  it) so it is **not** a blocker for #65 — the fix is a separate thin follow-up
+  covering both fields. Deferred the *why*/how (likely canvas-click deselect
+  unmounting the field before blur fires) to the Engineer Agent. Recorded it as a
+  new known gap; did not open an issue this run (clarify mode) — next cycle grooms
+  it or a human fast-tracks it. No spec change to #65 itself.
 - 2026-07-26 — Eleventh Product Agent run (cycle). Reconciled state with GitHub:
   no change since the tenth run — the same seven issues are open (#10, #20, #21,
   #33, #52, #60, #61) and there are no open PRs to acceptance-test. Ran the README
