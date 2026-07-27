@@ -121,6 +121,8 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 |-----|---------|---------|
 | `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the spec last changed** before a PR is blocked (editing the linked issue body — directly or via `agent:clarify` — resets the count) |
 | `SPACORY_AUTOMERGE` | `0` | `1` = squash-merge an accepted PR once CI is green |
+| `SPACORY_AGENT_RETRIES` | `1` | extra attempts for an agent run that exits non-zero before blocking (a non-zero exit is always an infra fault — a stalled stream, a killed process — never a "changes requested" verdict, so a retry can't mask a real rejection). `0` = block on first failure |
+| `SPACORY_AGENT_RETRY_BACKOFF_SECS` | `20` | wait between those attempts |
 | `SPACORY_CYCLE_LOCK_WAIT_SECS` | `1800` | how long the daily `cycle` waits for the shared lock before forfeiting its slot (the fast tick never waits) |
 | `CLAUDE_PERMISSION_MODE` | `acceptEdits` | passed to run-\*.sh; use `bypassPermissions` for fully unattended if a command isn't allowlisted |
 | `CLAUDE_MODEL` | session default | passed to run-\*.sh |
@@ -156,6 +158,13 @@ since it's fully unattended. The same `dispatch.sh` logic lifts over unchanged.
   forever. Counted only **since the spec last changed**, so a human amending the
   issue mid-PR (directly or via `agent:clarify`) doesn't burn the budget — the cap
   trips on genuine agent-vs-agent stalling, not on evolving requirements.
-- **Unparseable verdict / failed run → `agent:blocked` + Telegram**, never a guess.
+- **Transient run failures are retried** (`SPACORY_AGENT_RETRIES`, default 1)
+  before blocking — a stalled API stream or killed process gets another attempt, so
+  a one-off infra hiccup no longer strands an otherwise-healthy PR. Retries are safe
+  because a non-zero exit is never a "changes requested" verdict (that's a parsed
+  comment on a clean exit); `implement` only retries while no PR exists yet, so a
+  retry can't duplicate the branch/PR.
+- **Unparseable verdict / exhausted-retry run failure → `agent:blocked` + Telegram**,
+  never a guess.
 - **Agents never self-merge.** The terminal step is a human (or the explicit,
   opt-in `SPACORY_AUTOMERGE` — infrastructure the human chose, gated on green CI).
