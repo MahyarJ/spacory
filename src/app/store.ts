@@ -9,6 +9,7 @@ import {
   type WallEndpointRef,
 } from "@geometry/connectivity";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
+import { MIN_OPENING_WIDTH, resizeOpeningWidth } from "@geometry/opening";
 import {
   getWallLength,
   MIN_WALL_LENGTH,
@@ -93,6 +94,7 @@ interface AppState {
    * selected and `length` is a finite value ≥ MIN_WALL_LENGTH.
    */
   setSelectedWallLength: (length: number) => void;
+  setSelectedOpeningWidth: (width: number) => void;
   toggleSelectedDoorHingeEdge: () => void;
   toggleSelectedDoorSwingSide: () => void;
   themeMode: ThemeMode;
@@ -341,6 +343,37 @@ export const useApp = create<AppState>((set, get) => ({
     const next: Plan = {
       ...plan,
       walls: translateEndpointsAt(resizedWalls, wall.b, dx, dy),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    };
+    commit(next);
+    set({ plan: history.present });
+  },
+  setSelectedOpeningWidth: (width) => {
+    const { selectedItems, plan } = get();
+    if (selectedItems.size !== 1) return;
+    if (!Number.isFinite(width) || width < MIN_OPENING_WIDTH) return;
+    const [id] = selectedItems;
+    const item = plan.items.find((i) => i.id === id);
+    if (!item) return;
+    const wall = plan.walls.find((w) => w.id === item.wallAttach.wallId);
+    if (!wall) return;
+    const resized = resizeOpeningWidth(
+      item.wallAttach,
+      getWallLength(wall),
+      width,
+    );
+    // Skip a no-op resize so we don't push an empty undo step.
+    if (
+      resized.offset === item.wallAttach.offset &&
+      resized.length === item.wallAttach.length
+    ) {
+      return;
+    }
+    const next: Plan = {
+      ...plan,
+      items: plan.items.map((i) =>
+        i.id === id ? { ...i, wallAttach: { ...i.wallAttach, ...resized } } : i,
+      ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     commit(next);

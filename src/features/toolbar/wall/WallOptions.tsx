@@ -1,5 +1,6 @@
-import type { Units, Wall } from "@app/schema";
+import type { Item, Units, Wall } from "@app/schema";
 import { useApp } from "@app/store";
+import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
@@ -12,7 +13,9 @@ export function WallOptions() {
   const currentWallThickness = useApp((s) => s.currentWallThickness);
   const setThickness = useApp((s) => s.setCurrentWallThickness);
   const selectedWalls = useApp((s) => s.selectedWalls);
+  const selectedItems = useApp((s) => s.selectedItems);
   const walls = useApp((s) => s.plan.walls);
+  const items = useApp((s) => s.plan.items);
   const units = useApp((s) => s.plan.meta.units);
 
   // Length editing is a single-wall affair (see issue scope) and walls are only
@@ -22,6 +25,13 @@ export function WallOptions() {
   const selectedWall =
     tool === "select" && selectedWalls.size === 1
       ? walls.find((w) => selectedWalls.has(w.id))
+      : undefined;
+
+  // Width editing mirrors wall-length editing, but for a single selected opening
+  // (door/window). Same tool gate as above, for the same reason.
+  const selectedOpening =
+    tool === "select" && selectedItems.size === 1
+      ? items.find((i) => selectedItems.has(i.id))
       : undefined;
 
   return (
@@ -53,6 +63,15 @@ export function WallOptions() {
         <WallLengthField
           key={selectedWall.id}
           wall={selectedWall}
+          units={units}
+        />
+      )}
+
+      {selectedOpening && (
+        // Key by id so switching selection resets the field's local draft.
+        <OpeningWidthField
+          key={selectedOpening.id}
+          item={selectedOpening}
           units={units}
         />
       )}
@@ -100,6 +119,57 @@ function WallLengthField({ wall, units }: { wall: Wall; units: Units }) {
         type="number"
         inputMode="decimal"
         min={MIN_WALL_LENGTH}
+        step={1}
+        className={styles.lengthInput}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+      />
+      <span className={styles.unit}>{units}</span>
+    </form>
+  );
+}
+
+/** Numeric width editor for the currently selected opening (door/window). */
+function OpeningWidthField({ item, units }: { item: Item; units: Units }) {
+  const setSelectedOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
+  // Match the wall-length field: whole-centimetre precision.
+  const current = Math.round(item.wallAttach.length);
+  const [value, setValue] = useState(String(current));
+
+  // Re-sync the draft when the width changes underneath us — e.g. via undo/redo,
+  // or the on-resize reconcile clamp, while the opening stays selected.
+  useEffect(() => {
+    setValue(String(current));
+  }, [current]);
+
+  const commit = () => {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= MIN_OPENING_WIDTH) {
+      setSelectedOpeningWidth(parsed);
+    } else {
+      // Reject invalid input (non-numeric, zero, negative, below minimum):
+      // leave the opening untouched and revert the field.
+      setValue(String(current));
+    }
+  };
+
+  return (
+    <form
+      className={styles.lengthField}
+      onSubmit={(e) => {
+        e.preventDefault();
+        commit();
+      }}
+    >
+      <label className={styles.label} htmlFor="opening-width-input">
+        Width
+      </label>
+      <input
+        id="opening-width-input"
+        type="number"
+        inputMode="decimal"
+        min={MIN_OPENING_WIDTH}
         step={1}
         className={styles.lengthInput}
         value={value}
