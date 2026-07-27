@@ -67,9 +67,10 @@ list entry with no reply primitive, so burying its answer in your summary reads 
   acknowledgment is unmistakable, **and react on the original** to mark the outcome at
   a glance: `+1` (👍) when you acted on it or agree, `eyes` (👀) when you considered it
   but deliberately didn't change anything (deferred / out of scope / handed to the
-  Engineer Agent / disagreed). GitHub's reactions are a fixed set (👍 👎 😄 🎉 😕 ❤️ 🚀
-  👀 — **no 🤔**), so 👀 is the "seen and considered, not changed" marker. Never leave a
-  top-level human comment with neither a reply nor a reaction. Add one with:
+  Engineer Agent / disagreed). Use 👀 rather than a more affirmative reaction when you
+  didn't act — it marks "seen and considered" without overstating agreement or a change
+  that never happened. Never leave a top-level human comment with neither a reply nor a
+  reaction. Add one with:
 
   ```bash
   # find the id: gh api repos/{owner}/{repo}/issues/<N>/comments \
