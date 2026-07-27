@@ -44,6 +44,24 @@ single Zustand store with the `commit()` chokepoint, pure logic in tested module
 coordinates, strict scope discipline, and no AI attribution. The definition of done
 is the **`spacory-verify`** skill.
 
+## Answering the thread (every mode that reads or posts comments)
+
+A PR/issue discussion is a **conversation, and every comment that raises a point —
+a question, a request, a suggestion — deserves a reply.** Read the *whole* thread
+(`gh pr view <N> --comments`, and for a PR the inline
+`gh api repos/{owner}/{repo}/pulls/<N>/comments`) and make sure nothing on it is left
+unanswered, **whoever wrote it.** Don't sort comments into "human" vs "agent" and act
+on only one kind: the headless agents post through the human's own GitHub login, so
+the two are indistinguishable anyway — just respond to whatever is still open. Fold
+your responses into the comment you post this run, addressing each open point **by
+name**: if you acted on it, say what you did; if you didn't or you disagree, say why.
+**Never silently drop a comment** — folding a suggestion into a commit without
+acknowledging it on the thread reads as "ignored," even when the code did change.
+
+Keep depth **proportionate**: the comment that *opens* a topic is detailed and
+reasoned; follow-up replies — usually the resolve rounds — are concise and to the
+point (acknowledge, state the outcome, move on).
+
 ---
 
 ## Mode: implement an issue
@@ -188,19 +206,22 @@ gh pr comment <PR_NUMBER> --body "🛠️ **Engineer review**
 
 Mark each finding **blocking** (must change before merge) or **nit** (optional). Be
 specific and cite `file:line`. **Do not** modify code, approve via `gh`, or merge. If
-there are no blocking findings, say so plainly.
+there are no blocking findings, say so plainly. If the thread has open
+questions/suggestions (from anyone), answer them here too (see *Answering the
+thread*) rather than leaving them hanging.
 
 ---
 
 ## Mode: resolve review comments on a PR
 
-You are given **one PR number** whose review/acceptance **comments are your spec**
-for this run. You make the minimal changes that address them.
+You are given **one PR number**. The PR's **whole thread** — the review and
+acceptance comments **and any other comment on it** (see *Answering the thread*) —
+is your spec for this run. You make the minimal changes that address them.
 
 ### Step 1 — Read the comments and the change
 
 ```bash
-gh pr view <PR_NUMBER> --comments    # the review + acceptance comments = your spec
+gh pr view <PR_NUMBER> --comments    # the ENTIRE thread = your spec, not just the headered verdicts
 gh pr diff <PR_NUMBER>               # current state of the change
 # Inline (line-level) review comments are NOT shown by `gh pr view --comments`.
 # Read them too — a reviewer's feedback is often anchored to a specific line:
@@ -241,7 +262,10 @@ PR and do **not** merge:
 git push
 ```
 
-Optionally leave a short PR comment listing what you addressed per finding. No AI
+Leave a PR comment that **replies to every open point on the thread** (see
+*Answering the thread*), not just the headered findings: what you changed per
+finding, and a one-line reply to any question or suggestion you didn't act on and
+why. Keep it concise — a resolve comment is a follow-up, not a fresh essay. No AI
 attribution in commits (repo policy).
 
 ---
