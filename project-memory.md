@@ -88,7 +88,20 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   (vector) export deliberately deferred to a follow-up.
 - **No SVG/vector image export — in flight (#33).** Thin wiring follow-up to #4:
   save `buildExportSvg`'s existing markup as a `.svg` file next to "Export PNG";
-  no new rendering logic.
+  no new rendering logic. Note: once **#66** (Export menu) lands, #33's entry
+  belongs *in that menu* rather than as a fourth flat toolbar button — the two are
+  independent but #66 is the better sequence-first.
+- **Export formats are flat toolbar buttons, not a menu — in flight (#66, triaged
+  from a human-submitted idea 2026-07-27).** `ProjectActions.tsx` renders Import
+  (JSON), Export (JSON) and Export PNG as three top-level buttons; two are exports
+  differing only by a label suffix, and #33 would add a third. #66 groups the
+  export formats under one **Export** menu button. Product calls: **only exports
+  are grouped** — Import stays its own top-level button (different action, and
+  folding it in would turn this into a vaguer "File" menu) — and **#66 does not add
+  SVG export** (#33 owns that; #66 just builds the place it lands). Spec pins
+  behavior parity (same contents/filenames/error alerts), close-on
+  select/Escape/outside-click/blur, keyboard + screen-reader support, floating over
+  the canvas without layout shift, and theming via the existing CSS variables.
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -274,8 +287,9 @@ Current open issues (as of 2026-07-27): #10 (prune stale selection), #20 (fit
 shortcut/zoom to selection), #21 (error boundary), #33 (SVG export), #52 (custom
 door swing glyph, follow-up to #51), #60 (resize a door/window opening & show its
 width — now implemented by **open PR #65**, awaiting review/acceptance), #61
-(Cmd/Ctrl+drag to detach an endpoint without pre-selecting), and #63 (switch
-display units cm/m/mm/in/ft). Both #30 (detach a wall's endpoint, via PR #58) and
+(Cmd/Ctrl+drag to detach an endpoint without pre-selecting), #63 (switch
+display units cm/m/mm/in/ft), and #66 (group export formats under an Export menu).
+Both #30 (detach a wall's endpoint, via PR #58) and
 #45 (dispatcher self-heal, via PR #57) merged earlier; #51/#55 merged before that.
 Do **not** re-propose any of these.
 
@@ -317,6 +331,23 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-27 — Triage run on human-submitted idea #66 ("Make an export menu").
+  Verified the premise in `src/features/toolbar/ProjectActions.tsx`: three flat
+  top-level buttons — Import (JSON), Export (JSON), Export PNG — so two of them are
+  exports differing only by a label suffix, and #33 would add a third. Corrected one
+  detail in the submitted body: the import is **JSON**, not SVG (no SVG import
+  exists or is proposed). Accepted and enriched #66 into a full spec, retitled
+  "Group the export formats under a single Export menu in the toolbar." Two product
+  calls: **only exports are grouped** (Import stays a separate top-level button —
+  different action, and folding it in would drift into a vaguer "File" menu), and
+  **#66 does not add SVG export** (#33 owns it; #66 just builds the place it lands,
+  so #66 is the better sequence-first of the two). Spec pins the dropdown details
+  that are easy to get wrong: identical export behavior (contents/filenames/error
+  alerts), close on select/Escape/outside-click/blur, keyboard + screen-reader
+  support, floats over the canvas with no layout shift, themes off existing CSS
+  variables, plus a README Features-bullet delta. Left combined File menus, new
+  export options (scale/DPI/transparency/selection-only), and export keyboard
+  shortcuts explicitly out of scope. Did not add `agent:ready` (a human promotes it).
 - 2026-07-27 — Twelfth Product Agent run (cycle). Reconciled state with GitHub:
   no new issues since the eleventh run — the same eight are open (#10, #20, #21,
   #33, #52, #60, #61, #63). The one change is that the Engineer Agent opened
