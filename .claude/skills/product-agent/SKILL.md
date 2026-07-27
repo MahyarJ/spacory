@@ -40,6 +40,22 @@ earns a place on the roadmap and, if so, shape it into an implementable issue.
 Follow the **`spacory-preflight`** skill first: confirm `gh auth status` succeeds
 before you read or write anything. If it fails, send the blocked wrap-up and stop.
 
+## Answering the thread (every mode that reads or posts comments)
+
+A PR/issue discussion is a **conversation, and every comment that raises a point —
+a question, a request, a suggestion — deserves a reply.** Read the *whole* thread
+(`gh pr view <N> --comments` / `gh issue view <N> --comments`, and for a PR the
+inline `gh api repos/{owner}/{repo}/pulls/<N>/comments`) and make sure nothing on it
+is left unanswered, **whoever wrote it.** Don't sort comments into "human" vs "agent"
+and act on only one kind: the headless agents post through the human's own GitHub
+login, so the two are indistinguishable anyway — just respond to whatever is still
+open. Fold your responses into the comment you post this run, addressing each open
+point **by name**: if the answer changes the spec, say how; if you're deferring a
+technical point to the Engineer Agent, say so. **Never silently drop a comment.**
+
+Keep depth **proportionate**: the comment that *opens* a topic is detailed and
+reasoned; follow-up replies are concise and to the point.
+
 ## Committing `project-memory.md` (whenever you edit it)
 
 `project-memory.md` is your shared institutional memory and it lives on **`main`**.
@@ -253,7 +269,10 @@ gh pr comment <PR_NUMBER> --body "🪐 **Product acceptance**
 ```
 
 Mark unmet acceptance criteria clearly — those are blocking. Do **not** modify code
-or merge. If everything is met, say so plainly and mark it accepted.
+or merge. If everything is met, say so plainly and mark it accepted. If the thread
+has open product/scope questions or suggestions (from anyone), answer them in the
+**Product notes** rather than leaving them hanging (see *Answering the thread*);
+defer purely technical points to the Engineer Agent.
 
 ---
 
