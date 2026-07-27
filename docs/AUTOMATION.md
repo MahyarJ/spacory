@@ -119,7 +119,7 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the spec last changed** before a PR is blocked (editing the linked issue body — directly or via `agent:clarify` — resets the count) |
+| `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the budget last reset** before a PR is blocked. Resets on either of two signals: a **fresh attempt** (the PR re-enters the review loop from outside — a reopen from `accepted`/`blocked`, a `clarify`, a rebase-relabel, or first implement) or a **spec edit** (the linked issue body changes). So a converged PR reopened for one more change starts fresh |
 | `SPACORY_AUTOMERGE` | `0` | `1` = squash-merge an accepted PR once CI is green |
 | `SPACORY_AGENT_RETRIES` | `1` | extra attempts for an agent run that exits non-zero before blocking (a non-zero exit is always an infra fault — a stalled stream, a killed process — never a "changes requested" verdict, so a retry can't mask a real rejection). `0` = block on first failure |
 | `SPACORY_AGENT_RETRY_BACKOFF_SECS` | `20` | wait between those attempts |
@@ -155,9 +155,16 @@ since it's fully unattended. The same `dispatch.sh` logic lifts over unchanged.
 - **One action per tick** + **mkdir lock** → no stampede, no overlap.
 - **In-flight labels** → double-firing is visible and prevented across restarts.
 - **Round cap** (`SPACORY_MAX_ROUNDS`) → a non-converging PR is blocked, not looped
-  forever. Counted only **since the spec last changed**, so a human amending the
-  issue mid-PR (directly or via `agent:clarify`) doesn't burn the budget — the cap
-  trips on genuine agent-vs-agent stalling, not on evolving requirements.
+  forever. Counted only **since the budget last reset**, on two principled signals: a
+  **fresh attempt** (the PR re-entering the resolve↔review loop from outside it — a
+  reopen from `accepted`/`blocked`, a `clarify`, a rebase-relabel, or first implement)
+  or a **spec edit** (the linked issue body changing). Both are read off the
+  dispatcher-owned label timeline / issue metadata, so there's no human-vs-agent
+  ambiguity. So evolving requirements and a converged PR reopened for one more change
+  don't burn the budget; the cap trips on genuine agent-vs-agent stalling *within a
+  single attempt*. The block is unconditional (never an auto-accept): the cap only
+  fires from `do_resolve`, i.e. while changes are outstanding, so the only sensible
+  terminal is to hand it to a human.
 - **Transient run failures are retried** (`SPACORY_AGENT_RETRIES`, default 1)
   before blocking — a stalled API stream or killed process gets another attempt, so
   a one-off infra hiccup no longer strands an otherwise-healthy PR. Retries are safe
