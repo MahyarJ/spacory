@@ -94,12 +94,6 @@ interface AppState {
    * selected and `length` is a finite value ≥ MIN_WALL_LENGTH.
    */
   setSelectedWallLength: (length: number) => void;
-  /**
-   * Resize the single selected opening (door/window) to an exact width (cm)
-   * along its wall, keeping it on the wall (see `resizeOpeningWidth`). No-ops
-   * unless exactly one item is selected and `width` is finite ≥
-   * MIN_OPENING_WIDTH; a resize that changes nothing pushes no history entry.
-   */
   setSelectedOpeningWidth: (width: number) => void;
   toggleSelectedDoorHingeEdge: () => void;
   toggleSelectedDoorSwingSide: () => void;
