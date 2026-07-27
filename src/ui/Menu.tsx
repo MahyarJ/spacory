@@ -1,4 +1,4 @@
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -83,10 +83,12 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
     };
   }, [open, close]);
 
-  // Move the DOM focus to whichever item the roving index points at.
+  // Drop refs to items a caller no longer renders, then move the DOM focus to
+  // whichever item the roving index points at.
   useEffect(() => {
+    itemRefs.current.length = items.length;
     if (open && activeIndex >= 0) itemRefs.current[activeIndex]?.focus();
-  }, [open, activeIndex]);
+  }, [open, activeIndex, items.length]);
 
   // An empty menu has nothing to focus and nothing to dismiss with Escape, so
   // it simply doesn't open.
@@ -97,6 +99,14 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
   };
 
   const onTriggerKeyDown: React.KeyboardEventHandler = (e) => {
+    // Escape must work from the trigger too: Shift+Tab out of an open popup
+    // lands focus back on the trigger without closing (focus never left the
+    // menu), and from there the popup's own handler can no longer be reached.
+    if (e.key === "Escape" && open) {
+      e.preventDefault();
+      close(true);
+      return;
+    }
     // Enter/Space are left to the button's native click.
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
@@ -116,9 +126,6 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
     setActiveIndex(nextMenuIndex(activeIndex, items.length, move));
   };
 
-  // Drop refs to items a caller no longer renders.
-  itemRefs.current.length = items.length;
-
   return (
     <div ref={containerRef} className={styles.menu}>
       <button
@@ -132,7 +139,12 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
       >
         {icon}
         {label}
-        <ChevronDown size={CHEVRON_SIZE} aria-hidden="true" />
+        {/* Points at where the panel is: down to open it, up while it's open. */}
+        {open ? (
+          <ChevronUp size={CHEVRON_SIZE} aria-hidden="true" />
+        ) : (
+          <ChevronDown size={CHEVRON_SIZE} aria-hidden="true" />
+        )}
       </button>
       {open && (
         <div
@@ -156,6 +168,10 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
               role="menuitem"
               className={styles.item}
               tabIndex={index === activeIndex ? 0 : -1}
+              // Hover moves the roving index (WAI-ARIA menu pattern), so the
+              // hover highlight and the keyboard position can't disagree and an
+              // arrow key continues from the entry the pointer is on.
+              onMouseEnter={() => setActiveIndex(index)}
               onClick={() => {
                 close(true);
                 item.onSelect();
