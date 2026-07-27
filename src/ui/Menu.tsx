@@ -9,6 +9,13 @@ import {
 import styles from "./Menu.module.css";
 import { menuMoveForKey, nextMenuIndex } from "./menuNavigation";
 
+/**
+ * The chevron is deliberately smaller than the caller's own icons: it is an
+ * affordance hint, not a peer of the label's icon, so `Menu` owns this one size
+ * while the caller sizes everything it passes in.
+ */
+const CHEVRON_SIZE = 14;
+
 export type MenuItem = {
   /** Stable key; also used as the React key. */
   key: string;
@@ -81,7 +88,10 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
     if (open && activeIndex >= 0) itemRefs.current[activeIndex]?.focus();
   }, [open, activeIndex]);
 
+  // An empty menu has nothing to focus and nothing to dismiss with Escape, so
+  // it simply doesn't open.
   const openAt = (move: "first" | "last") => {
+    if (items.length === 0) return;
     setOpen(true);
     setActiveIndex(nextMenuIndex(-1, items.length, move));
   };
@@ -106,6 +116,9 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
     setActiveIndex(nextMenuIndex(activeIndex, items.length, move));
   };
 
+  // Drop refs to items a caller no longer renders.
+  itemRefs.current.length = items.length;
+
   return (
     <div ref={containerRef} className={styles.menu}>
       <button
@@ -119,7 +132,7 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
       >
         {icon}
         {label}
-        <ChevronDown size={14} aria-hidden="true" />
+        <ChevronDown size={CHEVRON_SIZE} aria-hidden="true" />
       </button>
       {open && (
         <div
@@ -127,6 +140,11 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
           role="menu"
           aria-label={label}
           onKeyDown={onKeyDown}
+          // Keep focus on the active item when the press lands on the popup's
+          // own padding or the gap between items: without this the item blurs
+          // to <body>, focusout sees a null relatedTarget, and the menu closes
+          // on a click that was actually inside it.
+          onMouseDown={(e) => e.preventDefault()}
         >
           {items.map((item, index) => (
             <button

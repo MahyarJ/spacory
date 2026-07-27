@@ -30,6 +30,9 @@ src/
   features/
     canvas/            # the SVG editor and its layers
     toolbar/           # tool buttons, wall options, theme switch, import/export
+  ui/                  # shared presentational primitives, no app knowledge
+    Menu.tsx           # generic menu-button (WAI-ARIA menu pattern)
+    menuNavigation.ts  # pure roving-focus/key-mapping rules for Menu
   main.tsx, App.tsx, theme.css
 ```
 
