@@ -109,14 +109,12 @@ export function ProjectActions() {
           {
             key: "json",
             label: "JSON",
-            hint: "Plan file",
             icon: <FileJson size={ICON_SIZE} />,
             onSelect: onExport,
           },
           {
             key: "png",
             label: "PNG",
-            hint: "Image",
             icon: <ImageIcon size={ICON_SIZE} />,
             onSelect: onExportPng,
           },

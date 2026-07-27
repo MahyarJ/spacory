@@ -12,7 +12,7 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 10;
-  min-width: 180px;
+  min-width: 140px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -33,7 +33,12 @@
   color: var(--sp-text);
   border: none;
   border-radius: 6px;
+  /* `font: inherit` alone would pick up the document's 16px body size, which
+     reads visibly bigger than the toolbar buttons next to the trigger (those
+     keep the UA's ~13px control font). Restate the size so an entry's label
+     matches the trigger's label instead of towering over it. */
   font: inherit;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
 }
@@ -49,13 +54,4 @@
 .item:focus-visible {
   outline: 2px solid var(--sp-accent);
   outline-offset: -2px;
-}
-
-.itemLabel {
-  flex: 1;
-}
-
-.itemHint {
-  font-size: 12px;
-  opacity: 0.7;
 }

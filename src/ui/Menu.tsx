@@ -20,8 +20,6 @@ export type MenuItem = {
   /** Stable key; also used as the React key. */
   key: string;
   label: string;
-  /** Optional one-word clarification shown next to the label. */
-  hint?: string;
   icon?: ReactNode;
   onSelect: () => void;
 };
@@ -64,8 +62,10 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
   // Dismiss on a click anywhere outside the menu, or on focus leaving it
   // entirely (Tab out). Both are wired as native listeners rather than JSX
   // handlers because the wrapper is a plain, non-interactive element.
-  // pointerdown (not click) closes the menu before the click lands on the
-  // canvas below.
+  // pointerdown (not click) dismisses as soon as the press starts, rather than
+  // waiting for the button to come back up. It does not shield the canvas: this
+  // is a bubble-phase document listener, so the press still reaches the canvas's
+  // own handler (which is attached at React's root, below document) first.
   useEffect(() => {
     if (!open) return;
     const container = containerRef.current;
@@ -194,10 +194,7 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
               }}
             >
               {item.icon}
-              <span className={styles.itemLabel}>{item.label}</span>
-              {item.hint && (
-                <span className={styles.itemHint}>{item.hint}</span>
-              )}
+              {item.label}
             </button>
           ))}
         </div>
