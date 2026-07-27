@@ -151,13 +151,19 @@ in this order:
    `Wall` / `Item`), the `commit()` chokepoint and single-store rule, the
    pure-module-with-tests convention, and the project's definition of done (`npm run
    check && npx tsc -b && npm test`). Link to repo paths like
-   `src/geometry/junction.ts`. Assume no prior knowledge of the codebase.
+   `src/geometry/junction.ts`. Assume no prior knowledge of the *specifics* of the
+   code, but assume the reader is already working in this repo.
    (These conventions are captured in the `spacory-conventions` and
-   `spacory-verify` skills.) **Write this as plain technical prose about Spacory and
-   the code** — do **not** narrate the agent workflow or address the reader as "the
-   Engineer Agent" inside the issue (e.g. no "the Engineer Agent reads only this
-   issue, so…"). The self-containment is a constraint on *how you write*, not a
-   sentence that belongs in the ticket.
+   `spacory-verify` skills.) **Write this as plain technical prose about the code** —
+   do **not** narrate the agent workflow or address the reader as "the Engineer
+   Agent" inside the issue (e.g. no "the Engineer Agent reads only this issue, so…").
+   The self-containment is a constraint on *how you write*, not a sentence that
+   belongs in the ticket. **Do not open with a generic description of what Spacory is
+   or its stack** — no "Spacory is a client-only React 18 + TypeScript app that
+   renders the floor plan as SVG, built with Vite" preamble. The reader knows what
+   repo they're in. Lead straight with the relevant files, and mention a stack or
+   platform fact only where it directly bears on *this* change (e.g. "runs in the
+   browser, so use the File System Access API's fallback").
 5. **Out of scope** — explicitly list what this issue does NOT include, to prevent
    scope creep and keep the issue thin. Reference related/follow-up issues.
 
