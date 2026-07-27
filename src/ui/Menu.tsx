@@ -104,31 +104,41 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
     if (open && next === activeIndex) itemRefs.current[next]?.focus();
   };
 
+  // An open menu owns the keys it navigates with. Without stopping propagation
+  // the native keydown keeps bubbling past React's root container to the
+  // canvas's window-level shortcut listener, which only skips form fields — so
+  // arrowing between entries would nudge the selected wall and push an undo
+  // entry, and Escape would clear in-progress draw state.
+  const consume = (e: React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   const onTriggerKeyDown: React.KeyboardEventHandler = (e) => {
     // Escape must work from the trigger too: Shift+Tab out of an open popup
     // lands focus back on the trigger without closing (focus never left the
     // menu), and from there the popup's own handler can no longer be reached.
     if (e.key === "Escape" && open) {
-      e.preventDefault();
+      consume(e);
       close(true);
       return;
     }
     // Enter/Space are left to the button's native click.
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
+      consume(e);
       openAt(e.key === "ArrowDown" ? "first" : "last");
     }
   };
 
   const onKeyDown: React.KeyboardEventHandler = (e) => {
     if (e.key === "Escape") {
-      e.preventDefault();
+      consume(e);
       close(true);
       return;
     }
     const move = menuMoveForKey(e.key);
     if (!move) return;
-    e.preventDefault();
+    consume(e);
     setActiveIndex(nextMenuIndex(activeIndex, items.length, move));
   };
 
