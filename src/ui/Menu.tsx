@@ -94,8 +94,14 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
   // it simply doesn't open.
   const openAt = (move: "first" | "last") => {
     if (items.length === 0) return;
+    const next = nextMenuIndex(-1, items.length, move);
     setOpen(true);
-    setActiveIndex(nextMenuIndex(-1, items.length, move));
+    setActiveIndex(next);
+    // Already open at that very index (Shift+Tab to the trigger, then
+    // ArrowDown): setActiveIndex bails out, so the focus effect never re-runs
+    // and focus would be stranded on the trigger. Move it here so the arrow
+    // keys always land on an item.
+    if (open && next === activeIndex) itemRefs.current[next]?.focus();
   };
 
   const onTriggerKeyDown: React.KeyboardEventHandler = (e) => {
