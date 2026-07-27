@@ -69,6 +69,16 @@
 #                         acceptEdits; use bypassPermissions for fully unattended if
 #                         a needed command isn't allowlisted).
 #   CLAUDE_MODEL          passed through to the run-*.sh scripts.
+#   SPACORY_AGENT_RETRIES how many EXTRA attempts to give an agent run that exits
+#                         non-zero before blocking (default 1 → 2 attempts total).
+#                         A non-zero exit is always an infrastructure fault — a
+#                         stalled API stream, a killed process, a crash — never a
+#                         "changes requested" verdict (those come back as a parsed
+#                         PR comment on a clean exit), so retrying can only re-attempt
+#                         a transient fault, never mask a real rejection. Set 0 to
+#                         disable and block on the first failure (the old behaviour).
+#   SPACORY_AGENT_RETRY_BACKOFF_SECS
+#                         seconds to wait between those attempts (default 20).
 #   SPACORY_CYCLE_LOCK_WAIT_SECS
 #                         how long a once-a-day `cycle` waits for the shared lock
 #                         before forfeiting its slot (default 1800 = 30m). A `tick`
@@ -100,6 +110,8 @@ fi
 MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-5}"
 AUTOMERGE="${SPACORY_AUTOMERGE:-0}"
 INFLIGHT_STALE_MINS="${SPACORY_INFLIGHT_STALE_MINS:-120}"
+AGENT_RETRIES="${SPACORY_AGENT_RETRIES:-1}"
+AGENT_RETRY_BACKOFF_SECS="${SPACORY_AGENT_RETRY_BACKOFF_SECS:-20}"
 
 # ── logging ────────────────────────────────────────────────────────────────
 log()  { printf '%s  %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
@@ -276,6 +288,31 @@ run_product()  { "$SCRIPT_DIR/run-product.sh"  "$@"; }
 SPACORY_WORKTREE_BASE="${SPACORY_WORKTREE_BASE:-${TMPDIR:-/tmp}/spacory-agent-worktrees}"
 run_engineer() { "$SCRIPT_DIR/run-engineer.sh" "$@"; }
 
+# Run an agent command ("$@"), retrying on a non-zero exit up to AGENT_RETRIES extra
+# times with a short backoff; returns the last attempt's exit code. $1 is a short
+# human label for the log. A non-zero exit from a run-*.sh is always an
+# infrastructure fault — a stalled API stream ("Response stalled mid-stream"), a
+# killed process, a crash — never a "changes requested" verdict (which is a parsed PR
+# comment on a *clean* exit), so a retry only ever re-attempts a transient fault and
+# can't paper over a genuine rejection. Bounded so a hard-down API can't spin a tick
+# forever. NOT for implement: re-running it once a PR exists would duplicate the
+# branch/PR, so do_implement guards its own retry on pr_for_issue (see there).
+run_with_retry() {  # $1=log-label  $2..=command to run
+  local label="$1"; shift
+  local attempt=1 max=$(( AGENT_RETRIES + 1 )) rc=0
+  while :; do
+    rc=0; "$@" || rc=$?
+    [ "$rc" -eq 0 ] && return 0
+    if [ "$attempt" -ge "$max" ]; then
+      log "  $label failed (exit $rc) after $attempt attempt(s); giving up."
+      return "$rc"
+    fi
+    log "  $label failed (exit $rc); retrying (attempt $((attempt+1))/$max) in ${AGENT_RETRY_BACKOFF_SECS}s…"
+    sleep "$AGENT_RETRY_BACKOFF_SECS"
+    attempt=$(( attempt + 1 ))
+  done
+}
+
 # Safety net: project-memory.md is the Product Agent's shared memory and belongs on
 # main (the Engineer never reads it). The agent is supposed to commit+push it itself
 # (see the product-agent skill), but if a run left it dirty, land it on main here so
@@ -311,7 +348,7 @@ do_resolve() {  # $1=pr
   fi
   log "→ resolve PR #$pr (round $((rounds+1))/$MAX_ROUNDS)"
   swap_label pr "$pr" agent:changes agent:resolving
-  if run_engineer resolve "$pr"; then
+  if run_with_retry "engineer resolve #$pr" run_engineer resolve "$pr"; then
     swap_label pr "$pr" agent:resolving agent:review
     log "✓ resolved PR #$pr → agent:review"
   else
@@ -326,8 +363,8 @@ do_review() {  # $1=pr — review + acceptance in parallel, then transition on v
   local head_date; head_date="$(pr_head_date "$pr")"
 
   local rc_e=0 rc_p=0
-  run_engineer review "$pr" & local pid_e=$!
-  run_product  acceptance "$pr" & local pid_p=$!
+  run_with_retry "engineer review #$pr"   run_engineer review "$pr"     & local pid_e=$!
+  run_with_retry "product acceptance #$pr" run_product acceptance "$pr" & local pid_p=$!
   wait "$pid_e" || rc_e=$?
   wait "$pid_p" || rc_p=$?
   if [ "$rc_e" -ne 0 ] || [ "$rc_p" -ne 0 ]; then
@@ -376,7 +413,7 @@ do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
   local issue="$1"
   log "→ triage issue #$issue"
   swap_label issue "$issue" agent:triage agent:triaging
-  if ! run_product triage "$issue"; then
+  if ! run_with_retry "product triage #$issue" run_product triage "$issue"; then
     block issue "$issue" "product triage run failed"
     return
   fi
@@ -408,7 +445,7 @@ do_clarify() {  # $1=issue|pr $2=number — answer a human question, refine the 
   local kind="$1" num="$2"
   log "→ clarify $kind #$num"
   swap_label "$kind" "$num" agent:clarify agent:clarifying
-  if ! run_product clarify "$num"; then
+  if ! run_with_retry "product clarify #$num" run_product clarify "$num"; then
     block "$kind" "$num" "product clarify run failed"
     return
   fi
@@ -433,18 +470,28 @@ do_implement() {  # $1=issue
   local issue="$1"
   log "→ implement issue #$issue"
   swap_label issue "$issue" agent:ready agent:implementing
-  if ! run_engineer implement "$issue"; then
-    block issue "$issue" "engineer implement run failed"
-    return
-  fi
+  # A stalled implement is worth retrying, but — unlike the comment-only runs —
+  # only until a PR closing this issue exists: once the branch/PR is up, re-running
+  # would recreate them and duplicate the work. So we retry by hand with that guard
+  # between attempts rather than through run_with_retry.
+  local attempt=1 max=$(( AGENT_RETRIES + 1 )) rc=0
+  while :; do
+    rc=0; run_engineer implement "$issue" || rc=$?
+    { [ "$rc" -eq 0 ] || [ "$attempt" -ge "$max" ] || [ -n "$(pr_for_issue "$issue")" ]; } && break
+    log "  engineer implement #$issue failed (exit $rc); retrying (attempt $((attempt+1))/$max) in ${AGENT_RETRY_BACKOFF_SECS}s…"
+    sleep "$AGENT_RETRY_BACKOFF_SECS"
+    attempt=$(( attempt + 1 ))
+  done
   local pr; pr="$(pr_for_issue "$issue")"
-  if [ -z "$pr" ]; then
+  if [ -n "$pr" ]; then
+    remove_label issue "$issue" agent:implementing
+    add_label pr "$pr" agent:review
+    log "✓ implemented issue #$issue → PR #$pr (agent:review)"
+  elif [ "$rc" -ne 0 ]; then
+    block issue "$issue" "engineer implement run failed (after $attempt attempt(s))"
+  else
     block issue "$issue" "implement finished but no PR closing #$issue was found (did the agent ask a question instead?)"
-    return
   fi
-  remove_label issue "$issue" agent:implementing
-  add_label pr "$pr" agent:review
-  log "✓ implemented issue #$issue → PR #$pr (agent:review)"
 }
 
 # ── self-healing: reclaim in-flight labels no live run is holding ────────────
