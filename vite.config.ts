@@ -20,6 +20,7 @@ export default defineConfig({
       "@app": path.resolve(__dirname, "src/app"),
       "@features": path.resolve(__dirname, "src/features"),
       "@geometry": path.resolve(__dirname, "src/geometry"),
+      "@ui": path.resolve(__dirname, "src/ui"),
     },
   },
 });

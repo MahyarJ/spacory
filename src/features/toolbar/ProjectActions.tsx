@@ -1,7 +1,8 @@
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
 import { useApp } from "@app/store";
 import { buildExportSvg } from "@geometry/exportSvg";
-import { Download, Image as ImageIcon, Upload } from "lucide-react";
+import { Menu } from "@ui/Menu";
+import { Download, FileJson, Image as ImageIcon, Upload } from "lucide-react";
 import { useRef } from "react";
 import { ICON_SIZE } from "./constants";
 import styles from "./Toolbar.module.css";
@@ -100,14 +101,27 @@ export function ProjectActions() {
         <Download size={ICON_SIZE} />
         Import
       </button>
-      <button type="button" className={styles.button} onClick={onExport}>
-        <Upload size={ICON_SIZE} />
-        Export
-      </button>
-      <button type="button" className={styles.button} onClick={onExportPng}>
-        <ImageIcon size={ICON_SIZE} />
-        Export PNG
-      </button>
+      <Menu
+        label="Export"
+        icon={<Upload size={ICON_SIZE} />}
+        triggerClassName={styles.button}
+        items={[
+          {
+            key: "json",
+            label: "JSON",
+            hint: "Plan file",
+            icon: <FileJson size={ICON_SIZE} />,
+            onSelect: onExport,
+          },
+          {
+            key: "png",
+            label: "PNG",
+            hint: "Image",
+            icon: <ImageIcon size={ICON_SIZE} />,
+            onSelect: onExportPng,
+          },
+        ]}
+      />
       <input
         ref={fileInputRef}
         type="file"

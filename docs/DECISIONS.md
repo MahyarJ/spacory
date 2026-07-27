@@ -158,3 +158,30 @@ including the floor-plan tools — Wall (`BrickWall`), Window (`Grid2x2`), Door
 (`DoorOpen`). Buttons keep their visible text label (icon + label, not
 icon-only). No in-house glyphs — lucide covers the domain tools well enough, so
 there's one consistent set and nothing to hand-maintain.
+
+## Menus/overlays: hand-rolled behavior in `src/ui/`, no UI library (yet)
+
+**Decision.** The toolbar's Export menu is built in-house: `src/ui/Menu.tsx` owns
+the WAI-ARIA menu-button behavior (`aria-haspopup`/`aria-expanded` trigger,
+`role="menu"` popup of `role="menuitem"` buttons, roving keyboard focus,
+dismissal on select / `Escape` / outside click / focus leave, focus back to the
+trigger on `Escape`). No UI-component dependency was added. The keyboard
+wrapping rules live in the pure, tested `src/ui/menuNavigation.ts`.
+
+**Why not a styled kit** (MUI/Chakra/Mantine). It brings its own theming and
+would fight the CSS Modules + `src/theme.css` CSS-variable styling used
+everywhere here, for a much larger dependency footprint than this app wants.
+
+**Why not a headless library yet** (Radix/Base UI, Ariakit, React Aria).
+Defensible in principle, premature now: before this change the app had exactly
+one overlay (`WallOptionsBar`, a plain absolutely-positioned `<div>` with no
+focus or dismissal logic), which isn't enough signal to pick an API and lock it
+in. Keeping the behavior behind the single `Menu` component means a later swap is
+one file, not every call site.
+
+**Tripwire for revisiting.** Adopt a headless behavior library (leading
+candidates Radix/Base UI or Ariakit — both unstyled, so the CSS Modules + theme
+variables stay) once a 2nd/3rd dismissable-overlay feature lands and the
+focus/dismissal logic would otherwise be hand-rolled again: e.g. an import-error
+dialog replacing the `window.alert` calls, item/wall context menus or property
+popovers, or toolbar tooltips.

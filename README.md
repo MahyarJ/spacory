@@ -27,8 +27,9 @@ connected room structures.
 - 🔄 **Undo / redo** — diff-based history that also **survives a page refresh**
 - ♻️ **Autosave** — the working plan and the viewport (pan/zoom) are persisted to
   `localStorage` and restored on reload
-- 💾 **Import / export** — save and load a plan as JSON, or export it as a PNG
-  image
+- 💾 **Import / export** — load a plan from JSON, and get it back out through the
+  toolbar's **Export** menu, which groups the available formats (JSON plan file
+  and PNG image today)
 - 🧭 **Canvas** — pan (right-drag or Pan tool) and zoom (wheel); "Fit" frames the
   whole plan in one click
 - 🎨 **Theming** — dark / light / system, via CSS variables
