@@ -54,6 +54,10 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
 - **PNG image export** — "Export PNG" toolbar button rasters the plan via
   `buildExportSvg` (`src/geometry/exportSvg.ts`) → `<canvas>` → PNG blob (#4,
   merged).
+- **Export menu** — Import stays a top-level toolbar button; the export formats
+  (JSON, PNG) live behind one **Export** menu button (`src/ui/Menu.tsx`,
+  `ProjectActions.tsx`), which SVG export (#33) will extend with a third entry
+  (#66, merged as PR #69).
 - **Connection points selectable/draggable** — drag a corner/junction handle and
   every co-located wall endpoint moves together in one commit (#22, merged as
   #27; `src/geometry/connectivity.ts`).
@@ -87,18 +91,19 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 - **PNG image export — done (#4, merged).** Raster export of the plan; SVG
   (vector) export deliberately deferred to a follow-up.
 - **No SVG/vector image export — in flight (#33).** Thin wiring follow-up to #4:
-  save `buildExportSvg`'s existing markup as a `.svg` file next to "Export PNG";
-  no new rendering logic. Note: once **#66** (Export menu) lands, #33's entry
-  belongs *in that menu* rather than as a fourth flat toolbar button — the two are
-  independent but #66 is the better sequence-first.
-- **Export formats are flat toolbar buttons, not a menu — in flight (#66, triaged
-  from a human-submitted idea 2026-07-27).** `ProjectActions.tsx` renders Import
-  (JSON), Export (JSON) and Export PNG as three top-level buttons; two are exports
-  differing only by a label suffix, and #33 would add a third. #66 groups the
-  export formats under one **Export** menu button. Product calls: **only exports
-  are grouped** — Import stays its own top-level button (different action, and
-  folding it in would turn this into a vaguer "File" menu) — and **#66 does not add
-  SVG export** (#33 owns that; #66 just builds the place it lands). Spec pins
+  save `buildExportSvg`'s existing markup as a `.svg` file; no new rendering logic.
+  **Respecced 2026-07-29** (clarify run, at the human's prompting) now that the
+  Export menu has shipped: #33 adds a **third entry ("SVG") inside the existing
+  Export menu**, appended after "JSON" and "PNG" — *not* a fourth flat toolbar
+  button, which would undo #66. Menu structure/styling and the existing entries
+  stay out of scope; the icon glyph is the engineer's choice.
+- **Export formats grouped under one Export menu — done (#66, merged as PR #69).**
+  `ProjectActions.tsx` renders Import (JSON) as its own button plus a `Menu`
+  (`src/ui/Menu.tsx`) labelled **Export** whose `items` are `json` and `png`.
+  Product calls that still bind: **only exports are grouped** — Import stays its own
+  top-level button (different action, and folding it in would turn this into a vaguer
+  "File" menu) — and **#66 did not add SVG export** (#33 owns that; #66 built the
+  place it lands). Spec pinned
   behavior parity (same contents/filenames/error alerts), close-on
   select/Escape/outside-click/blur, keyboard + screen-reader support, floating over
   the canvas without layout shift, and theming via the existing CSS variables.
@@ -343,6 +348,20 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-29 — Clarify run on issue #33 (SVG export). The human flagged that the
+  spec predated the Export menu: it asked for "a new Export SVG button next to Export
+  PNG," a toolbar that no longer exists now that #66 shipped as PR #69. Rewrote the
+  issue body around the menu — **SVG becomes a third entry appended after "JSON" and
+  "PNG" inside the existing Export menu**, never a fourth flat button (that would undo
+  #66); label is the bare format name to match the siblings; an icon distinct from
+  PNG's, glyph left to the engineer; menu restructuring/restyling and the existing
+  entries explicitly out of scope. Added the missing README criterion with the exact
+  delta (Import/export bullet gains SVG; "SVG (vector) image export" leaves "Not yet").
+  Behavior is otherwise unchanged (same `buildExportSvg` markup, `sanitizeFilename`,
+  `downloadBlob`). Also updated Current state, which had never recorded the Export menu
+  as shipped. Standing lesson: **when a UI-shell issue lands, re-read the older issues
+  that target the shell it replaced** — #33 sat stale for a day pointing at a button
+  row that was gone, and only a human caught it.
 - 2026-07-28 — Clarify run on PR #69 (implements #66). One new scope call from the
   human: the menu entries' `font-size: 13px` in `src/ui/Menu.module.css` is a literal
   hand-matched to `.toolbar .button`'s *undeclared* UA control font, which differs per
