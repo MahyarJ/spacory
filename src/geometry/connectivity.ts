@@ -91,6 +91,54 @@ export function pickWallEndpoint(
 }
 
 /**
+ * Outcome of picking an endpoint across *all* walls:
+ * - `hit` — exactly one endpoint is nearest within tolerance;
+ * - `tie` — two or more endpoints are equally nearest (a junction under the
+ *   cursor), so the caller must not guess which wall to act on;
+ * - `none` — no endpoint within tolerance.
+ */
+export type EndpointPick =
+  | { kind: "hit"; ref: WallEndpointRef }
+  | { kind: "tie" }
+  | { kind: "none" };
+
+/**
+ * The nearest wall endpoint to `point` across every wall, within `tolerance`.
+ *
+ * Powers the modifier+drag detach accelerator, which acts on one wall's end
+ * without it being selected first — so an ambiguous grab must *not* pick a wall
+ * arbitrarily. Endpoints sharing the nearest distance (co-located ones at a
+ * junction, and the equidistant-by-chance case) therefore report `"tie"` and
+ * leave the choice to the user via the select-first endpoint handles.
+ */
+export function pickAnyWallEndpoint(
+  walls: Wall[],
+  point: Point,
+  tolerance: number,
+  eps = EPS,
+): EndpointPick {
+  let best = Number.POSITIVE_INFINITY;
+  let bestRefs: WallEndpointRef[] = [];
+  for (const w of walls) {
+    for (const end of ["a", "b"] as const) {
+      const d = Math.hypot(point.x - w[end].x, point.y - w[end].y);
+      if (d > tolerance) continue;
+      if (d < best - eps) {
+        best = d;
+        bestRefs = [{ wallId: w.id, end }];
+      } else if (d <= best + eps) {
+        // Keep the smaller distance as the reference so `best` can't drift up.
+        best = Math.min(best, d);
+        bestRefs.push({ wallId: w.id, end });
+      }
+    }
+  }
+  if (bestRefs.length === 0) return { kind: "none" };
+  if (bestRefs.length > 1) return { kind: "tie" };
+  return { kind: "hit", ref: bestRefs[0] };
+}
+
+/**
  * Move exactly the given wall endpoints by (dx, dy) — a fixed-membership
  * junction drag. Unlike `translateEndpointsAt`, membership isn't re-derived
  * from the live coordinate on each call, so transiting over an unrelated

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   findConnectedEndpoints,
   getConnectionPoints,
+  pickAnyWallEndpoint,
   pickWallEndpoint,
   pointsEqual,
   translateEndpoints,
@@ -199,6 +200,70 @@ describe("pickWallEndpoint", () => {
 
   it("favours `a` on an exact tie", () => {
     expect(pickWallEndpoint(w, { x: 50, y: 0 }, 100)).toBe("a");
+  });
+});
+
+describe("pickAnyWallEndpoint", () => {
+  const walls = [
+    wall("w1", 0, 0, 100, 0),
+    wall("w2", 100, 0, 200, 0),
+    wall("w3", 500, 500, 600, 500),
+  ];
+
+  it("picks the nearest endpoint among many walls", () => {
+    expect(pickAnyWallEndpoint(walls, { x: 504, y: 497 }, 10)).toEqual({
+      kind: "hit",
+      ref: { wallId: "w3", end: "a" },
+    });
+  });
+
+  it("picks the nearer end of the nearest wall over a farther one in range", () => {
+    // (95, 0) is 5 from w1.b and 95 from w1.a — both walls' far ends are out of
+    // range, so w1.b must win outright rather than reading as a tie.
+    expect(pickAnyWallEndpoint([walls[0]], { x: 95, y: 0 }, 10)).toEqual({
+      kind: "hit",
+      ref: { wallId: "w1", end: "b" },
+    });
+  });
+
+  it("returns none when no endpoint is within tolerance", () => {
+    expect(pickAnyWallEndpoint(walls, { x: 300, y: 300 }, 10)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("returns none for an empty plan", () => {
+    expect(pickAnyWallEndpoint([], { x: 0, y: 0 }, 10)).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("reports a tie when co-located endpoints share the junction under the cursor", () => {
+    // w1.b and w2.a both sit at (100, 0): which wall to detach is ambiguous.
+    expect(pickAnyWallEndpoint(walls, { x: 103, y: 2 }, 10)).toEqual({
+      kind: "tie",
+    });
+  });
+
+  it("reports a tie for endpoints that are equidistant by chance", () => {
+    const pair = [wall("w1", 0, 0, 100, 0), wall("w2", 0, 20, 100, 20)];
+    expect(pickAnyWallEndpoint(pair, { x: 0, y: 10 }, 20)).toEqual({
+      kind: "tie",
+    });
+  });
+
+  it("still hits when a junction is in range but a lone endpoint is nearer", () => {
+    expect(pickAnyWallEndpoint(walls, { x: 2, y: 0 }, 10)).toEqual({
+      kind: "hit",
+      ref: { wallId: "w1", end: "a" },
+    });
+  });
+
+  it("tolerates float noise between co-located endpoints", () => {
+    const pair = [wall("w1", 0, 0, 100, 0), wall("w2", 100 + 1e-9, 0, 200, 0)];
+    expect(pickAnyWallEndpoint(pair, { x: 100, y: 0 }, 10)).toEqual({
+      kind: "tie",
+    });
   });
 });
 

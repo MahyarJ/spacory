@@ -185,3 +185,25 @@ variables stay) once a 2nd/3rd dismissable-overlay feature lands and the
 focus/dismissal logic would otherwise be hand-rolled again: e.g. an import-error
 dialog replacing the `window.alert` calls, item/wall context menus or property
 popovers, or toolbar tooltips.
+
+## Cmd/Ctrl+drag detaches a wall endpoint, and refuses to guess at a junction
+
+**Decision.** Holding Cmd (macOS) / Ctrl (Win/Linux) and dragging near any wall
+endpoint detaches just that endpoint, with no selection required — an
+accelerator layered on top of the discoverable select-first square handles,
+which are unchanged. Cmd/Ctrl was the one canvas drag modifier still free
+(Shift = additive select / ×10 nudge, Alt = raw/un-snapped); it only meant
+undo/redo on the keyboard, which a pointer drag can't collide with.
+
+**Why it declines ambiguous grabs.** At a shared junction two or more endpoints
+sit at the same coordinate, so "the endpoint under the cursor" doesn't identify
+a wall. Rather than pick one arbitrarily — a silent wrong-wall detach is worse
+than no shortcut — `pickAnyWallEndpoint` (`src/geometry/connectivity.ts`)
+reports a `"tie"` and the gesture falls through to the normal hit-tests. The
+user then uses the select-first handles, which name the wall explicitly. Lone
+endpoints, the common case, still get the one-gesture shortcut.
+
+**Where it sits in the pointer-down order.** After the item and select-first
+endpoint hit-tests, before connection points and walls — so the accelerator
+wins over starting a junction or whole-wall drag, but the existing behavior for
+a selected wall is untouched.
