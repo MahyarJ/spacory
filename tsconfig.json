@@ -15,7 +15,8 @@
     "paths": {
       "@app/*": ["src/app/*"],
       "@features/*": ["src/features/*"],
-      "@geometry/*": ["src/geometry/*"]
+      "@geometry/*": ["src/geometry/*"],
+      "@ui/*": ["src/ui/*"]
     }
   },
   "include": ["src"]

@@ -1,0 +1,56 @@
+/* Anchor for the popup: the trigger keeps its caller's styling, this wrapper
+   only provides the positioning context. */
+.menu {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Floating panel, absolutely positioned so opening it never reflows the
+   toolbar or the canvas below. */
+.popup {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-grid);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--sp-text);
+  border: none;
+  border-radius: 6px;
+  /* `font: inherit` alone would pick up the document's 16px body size, which
+     reads visibly bigger than the trigger next to it. Take the shared control
+     size so an entry's label matches its trigger's exactly, on every platform. */
+  font: inherit;
+  font-size: var(--sp-control-font-size);
+  text-align: left;
+  cursor: pointer;
+}
+
+.item svg {
+  flex: none;
+}
+
+.item:hover {
+  background: var(--sp-grid);
+}
+
+.item:focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: -2px;
+}

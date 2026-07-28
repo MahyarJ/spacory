@@ -10,6 +10,10 @@
   --sp-font:
     ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
     Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji;
+  /* Label size for chrome controls (toolbar buttons, menu entries). Stated
+     explicitly so controls don't fall back to the UA's form-control font,
+     which differs per browser/platform and can't be matched by hand. */
+  --sp-control-font-size: 13px;
 }
 
 * {
