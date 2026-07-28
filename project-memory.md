@@ -102,6 +102,18 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   behavior parity (same contents/filenames/error alerts), close-on
   select/Escape/outside-click/blur, keyboard + screen-reader support, floating over
   the canvas without layout shift, and theming via the existing CSS variables.
+  **Amended 2026-07-28** during PR #69's review: the entries' text size must match the
+  toolbar buttons' by sharing one explicit declaration (a font size on the toolbar's
+  button class, or a token in `src/theme.css`), not a pixel literal tuned to the
+  browser's default control font; that one toolbar-style touch is the sole exception to
+  the "no toolbar restyling" exclusion.
+- **Canvas shortcuts fire while a toolbar control has focus — no issue yet.** `h`, `s`,
+  `[`, `]` and `Delete`/`Backspace` reach `FloorPlan`'s `window` keydown listener and
+  edit the plan even when focus sits on a toolbar button, so a user tabbing through the
+  toolbar can mutate the plan by typing. Pre-existing and not caused by #66; PR #69
+  fixed only the arrow-key case it introduced (an open menu invites arrows). Needs a
+  thin issue in a cycle run: decide whether the canvas listener should ignore keys while
+  focus is inside the toolbar, and whether that changes `Delete` semantics.
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -331,6 +343,26 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-28 — Clarify run on PR #69 (implements #66). One new scope call from the
+  human: the menu entries' `font-size: 13px` in `src/ui/Menu.module.css` is a literal
+  hand-matched to `.toolbar .button`'s *undeclared* UA control font, which differs per
+  browser/platform — both agents had parked the durable fix as a follow-up under #66's
+  "no toolbar restyling," and the human asked for it in this PR rather than as accrued
+  debt. **Accepted and pulled into scope**: #66 gained an acceptance criterion (entry
+  text size must match the toolbar's *by construction* — one explicit declaration
+  shared by both, either a font size on the toolbar's button class or a token in
+  `src/theme.css` — not a literal tuned to a default), and its "Restyling the rest of
+  the toolbar" out-of-scope bullet now carries that one narrow exception, with spacing
+  / colors / grouping / other button groups still excluded. Which of the two shapes to
+  use was deferred to the Engineer Agent as an implementation choice. The stale PR
+  description remains open and remains the Engineer Agent's `gh pr edit --body`; both
+  can land in one round now that code is needed anyway. Precedent worth keeping: a
+  *symptom already fixed in a PR whose cause is a one-line durable fix in adjacent code*
+  is worth pulling into that PR rather than ticketing — the follow-up that fixes only a
+  cause nobody can see is the one that never gets written. Still deliberately out:
+  the pre-existing canvas-shortcut leak (`h` / `s` / `[` / `]` / `Delete` reaching the
+  plan while any toolbar control has focus), which is toolbar-wide, not caused by #66,
+  and needs its own issue in a cycle run.
 - 2026-07-27 — Triage run on human-submitted idea #66 ("Make an export menu").
   Verified the premise in `src/features/toolbar/ProjectActions.tsx`: three flat
   top-level buttons — Import (JSON), Export (JSON), Export PNG — so two of them are
