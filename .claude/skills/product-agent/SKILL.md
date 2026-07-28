@@ -283,15 +283,18 @@ Go criterion by criterion and decide whether the change satisfies it from a
 
 **Trace the headline scenario to an observable outcome — don't stop at ticked
 boxes.** Green tests and satisfied criteria prove the *letter* of the spec; they
-do not prove the user gets anything. Take the user story's main scenario and
-walk it step by step through the actual change — the exact gesture, on a
-realistic plan (e.g. two walls meeting at a corner, not a lone wall in a void) —
-and name the concrete thing the user now sees or can do that they couldn't
-before. If you can't point to an observable difference in the primary case, the
-feature fails acceptance **even if every criterion is checked** — say so and
-request changes. When feasible for a UI/interaction change, actually run it
-(`npm run dev`) and drive the gesture rather than reasoning from the diff alone;
-a canvas interaction can read as correct in code and do nothing on screen.
+do not prove the user gets anything (a test can even assert the wrong behavior
+as correct). Take the user story's main scenario and walk it step by step
+through the actual change — the exact gesture, on a realistic plan (e.g. two
+walls meeting at a corner, not a lone wall in a void) — and name the concrete
+thing the user now sees or can do that they couldn't before. If you can't point
+to an observable difference in the primary case, the feature fails acceptance
+**even if every criterion is checked** — say so and request changes. Look for a
+**test that would fail if the feature did nothing** in that headline scenario;
+if the PR's tests only exercise a pure helper and nothing asserts the wired-up
+user-observable outcome, that's a gap worth calling out (and, for interactions
+Vitest can't reach, a nudge toward an end-to-end / Cypress test) — not a reason
+to fall back on manually running the app.
 
 **If the acceptance criteria contradict the user story, the user story wins.**
 The user story is the promise; the criteria are a fallible attempt to make it

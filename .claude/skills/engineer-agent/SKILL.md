@@ -166,13 +166,22 @@ npm run check && npx tsc -b && npm test
 If anything fails, fix it. Do not open a PR with failing checks.
 
 Green gates are necessary, not sufficient: they prove the code is well-formed and
-your tests pass, **not** that the feature does anything a user would notice. For
-any user-visible / interaction change, before opening the PR confirm the observable
-outcome in the *primary* scenario — ideally by running it (`npm run dev`) and
-driving the actual gesture on a realistic plan (e.g. two walls sharing a corner,
-not a lone wall). A canvas interaction can typecheck, pass unit tests on the pure
-helper, and still do nothing on screen. If you can't observe the promised effect,
-the change isn't done — treat it like a failing gate.
+your tests pass, **not** that the feature does anything a user would notice. A
+unit test on a pure helper can pass while the wired-up feature does nothing on
+screen — and worse, a test can *assert the wrong behavior as correct* (the bug
+this loop was tightened for shipped with a test that locked in "a junction
+declines"). So the safeguard is a **test that asserts the headline scenario's
+user-observable outcome**, written so it would fail if the feature did nothing:
+for a detach, "Cmd/Ctrl+drag at a junction leaves one wall's endpoint moved and
+the others put," on a realistic plan (two walls sharing a corner, not a lone
+wall). Don't lean on manually running `npm run dev` as the check — that doesn't
+scale and doesn't regress-guard. Prefer the lowest level that can *actually
+reach* the behavior: pure logic in Vitest where possible; if the outcome only
+exists once the pointer handler / store / component are wired together and
+Vitest can't reach it, that's the signal to add an end-to-end test — introduce
+Cypress gradually for exactly these interaction cases rather than falling back
+to eyeballing it. If the promised effect isn't covered by a test that would
+catch its absence, the change isn't done.
 
 ### Step 5 — Open a PR that references the issue
 
