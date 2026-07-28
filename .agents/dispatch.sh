@@ -30,16 +30,19 @@
 #   to agent:ready stays a human decision.
 #
 #   agent:clarify is the mid-flight refinement door: label an issue OR a PR
-#   agent:clarify when you've left a question/comment that should reshape the spec
-#   (the "daily-scrum" case — raise it on the PR where the confusion lives). The
-#   Product Agent answers and folds any decision back into the *issue* body, then
-#   a PR is sent back to agent:review to be re-judged against the updated spec.
-#   Because editing the issue body resets the review-round budget (see
+#   agent:clarify when you've left a question/comment (the "daily-scrum" case — raise
+#   it on the PR where the confusion lives). On an ISSUE, the Product Agent answers
+#   and folds any decision into the issue body. On a PR, BOTH agents run in parallel
+#   (like review+acceptance): Product handles product/scope questions + the issue
+#   body, and Engineer handles technical questions + the PR's own metadata (title /
+#   description) via `gh pr edit` — the artifact Product won't touch and `resolve`
+#   won't (non-code). The PR then returns to agent:review to be re-judged against the
+#   updated spec. Because editing the issue body resets the review-round budget (see
 #   review_rounds), legitimate spec growth no longer burns the loop guard.
 #
 #   Priority per tick (drain PRs before pulling new work):
 #     1. agent:changes   PR       → resolve
-#     2. agent:clarify   issue/PR → clarify (answer + refine spec), then transition
+#     2. agent:clarify   issue/PR → clarify (issue: Product; PR: Product + Engineer), then transition
 #     3. agent:review    PR       → review + acceptance (in parallel), then transition
 #     4. agent:triage    issue    → triage (groom an idea), then transition
 #     5. agent:ready     issue (no open PR) → implement
@@ -142,8 +145,8 @@ ensure_labels() {
     "agent:reviewing|c5def5|Review + acceptance in flight"
     "agent:changes|d93f0b|Changes requested — awaiting Engineer resolve"
     "agent:resolving|fbca04|Engineer Agent is resolving review comments"
-    "agent:clarify|c2e0c6|A human question/comment should reshape the spec — awaiting Product clarify"
-    "agent:clarifying|fbca04|Product Agent is clarifying and refining the spec"
+    "agent:clarify|c2e0c6|A human question/comment to answer — awaiting clarify (Product for an issue; Product + Engineer for a PR)"
+    "agent:clarifying|fbca04|Clarify in flight (Product; also Engineer on a PR)"
     "agent:accepted|0e8a16|Passed review + acceptance — awaiting human merge"
     "agent:blocked|b60205|Needs a human; the dispatcher will not touch it"
   )
@@ -484,21 +487,43 @@ do_clarify() {  # $1=issue|pr $2=number — answer a human question, refine the 
   local kind="$1" num="$2"
   log "→ clarify $kind #$num"
   swap_label "$kind" "$num" agent:clarify agent:clarifying
-  if ! run_with_retry "product clarify #$num" run_product clarify "$num"; then
-    block "$kind" "$num" "product clarify run failed"
-    return
-  fi
-  commit_memory   # clarify may record a decision in project-memory.md
+
   if [ "$kind" = pr ]; then
+    # A PR clarify has TWO lanes, so run BOTH agents in parallel (mirroring
+    # do_review's review+acceptance): the Product Agent answers product/scope
+    # questions and folds decisions into the *issue* body / project-memory.md; the
+    # Engineer Agent answers technical questions and edits the PR's own metadata —
+    # crucially its **description/title** via `gh pr edit`, which Product refuses to
+    # touch (not its artifact) and `resolve` won't touch (non-code). Without the
+    # engineer lane, a "the PR body is stale" request deadlocks: every agent
+    # correctly defers to engineer-clarify, which nothing ever invoked. They edit
+    # disjoint artifacts (Product: issue/memory; Engineer: PR metadata), and the
+    # engineer run self-isolates in a worktree, so the two can't collide.
+    local rc_e=0 rc_p=0
+    run_with_retry "engineer clarify #$num" run_engineer clarify "$num" & local pid_e=$!
+    run_with_retry "product clarify #$num"  run_product  clarify "$num" & local pid_p=$!
+    wait "$pid_e" || rc_e=$?
+    wait "$pid_p" || rc_p=$?
+    if [ "$rc_e" -ne 0 ] || [ "$rc_p" -ne 0 ]; then
+      block pr "$num" "clarify run failed (engineer=$rc_e product=$rc_p)"
+      return
+    fi
+    commit_memory   # the product lane may record a decision in project-memory.md
     # The spec may have moved; re-judge the PR against it. Editing the issue body
-    # (which clarify does when a decision changes the spec) resets the round
-    # budget, so this fresh review round doesn't count as non-convergence.
+    # (which clarify does when a decision changes the spec) resets the round budget,
+    # so this fresh review round doesn't count as non-convergence.
     swap_label pr "$num" agent:clarifying agent:review
     log "✓ clarified PR #$num → agent:review (re-evaluate against the updated spec)"
     notify "💬 Spacory agents: clarified PR #$num — re-reviewing against the updated spec."
   else
-    # An issue: it's refined and back in the backlog; promoting to agent:ready
-    # stays a human decision (same as a triage-accepted issue).
+    # An issue has no PR artifact, so only the Product Agent (the spec owner) runs.
+    if ! run_with_retry "product clarify #$num" run_product clarify "$num"; then
+      block issue "$num" "product clarify run failed"
+      return
+    fi
+    commit_memory   # clarify may record a decision in project-memory.md
+    # It's refined and back in the backlog; promoting to agent:ready stays a human
+    # decision (same as a triage-accepted issue).
     remove_label issue "$num" agent:clarifying
     log "✓ clarified issue #$num (spec refined; awaiting a human next step)"
     notify "💬 Spacory agents: clarified issue #$num (spec refined if the answer changed it)."
