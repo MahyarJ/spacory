@@ -119,7 +119,7 @@ case "$MODE" in
   implement) TASK="Implement GitHub issue #$NUM." ;;
   review)    TASK="Review pull request #$NUM (Engineer Agent review mode): leave a code-review comment on the PR and make no code changes." ;;
   resolve)   TASK="Resolve the review comments on pull request #$NUM (Engineer Agent resolve mode): push fixes to the PR's branch." ;;
-  clarify)   TASK="Answer the technical questions on #$NUM (Engineer Agent clarify mode): reply on the thread answering the engineering questions, defer any product questions to the Product Agent, and make no code changes." ;;
+  clarify)   TASK="Answer the technical questions on #$NUM (Engineer Agent clarify mode): reply on the thread answering the engineering questions, defer any product questions to the Product Agent, and make no CODE changes. This mode DOES own the PR's own non-code metadata: if the thread shows a settled decision that the PR's title or description is stale/inaccurate, fix it with \`gh pr edit\` — that is your artifact and no other mode will touch it." ;;
 esac
 [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
 

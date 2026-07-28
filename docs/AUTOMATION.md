@@ -57,13 +57,19 @@ and can't double-fire.
 **Mid-flight refinement (the "daily-scrum" door):** when work is already in the
 loop and you want to reshape the spec — you left a question, or a PR's result made
 you realize the requirements should change — label the **issue _or_ the PR**
-**`agent:clarify`**. The Product Agent answers on the thread and folds any decision
-back into the **issue body** (the spec is the issue, always), then the dispatcher
-sends a PR back to **`agent:review`** to be re-judged against the updated spec (an
-issue just returns to the backlog). Raising it on the PR where the confusion lives
-is fine — the answer still lands in the ticket. Because editing the issue body
-**resets the review-round budget** (below), refining the spec this way never counts
-against the non-convergence guard.
+**`agent:clarify`**. On an **issue**, the Product Agent answers on the thread and
+folds any decision back into the **issue body** (the spec is the issue, always). On a
+**PR**, **both agents run in parallel** (like review + acceptance): Product handles
+product/scope questions and the issue body, while the **Engineer** handles technical
+questions and the PR's **own metadata — its title/description** via `gh pr edit`.
+That engineer lane matters: the PR description is the engineer's artifact, so Product
+won't touch it and `resolve` won't (it's non-code) — without an engineer clarify the
+request deadlocks, every agent correctly deferring to a lane nothing invoked. The
+dispatcher then sends the PR back to **`agent:review`** to be re-judged against the
+updated spec (an issue just returns to the backlog). Raising it on the PR where the
+confusion lives is fine — the answer still lands in the ticket. Because editing the
+issue body **resets the review-round budget** (below), refining the spec this way
+never counts against the non-convergence guard.
 
 ### How a verdict becomes a transition
 
@@ -84,7 +90,7 @@ Unparseable → blocked.
 ## Priority per tick (drain before pulling new work)
 
 1. `agent:changes` PR → **resolve**
-2. `agent:clarify` issue/PR → **clarify** (answer + refine the spec), then transition
+2. `agent:clarify` issue/PR → **clarify** (issue: Product; PR: Product + Engineer in parallel), then transition
 3. `agent:review` PR → **review + acceptance** (run in parallel), then transition
 4. `agent:triage` issue → **triage** (groom the idea), then transition
 5. `agent:ready` issue with no PR → **implement**
