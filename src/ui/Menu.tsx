@@ -7,7 +7,11 @@ import {
   useState,
 } from "react";
 import styles from "./Menu.module.css";
-import { menuMoveForKey, nextMenuIndex } from "./menuNavigation";
+import {
+  isMenuSwallowedKey,
+  menuMoveForKey,
+  nextMenuIndex,
+} from "./menuNavigation";
 
 /**
  * The chevron is deliberately smaller than the caller's own icons: it is an
@@ -123,6 +127,13 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
       close(true);
       return;
     }
+    // While the menu is open the trigger is part of it (Shift+Tab lands here
+    // without closing), so it owns the same dead keys the popup swallows. A
+    // closed trigger stays a plain toolbar button and leaks them as before.
+    if (open && isMenuSwallowedKey(e.key)) {
+      consume(e);
+      return;
+    }
     // Enter/Space are left to the button's native click.
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       consume(e);
@@ -134,6 +145,12 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
     if (e.key === "Escape") {
       consume(e);
       close(true);
+      return;
+    }
+    // Keys the menu navigates nowhere with but still owns while it is open —
+    // otherwise they reach the canvas's shortcut listener and edit the plan.
+    if (isMenuSwallowedKey(e.key)) {
+      consume(e);
       return;
     }
     const move = menuMoveForKey(e.key);

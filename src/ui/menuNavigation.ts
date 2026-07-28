@@ -25,6 +25,18 @@ export function nextMenuIndex(
   }
 }
 
+/**
+ * Whether an open menu should swallow `key` even though it navigates nowhere.
+ *
+ * A vertical menu has no horizontal navigation, but the horizontal arrows are a
+ * natural thing to press while arrowing through it — and letting them through
+ * hands them to the app's global shortcuts, which is how "picking an export
+ * format" ends up nudging the plan.
+ */
+export function isMenuSwallowedKey(key: string): boolean {
+  return key === "ArrowLeft" || key === "ArrowRight";
+}
+
 /** The move a key press maps to, or `null` if the menu shouldn't handle it. */
 export function menuMoveForKey(key: string): MenuMove | null {
   switch (key) {

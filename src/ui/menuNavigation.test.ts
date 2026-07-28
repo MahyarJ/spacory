@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { menuMoveForKey, nextMenuIndex } from "./menuNavigation";
+import {
+  isMenuSwallowedKey,
+  menuMoveForKey,
+  nextMenuIndex,
+} from "./menuNavigation";
 
 describe("nextMenuIndex", () => {
   it("moves to the next item", () => {
@@ -49,6 +53,19 @@ describe("menuMoveForKey", () => {
   it("ignores keys the menu doesn't navigate with", () => {
     for (const key of ["Escape", "Enter", " ", "Tab", "a", "ArrowLeft"]) {
       expect(menuMoveForKey(key)).toBeNull();
+    }
+  });
+});
+
+describe("isMenuSwallowedKey", () => {
+  it("swallows the horizontal arrows a vertical menu navigates nowhere with", () => {
+    expect(isMenuSwallowedKey("ArrowLeft")).toBe(true);
+    expect(isMenuSwallowedKey("ArrowRight")).toBe(true);
+  });
+
+  it("leaves everything else to the menu's own handling or the app", () => {
+    for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Escape", "a"]) {
+      expect(isMenuSwallowedKey(key)).toBe(false);
     }
   });
 });
