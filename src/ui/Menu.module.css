@@ -34,11 +34,10 @@
   border: none;
   border-radius: 6px;
   /* `font: inherit` alone would pick up the document's 16px body size, which
-     reads visibly bigger than the toolbar buttons next to the trigger (those
-     keep the UA's ~13px control font). Restate the size so an entry's label
-     matches the trigger's label instead of towering over it. */
+     reads visibly bigger than the trigger next to it. Take the shared control
+     size so an entry's label matches its trigger's exactly, on every platform. */
   font: inherit;
-  font-size: 13px;
+  font-size: var(--sp-control-font-size);
   text-align: left;
   cursor: pointer;
 }
