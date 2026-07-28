@@ -308,9 +308,10 @@ export function FloorPlan() {
 
       // Cmd/Ctrl accelerator: detach the nearest endpoint of *any* wall without
       // selecting it first. Tested before connection points and walls so it
-      // wins over starting a junction/wall drag. A junction under the cursor is
-      // an ambiguous grab, so `pickAnyWallEndpoint` reports a tie and we fall
-      // through — the user disambiguates via the select-first square handles.
+      // wins over starting a junction/wall drag. At a shared junction it detaches
+      // the topmost wall (see `pickAnyWallEndpoint`); only a genuinely ambiguous
+      // grab (endpoints equidistant but at different spots) reports a tie and
+      // falls through, where the user disambiguates via the select-first handles.
       if (e.metaKey || e.ctrlKey) {
         const pick = pickAnyWallEndpoint(plan.walls, world, 10);
         if (pick.kind === "hit") {

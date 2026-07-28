@@ -92,9 +92,10 @@ export function pickWallEndpoint(
 
 /**
  * Outcome of picking an endpoint across *all* walls:
- * - `hit` — exactly one endpoint is nearest within tolerance;
- * - `tie` — two or more endpoints are equally nearest (a junction under the
- *   cursor), so the caller must not guess which wall to act on;
+ * - `hit` — a single wall's endpoint is the unambiguous target;
+ * - `tie` — two or more endpoints at *different* coordinates are equally
+ *   nearest (equidistant by chance), so the cursor doesn't name a spot and the
+ *   caller must not guess;
  * - `none` — no endpoint within tolerance.
  */
 export type EndpointPick =
@@ -106,10 +107,14 @@ export type EndpointPick =
  * The nearest wall endpoint to `point` across every wall, within `tolerance`.
  *
  * Powers the modifier+drag detach accelerator, which acts on one wall's end
- * without it being selected first — so an ambiguous grab must *not* pick a wall
- * arbitrarily. Endpoints sharing the nearest distance (co-located ones at a
- * junction, and the equidistant-by-chance case) therefore report `"tie"` and
- * leave the choice to the user via the select-first endpoint handles.
+ * without it being selected first. The interesting case is a shared **junction**
+ * — two or more endpoints at the *same* coordinate. Since detaching one wall
+ * from a junction is the whole point of the gesture, we resolve that by
+ * z-order: the **topmost** wall (last in the array, matching the `findLast`
+ * order the canvas uses to hit-test walls) wins, so a plain Cmd/Ctrl+drag pulls
+ * the top wall straight out. Only a genuinely ambiguous grab — endpoints tied
+ * for nearest but at *different* coordinates (equidistant by chance) — reports
+ * `"tie"` and leaves the choice to the user via the select-first handles.
  */
 export function pickAnyWallEndpoint(
   walls: Wall[],
@@ -134,8 +139,18 @@ export function pickAnyWallEndpoint(
     }
   }
   if (bestRefs.length === 0) return { kind: "none" };
-  if (bestRefs.length > 1) return { kind: "tie" };
-  return { kind: "hit", ref: bestRefs[0] };
+  if (bestRefs.length === 1) return { kind: "hit", ref: bestRefs[0] };
+
+  // 2+ endpoints tie for nearest. If they all sit at the *same* coordinate it's
+  // a junction: pick the topmost wall's endpoint (last collected = last in draw
+  // order) so the accelerator detaches it. If they're at different coordinates
+  // the cursor is genuinely ambiguous, so decline.
+  const coordOf = (ref: WallEndpointRef): Point =>
+    walls.find((w) => w.id === ref.wallId)![ref.end];
+  const anchor = coordOf(bestRefs[0]);
+  const coLocated = bestRefs.every((r) => pointsEqual(coordOf(r), anchor, eps));
+  if (!coLocated) return { kind: "tie" };
+  return { kind: "hit", ref: bestRefs[bestRefs.length - 1] };
 }
 
 /**

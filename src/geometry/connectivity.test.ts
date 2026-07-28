@@ -238,14 +238,18 @@ describe("pickAnyWallEndpoint", () => {
     });
   });
 
-  it("reports a tie when co-located endpoints share the junction under the cursor", () => {
-    // w1.b and w2.a both sit at (100, 0): which wall to detach is ambiguous.
+  it("resolves a shared junction to the topmost wall's endpoint", () => {
+    // w1.b and w2.a both sit at (100, 0). The junction detach picks the topmost
+    // wall (w2, drawn last), so a plain Cmd/Ctrl+drag pulls it straight out.
     expect(pickAnyWallEndpoint(walls, { x: 103, y: 2 }, 10)).toEqual({
-      kind: "tie",
+      kind: "hit",
+      ref: { wallId: "w2", end: "a" },
     });
   });
 
   it("reports a tie for endpoints that are equidistant by chance", () => {
+    // Two endpoints tied for nearest but at *different* coordinates: the cursor
+    // doesn't name a spot, so decline rather than guess.
     const pair = [wall("w1", 0, 0, 100, 0), wall("w2", 0, 20, 100, 20)];
     expect(pickAnyWallEndpoint(pair, { x: 0, y: 10 }, 20)).toEqual({
       kind: "tie",
@@ -259,10 +263,11 @@ describe("pickAnyWallEndpoint", () => {
     });
   });
 
-  it("tolerates float noise between co-located endpoints", () => {
+  it("resolves co-located endpoints to the topmost wall despite float noise", () => {
     const pair = [wall("w1", 0, 0, 100, 0), wall("w2", 100 + 1e-9, 0, 200, 0)];
     expect(pickAnyWallEndpoint(pair, { x: 100, y: 0 }, 10)).toEqual({
-      kind: "tie",
+      kind: "hit",
+      ref: { wallId: "w2", end: "a" },
     });
   });
 });

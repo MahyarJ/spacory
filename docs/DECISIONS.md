@@ -186,7 +186,7 @@ focus/dismissal logic would otherwise be hand-rolled again: e.g. an import-error
 dialog replacing the `window.alert` calls, item/wall context menus or property
 popovers, or toolbar tooltips.
 
-## Cmd/Ctrl+drag detaches a wall endpoint, and refuses to guess at a junction
+## Cmd/Ctrl+drag detaches a wall endpoint, resolving a junction by z-order
 
 **Decision.** Holding Cmd (macOS) / Ctrl (Win/Linux) and dragging near any wall
 endpoint detaches just that endpoint, with no selection required — an
@@ -195,13 +195,22 @@ which are unchanged. Cmd/Ctrl was the one canvas drag modifier still free
 (Shift = additive select / ×10 nudge, Alt = raw/un-snapped); it only meant
 undo/redo on the keyboard, which a pointer drag can't collide with.
 
-**Why it declines ambiguous grabs.** At a shared junction two or more endpoints
-sit at the same coordinate, so "the endpoint under the cursor" doesn't identify
-a wall. Rather than pick one arbitrarily — a silent wrong-wall detach is worse
-than no shortcut — `pickAnyWallEndpoint` (`src/geometry/connectivity.ts`)
-reports a `"tie"` and the gesture falls through to the normal hit-tests. The
-user then uses the select-first handles, which name the wall explicitly. Lone
-endpoints, the common case, still get the one-gesture shortcut.
+**How it picks a wall at a junction.** The headline use case is pulling one wall
+out of a *shared junction*, where two or more endpoints sit at the same
+coordinate. An earlier take declined that case as "ambiguous" and fell
+through — but that carved out precisely the case the feature exists for, so the
+accelerator did nothing observable in normal use (a lone endpoint has nothing to
+leave behind; a junction fell through to the whole-junction hinge move). So
+`pickAnyWallEndpoint` (`src/geometry/connectivity.ts`) now resolves a
+co-located junction by **z-order**: it detaches the topmost wall (last in draw
+order, matching the `findLast` the canvas already uses to hit-test walls). The
+pick is predictable and cheaply reversible (Cmd+Z, or re-drag the wall back), so
+"top wall wins" beats "no shortcut."
+
+**When it still declines.** Only a *genuinely* ambiguous grab — endpoints tied
+for nearest but at **different** coordinates (equidistant by chance, not a real
+junction) — reports a `"tie"` and falls through to the normal hit-tests, since
+the cursor there doesn't name a spot to act on.
 
 **Where it sits in the pointer-down order.** After the item and select-first
 endpoint hit-tests, before connection points and walls — so the accelerator

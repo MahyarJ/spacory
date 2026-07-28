@@ -209,6 +209,15 @@ Guidance:
 - Give enough context to remove ambiguity, but don't over-specify the
   implementation — the engineer owns the "how." Constrain via acceptance criteria
   and necessary facts, not by dictating code.
+- **Acceptance criteria must not contradict the user story.** Before you post,
+  re-read the criteria against the story and check that satisfying *all* of them
+  literally delivers the promised benefit — especially the story's headline case.
+  A criterion that excludes exactly the scenario the story is about (e.g. "detach
+  a wall from a junction" + "at a junction, decline") produces a feature that
+  passes every check and does nothing the user can see. If a hard case needs a
+  fallback, spell out the *behavior* it should have, don't carve the case out.
+  When you defer an edge as out of scope, confirm the *common* case still lands
+  in scope; if excluding the edge guts the story, the story or the scope is wrong.
 - Respect every constraint in "What the Product Agent should NOT do" (no stack
   swaps, no backend, no revisiting settled decisions, no AI attribution, no
   sprawling multi-subsystem issues).
@@ -271,6 +280,26 @@ Go criterion by criterion and decide whether the change satisfies it from a
 - **Docs** — for a user-visible change, did the PR update `README.md` (Features /
   shortcuts / "Not yet") as the acceptance criteria require? A missing README
   update on a user-facing feature is a blocking gap, not a nit.
+
+**Trace the headline scenario to an observable outcome — don't stop at ticked
+boxes.** Green tests and satisfied criteria prove the *letter* of the spec; they
+do not prove the user gets anything. Take the user story's main scenario and
+walk it step by step through the actual change — the exact gesture, on a
+realistic plan (e.g. two walls meeting at a corner, not a lone wall in a void) —
+and name the concrete thing the user now sees or can do that they couldn't
+before. If you can't point to an observable difference in the primary case, the
+feature fails acceptance **even if every criterion is checked** — say so and
+request changes. When feasible for a UI/interaction change, actually run it
+(`npm run dev`) and drive the gesture rather than reasoning from the diff alone;
+a canvas interaction can read as correct in code and do nothing on screen.
+
+**If the acceptance criteria contradict the user story, the user story wins.**
+The user story is the promise; the criteria are a fallible attempt to make it
+testable. If satisfying a criterion literally defeats the story's intent — e.g.
+a criterion that carves out exactly the case the story exists for — that is a
+**blocking spec defect**, not an acceptance pass. Call it out explicitly, name
+the contradiction, and request changes (and flag the issue text for repair via
+`clarify`); never rubber-stamp a self-defeating checklist.
 
 This is the **product** lens. Leave code-correctness, tests, and convention nits
 to the Engineer Agent's review — don't duplicate them.

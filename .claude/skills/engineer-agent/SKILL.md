@@ -119,6 +119,15 @@ If the issue is unclear, underspecified, internally contradictory, or could be
 reasonably implemented in materially different ways that affect the user-visible
 result, **stop and ask by posting a comment on the issue**:
 
+Watch for the subtle contradiction in particular: **acceptance criteria that,
+taken literally, defeat the user story's headline case** — e.g. a story about
+"pull a wall out of a junction" paired with a criterion "at a junction, decline
+and do nothing." Implementing such a spec to the letter yields a feature that
+passes every check and does nothing the user can see. Don't quietly satisfy the
+criteria (and don't dress the gap up as a virtue in the PR body); name the
+contradiction and ask which the user actually wants — the criteria usually need
+to state the hard case's *behavior*, not exclude it.
+
 ```bash
 gh issue comment <ISSUE_NUMBER> --body "❓ Clarification needed before I implement:
 1. <specific question>
@@ -155,6 +164,15 @@ npm run check && npx tsc -b && npm test
 ```
 
 If anything fails, fix it. Do not open a PR with failing checks.
+
+Green gates are necessary, not sufficient: they prove the code is well-formed and
+your tests pass, **not** that the feature does anything a user would notice. For
+any user-visible / interaction change, before opening the PR confirm the observable
+outcome in the *primary* scenario — ideally by running it (`npm run dev`) and
+driving the actual gesture on a realistic plan (e.g. two walls sharing a corner,
+not a lone wall). A canvas interaction can typecheck, pass unit tests on the pure
+helper, and still do nothing on screen. If you can't observe the promised effect,
+the change isn't done — treat it like a failing gate.
 
 ### Step 5 — Open a PR that references the issue
 
