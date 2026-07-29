@@ -119,6 +119,15 @@ If the issue is unclear, underspecified, internally contradictory, or could be
 reasonably implemented in materially different ways that affect the user-visible
 result, **stop and ask by posting a comment on the issue**:
 
+Watch for the subtle contradiction in particular: **acceptance criteria that,
+taken literally, defeat the user story's headline case** — e.g. a story about
+"pull a wall out of a junction" paired with a criterion "at a junction, decline
+and do nothing." Implementing such a spec to the letter yields a feature that
+passes every check and does nothing the user can see. Don't quietly satisfy the
+criteria (and don't dress the gap up as a virtue in the PR body); name the
+contradiction and ask which the user actually wants — the criteria usually need
+to state the hard case's *behavior*, not exclude it.
+
 ```bash
 gh issue comment <ISSUE_NUMBER> --body "❓ Clarification needed before I implement:
 1. <specific question>
@@ -155,6 +164,24 @@ npm run check && npx tsc -b && npm test
 ```
 
 If anything fails, fix it. Do not open a PR with failing checks.
+
+Green gates are necessary, not sufficient: they prove the code is well-formed and
+your tests pass, **not** that the feature does anything a user would notice. A
+unit test on a pure helper can pass while the wired-up feature does nothing on
+screen — and worse, a test can *assert the wrong behavior as correct* (the bug
+this loop was tightened for shipped with a test that locked in "a junction
+declines"). So the safeguard is a **test that asserts the headline scenario's
+user-observable outcome**, written so it would fail if the feature did nothing:
+for a detach, "Cmd/Ctrl+drag at a junction leaves one wall's endpoint moved and
+the others put," on a realistic plan (two walls sharing a corner, not a lone
+wall). Don't lean on manually running `npm run dev` as the check — that doesn't
+scale and doesn't regress-guard. Prefer the lowest level that can *actually
+reach* the behavior: pure logic in Vitest where possible; if the outcome only
+exists once the pointer handler / store / component are wired together and
+Vitest can't reach it, that's the signal to add an end-to-end test — introduce
+Cypress gradually for exactly these interaction cases rather than falling back
+to eyeballing it. If the promised effect isn't covered by a test that would
+catch its absence, the change isn't done.
 
 ### Step 5 — Open a PR that references the issue
 
@@ -222,7 +249,7 @@ gh pr comment <PR_NUMBER> --body "🛠️ **Engineer review**
 **Nits (non-blocking)**
 - <suggestion>
 
-**Verdict:** <approve / changes requested> — <one-line rationale>"
+**Verdict:** <approve / changes requested / approve pending non-code fixes> — <one-line rationale>"
 ```
 
 Mark each finding **blocking** (must change before merge) or **nit** (optional). Be
@@ -230,6 +257,23 @@ specific and cite `file:line`. **Do not** modify code, approve via `gh`, or merg
 there are no blocking findings, say so plainly. If the thread has open
 questions/suggestions (from anyone), answer them here too (see *Answering the
 thread*) rather than leaving them hanging.
+
+**A conditional approval is NOT an `approve` — the verdict word decides what the
+loop does next, so it must carry the condition.** The dispatcher parses only the
+`**Verdict:**` line, so "approve — but fix the PR body first" is read as a clean
+approve and the "but…" is silently dropped; the PR goes to `agent:accepted` and a
+human can merge on the unmet condition (this is a real failure that has happened).
+So:
+
+- A **blocking code** finding → `changes requested` (routes to `resolve`).
+- The code is right, but a **non-code artifact must be fixed before merge** — the
+  **PR body/title no longer matches what shipped**, or the change deviated from the
+  linked issue so the **issue spec must be corrected** — → `approve pending non-code
+  fixes`. The dispatcher routes that to a `clarify` pass (which edits exactly those
+  artifacts: Engineer→PR metadata, Product→issue body), then re-reviews. Name the
+  specific artifact and the exact edit needed in the body.
+- Only when **nothing** is outstanding — code, PR body, and spec all consistent —
+  use a plain `approve`.
 
 ---
 

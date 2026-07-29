@@ -18,11 +18,20 @@
 #
 #     issue  agent:triage      ── triage ──▶  enriched backlog issue | closed (rejected)
 #     issue  agent:ready        ── implement ──▶  PR agent:review
-#     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:accepted
+#     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:clarify | agent:accepted
 #     PR     agent:changes       ── resolve  ──▶  PR agent:review   (loops, capped)
 #     issue/PR agent:clarify      ── clarify  ──▶  spec refined; PR→agent:review, issue→backlog
 #     PR     agent:accepted      ── human merges (or SPACORY_AUTOMERGE=1 + CI green)
+#                                   …unless the head moves past the sign-off → agent:review
 #     *      agent:blocked       ── needs a human; never touched again automatically
+#
+#   A review verdict of "accepted/approve PENDING non-code fixes" is a CONDITIONAL
+#   accept (the code is fine but the PR body/title or the linked issue's spec is out
+#   of sync with what shipped). It routes PR→agent:clarify — which edits exactly
+#   those artifacts — then back to agent:review, instead of to agent:accepted; that
+#   stops "accepted, but fix X first" from reaching a human merge with X unmet.
+#   Separately, a push onto an already-agent:accepted PR invalidates the sign-off
+#   (its verdicts predate the new head), so the tick bounces it back to agent:review.
 #
 #   agent:triage is the human intake front door: open a rough idea issue, label it
 #   agent:triage, and the Product Agent grooms it (accept+enrich, or reject+close).
@@ -193,13 +202,21 @@ latest_comment() {  # $1=pr $2=after-iso $3=header-substring
     | grep -F "$3" | tail -1 | cut -f2- || true
 }
 
-# classify a verdict comment body → pass | changes | none
+# classify a verdict comment body → pass | changes | defer | none
+#   defer = a CONDITIONAL accept: the code is approved but a non-code artifact
+#   (a stale PR body/title, or the linked issue's spec drifting from what shipped)
+#   must be fixed before merge. It routes to a clarify pass, not to accepted — so a
+#   reviewer can't accidentally send an unmet condition straight to a human merge
+#   by writing "accepted, but fix X" (the "but X" used to be silently dropped).
+#   Order matters: "changes requested" and the "…pending…" conditional are both
+#   checked before the bare accept/approve, since each contains that word.
 verdict_of() {  # $1=body
   local body_lc; body_lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
   [ -z "$body_lc" ] && { echo none; return; }
   case "$body_lc" in
-    *"changes requested"*) echo changes ;;
-    *approve*|*accepted*)  echo pass ;;
+    *"changes requested"*)                        echo changes ;;
+    *"accepted pending non-code fix"*|*"approve pending non-code fix"*) echo defer ;;
+    *approve*|*accepted*)                         echo pass ;;
     *) echo none ;;
   esac
 }
@@ -425,6 +442,17 @@ do_review() {  # $1=pr — review + acceptance in parallel, then transition on v
     swap_label pr "$pr" agent:reviewing agent:changes
     log "✓ PR #$pr → agent:changes"
     notify "🔁 Spacory agents: PR #$pr needs changes (engineer=$eng product=$prod)."
+  elif [ "$eng" = defer ] || [ "$prod" = defer ]; then
+    # A CONDITIONAL accept: the code is approved but a reviewer gated merge on a
+    # NON-code artifact fix — a stale PR body/title, or the linked issue's spec
+    # drifting from what shipped. That's exactly what a clarify pass edits (Engineer
+    # → PR metadata, Product → issue body), so route there rather than to accepted;
+    # the clarify run returns the PR to agent:review to be re-judged once the
+    # artifacts match. Prevents "accepted, but fix X first" from reaching a human
+    # merge with X unmet (Hole 2).
+    swap_label pr "$pr" agent:reviewing agent:clarify
+    log "✓ PR #$pr → agent:clarify (accepted pending non-code fixes; engineer=$eng product=$prod)"
+    notify "📝 Spacory agents: PR #$pr accepted pending non-code fixes — routing to clarify, then re-review."
   else
     swap_label pr "$pr" agent:reviewing agent:accepted
     log "✓ PR #$pr → agent:accepted"
@@ -449,6 +477,25 @@ maybe_merge() {  # $1=pr — only if the human opted in AND CI is green
   else
     log "  PR #$pr accepted but CI not green yet; leaving for a later tick."
   fi
+}
+
+# An accepted PR is validly accepted only while BOTH latest agent verdicts still
+# post AFTER its head commit — the same "verdict must be newer than the head"
+# invariant do_review counts on. If the head later moves (a new push onto an
+# already-accepted PR), those verdicts no longer cover the code, so the approval is
+# stale and a human must not merge on it. Bounce it back to review for a fresh pass.
+# Returns 0 (and relabels) when it re-queued the PR; 1 when the approval still holds.
+# (Hole 1: nothing else re-reviews an accepted PR when its head changes.)
+requeue_if_stale_accept() {  # $1=pr
+  local pr="$1" hd e p
+  hd="$(pr_head_date "$pr")"
+  e="$(verdict_of "$(latest_comment "$pr" "$hd" "Engineer review")")"
+  p="$(verdict_of "$(latest_comment "$pr" "$hd" "Product acceptance")")"
+  [ "$e" = pass ] && [ "$p" = pass ] && return 1
+  swap_label pr "$pr" agent:accepted agent:review
+  log "↩︎ PR #$pr head moved past its acceptance (engineer=$e product=$p) → agent:review"
+  notify "🔁 Spacory agents: PR #$pr changed after it was accepted — re-reviewing the new commits."
+  return 0
 }
 
 do_triage() {  # $1=issue — a human-submitted idea; groom it or reject it
@@ -635,6 +682,11 @@ dispatch_once() {
   for n in $(list_prs    "agent:clarify"); do do_clarify pr    "$n"; return; done
   for n in $(list_issues "agent:clarify"); do do_clarify issue "$n"; return; done
   for n in $(list_prs "agent:review");  do do_review  "$n"; return; done
+  # A push onto an already-accepted PR invalidates that sign-off; re-review it
+  # before pulling new work, so nobody merges on a stale acceptance (Hole 1). Only
+  # the stale ones relabel + return here; still-valid accepts fall to the automerge
+  # nudge at the bottom.
+  for n in $(list_prs "agent:accepted"); do requeue_if_stale_accept "$n" && return; done
   for n in $(list_issues "agent:triage"); do do_triage "$n"; return; done
   for n in $(list_issues "agent:ready"); do
     # skip if a PR already exists for it (belt-and-suspenders)

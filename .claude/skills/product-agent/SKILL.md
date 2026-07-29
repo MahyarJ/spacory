@@ -209,6 +209,15 @@ Guidance:
 - Give enough context to remove ambiguity, but don't over-specify the
   implementation — the engineer owns the "how." Constrain via acceptance criteria
   and necessary facts, not by dictating code.
+- **Acceptance criteria must not contradict the user story.** Before you post,
+  re-read the criteria against the story and check that satisfying *all* of them
+  literally delivers the promised benefit — especially the story's headline case.
+  A criterion that excludes exactly the scenario the story is about (e.g. "detach
+  a wall from a junction" + "at a junction, decline") produces a feature that
+  passes every check and does nothing the user can see. If a hard case needs a
+  fallback, spell out the *behavior* it should have, don't carve the case out.
+  When you defer an edge as out of scope, confirm the *common* case still lands
+  in scope; if excluding the edge guts the story, the story or the scope is wrong.
 - Respect every constraint in "What the Product Agent should NOT do" (no stack
   swaps, no backend, no revisiting settled decisions, no AI attribution, no
   sprawling multi-subsystem issues).
@@ -272,6 +281,29 @@ Go criterion by criterion and decide whether the change satisfies it from a
   shortcuts / "Not yet") as the acceptance criteria require? A missing README
   update on a user-facing feature is a blocking gap, not a nit.
 
+**Trace the headline scenario to an observable outcome — don't stop at ticked
+boxes.** Green tests and satisfied criteria prove the *letter* of the spec; they
+do not prove the user gets anything (a test can even assert the wrong behavior
+as correct). Take the user story's main scenario and walk it step by step
+through the actual change — the exact gesture, on a realistic plan (e.g. two
+walls meeting at a corner, not a lone wall in a void) — and name the concrete
+thing the user now sees or can do that they couldn't before. If you can't point
+to an observable difference in the primary case, the feature fails acceptance
+**even if every criterion is checked** — say so and request changes. Look for a
+**test that would fail if the feature did nothing** in that headline scenario;
+if the PR's tests only exercise a pure helper and nothing asserts the wired-up
+user-observable outcome, that's a gap worth calling out (and, for interactions
+Vitest can't reach, a nudge toward an end-to-end / Cypress test) — not a reason
+to fall back on manually running the app.
+
+**If the acceptance criteria contradict the user story, the user story wins.**
+The user story is the promise; the criteria are a fallible attempt to make it
+testable. If satisfying a criterion literally defeats the story's intent — e.g.
+a criterion that carves out exactly the case the story exists for — that is a
+**blocking spec defect**, not an acceptance pass. Call it out explicitly, name
+the contradiction, and request changes (and flag the issue text for repair via
+`clarify`); never rubber-stamp a self-defeating checklist.
+
 This is the **product** lens. Leave code-correctness, tests, and convention nits
 to the Engineer Agent's review — don't duplicate them.
 
@@ -287,7 +319,7 @@ gh pr comment <PR_NUMBER> --body "🪐 **Product acceptance**
 **Product notes**
 - <UX / user-value / scope observation>
 
-**Verdict:** <accepted / changes requested> — <one-line rationale>"
+**Verdict:** <accepted / changes requested / accepted pending non-code fixes> — <one-line rationale>"
 ```
 
 Mark unmet acceptance criteria clearly — those are blocking. Do **not** modify code
@@ -295,6 +327,23 @@ or merge. If everything is met, say so plainly and mark it accepted. If the thre
 has open product/scope questions or suggestions (from anyone), answer them in the
 **Product notes** rather than leaving them hanging (see *Answering the thread*);
 defer purely technical points to the Engineer Agent.
+
+**A conditional acceptance is NOT an `accepted` — the verdict word decides what the
+loop does next, so it must carry the condition.** The dispatcher parses only the
+`**Verdict:**` line, so "accepted — but repair the issue's criterion first" is read
+as a clean accept and the "but…" is dropped; the PR moves to `agent:accepted` and a
+human can merge with the record still wrong (this has actually happened). So:
+
+- Unmet acceptance criteria / missing user value → `changes requested`.
+- The change delivers the value, but a **non-code artifact must be fixed before the
+  PR closes** — most often the **linked issue's spec drifted from what shipped**
+  (e.g. an acceptance criterion the code deliberately and correctly deviated from,
+  which would otherwise become the permanent, wrong record), or the **PR body no
+  longer describes the change** → `accepted pending non-code fixes`. The dispatcher
+  routes that to a `clarify` pass (Product edits the issue body, Engineer edits the
+  PR metadata), then re-judges. Name the exact artifact and edit in **Product
+  notes**.
+- Only when **nothing** is outstanding use a plain `accepted`.
 
 ---
 
