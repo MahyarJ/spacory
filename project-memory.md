@@ -78,6 +78,14 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   square endpoint handles (`WallEndpointsLayer`) let you drag just that wall's end
   out of a shared junction while co-located endpoints stay put (#30, merged as PR
   #58; `pickWallEndpoint` in `src/geometry/connectivity.ts`).
+- **Resize a door/window opening & show its width** — a single selected opening gets
+  a width field in the floating options bar, mirroring the wall-length field; the
+  pure clamp/keep-on-wall helper lives in `src/geometry/opening.ts` (#60, merged as
+  PR #65). **Not yet in the README** — see #78.
+- **Export menu** — the toolbar's export formats (JSON plan, PNG image) are grouped
+  under one **Export** dropdown built on a shared, keyboard/ARIA-correct `Menu`
+  (`src/ui/Menu.tsx` + pure `src/ui/menuNavigation.ts`); Import stays a separate
+  top-level button (#66, merged as PR #69).
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -112,13 +120,18 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   button class, or a token in `src/theme.css`), not a pixel literal tuned to the
   browser's default control font; that one toolbar-style touch is the sole exception to
   the "no toolbar restyling" exclusion.
-- **Canvas shortcuts fire while a toolbar control has focus — no issue yet.** `h`, `s`,
-  `[`, `]` and `Delete`/`Backspace` reach `FloorPlan`'s `window` keydown listener and
-  edit the plan even when focus sits on a toolbar button, so a user tabbing through the
-  toolbar can mutate the plan by typing. Pre-existing and not caused by #66; PR #69
-  fixed only the arrow-key case it introduced (an open menu invites arrows). Needs a
-  thin issue in a cycle run: decide whether the canvas listener should ignore keys while
-  focus is inside the toolbar, and whether that changes `Delete` semantics.
+- **Canvas shortcuts fire while a toolbar control has focus — in flight (#77, scoped
+  2026-07-29).** `h`, `s`, `[`, `]`, `Delete`/`Backspace` **and the arrows** reach
+  `FloorPlan`'s `window` keydown listener and edit the plan even when focus sits on a
+  toolbar button, so a user tabbing through the toolbar can mutate the plan by typing.
+  The listener's only guard skips `INPUT`/`TEXTAREA`/`SELECT`/`contentEditable` —
+  buttons aren't covered. Pre-existing and not caused by #66; PR #69 only worked around
+  it locally via `stopPropagation` in `Menu.tsx` while its menu is open (that code's own
+  comment names the leak and notes "a closed trigger … leaks them as before"). Product
+  calls settled in #77: **focus inside the toolbar suppresses the canvas verbs**, with
+  **`Escape` the one exception** (non-destructive, universally "get me out"; the open
+  menu still consumes its own Escape first), and **undo/redo stay global** (app
+  commands, not canvas verbs). `Delete` semantics on the canvas are unchanged.
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -163,10 +176,10 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   switcher would expose), and adds the pure inverse of `formatLength`
   (`lengthToCm`) in `format.ts` with tests. Was previously out of scope of #11.
   Thickness presets and compound imperial entry left as explicit follow-ups.
-- **Inline number fields don't commit on click-away to the canvas — not yet
-  scoped as an issue; confirmed as a real UX defect (clarify on PR #65,
-  2026-07-27).** The selected-wall length field (#11, shipped) and the new
-  opening-width field (#60/PR #65) both apply the typed value only on Enter/blur;
+- **Inline number fields don't commit on click-away to the canvas — in flight (#76,
+  scoped 2026-07-29; confirmed as a real UX defect by the clarify on PR #65,
+  2026-07-27).** The selected-wall length field (#11, shipped) and the
+  opening-width field (#60, merged as PR #65) both apply the typed value only on Enter/blur;
   clicking on the canvas (rather than tabbing/Enter) silently discards what the
   user just typed instead of committing it. Product decision: click-away **should**
   commit — the field already commits on blur, so this is an inconsistency and a
@@ -175,11 +188,16 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   faithfully mirroring that field), so it is **not** a blocker for PR #65 — the fix
   is a separate thin bug-fix follow-up covering **both** fields. The *why*/how
   (likely: clicking the canvas deselects the item and unmounts the field before its
-  blur handler runs) is deferred to the Engineer Agent. Next cycle should groom this
-  into an issue (or a human can fast-track it).
+  blur handler runs) was confirmed while scoping #76: clicking empty canvas calls
+  `selectNone()` from `FloorPlan`'s `onPointerDown`, React unmounts the focused
+  `<input>`, and removing a focused element fires no `blur`. Clicking a *different*
+  wall loses it for a second reason — the field is `key`ed on the selected id, so it
+  remounts with a fresh draft. #76 covers **both** fields on one shared path and
+  requires a test that would fail if the fix were reverted; the *mechanism* is left
+  to the Engineer Agent.
 - **No furniture / fixtures** — only doors and windows; no other placeable objects.
-- **Openings can't be resized, and their width isn't shown — in flight (#60,
-  triaged from a human-submitted idea 2026-07-26).** An opening's width
+- **Openings can't be resized, and their width isn't shown — done (#60, merged as
+  PR #65; triaged from a human-submitted idea 2026-07-26).** An opening's width
   (`wallAttach.length`) is fixed at creation; the only way to change it is
   delete-and-redraw, and there's no readout of how wide a placed door/window is.
   Accepted and enriched into the wall-work analogue: a pure, tested resize helper
@@ -188,6 +206,13 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   `setSelectedWallLength` through `commit()`, and an options-bar width field
   mirroring the wall-length field (#11). On-canvas always-on width labels (the
   #5 analogue) and drag-handle resize are explicit out-of-scope follow-ups.
+  **PR #65 shipped the code but not the docs** — the README still describes openings
+  as place-only, so the drift is tracked as #78 (docs-only).
+- **README drift: opening width undocumented — in flight (#78, opened 2026-07-29 by
+  the cycle's README backstop check).** #60/PR #65 shipped a user-visible capability
+  and touched no docs, so the README's Openings and Dimensions bullets still imply
+  openings are delete-and-redraw. Thin docs-only issue; everything else in the README
+  (Export menu, "Not yet", shortcuts, scripts, stack) verified accurate this run.
 - **Drag-creation for openings — done (#55, merged as PR #56).** Doors/windows can
   now be placed by press-drag-release along a wall (mirroring the wall tool's
   dual-gesture pattern), and the existing click-click flow is intact; reuses the
@@ -227,7 +252,8 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   one detaches just that end (`pickWallEndpoint` + `moveWallEndpointLive` in
   `store.ts`).
 - **Follow-up to #30: Cmd+drag to detach an endpoint without pre-selecting the
-  wall — in flight (#61).** Raised by the owner on PR #58 (2026-07-19); scoped into
+  wall — in flight (#61, now implemented by open PR #75 on branch
+  `feat/issue-61-cmd-drag-detach-endpoint`, awaiting review/acceptance).** Raised by the owner on PR #58 (2026-07-19); scoped into
   an issue this cycle (2026-07-26) now that #58 has merged. Adds an *accelerator* —
   hold Cmd/Ctrl and drag any wall's endpoint directly, no selection needed. Cmd/Ctrl
   is free (unused as a canvas drag modifier; only Cmd+Z/Y for undo/redo), so #30's
@@ -300,15 +326,16 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-27): #10 (prune stale selection), #20 (fit
-shortcut/zoom to selection), #21 (error boundary), #33 (SVG export), #52 (custom
-door swing glyph, follow-up to #51), #60 (resize a door/window opening & show its
-width — now implemented by **open PR #65**, awaiting review/acceptance), #61
-(Cmd/Ctrl+drag to detach an endpoint without pre-selecting), #63 (switch
-display units cm/m/mm/in/ft), and #66 (group export formats under an Export menu).
-Both #30 (detach a wall's endpoint, via PR #58) and
-#45 (dispatcher self-heal, via PR #57) merged earlier; #51/#55 merged before that.
-Do **not** re-propose any of these.
+Current open issues (as of 2026-07-29): #10 (prune stale selection), #20 (fit
+shortcut/zoom to selection), #21 (error boundary), #33 (SVG export — respecced as an
+entry in the shipped Export menu), #52 (custom door swing glyph, follow-up to #51),
+#61 (Cmd/Ctrl+drag to detach an endpoint without pre-selecting — implemented by
+**open PR #75**, awaiting review/acceptance), #63 (switch display units
+cm/m/mm/in/ft), plus this cycle's three: **#76** (commit a typed wall length /
+opening width on click-away to the canvas), **#77** (ignore canvas shortcuts while a
+toolbar control has focus), **#78** (README: document the opening width field).
+#60 (opening resize, via PR #65) and #66 (Export menu, via PR #69) merged since the
+last cycle; #30/#45 merged before that. Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -319,10 +346,21 @@ rough priority order) are:
    it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
    gaps" and the open question above. Do not write this issue until answered.
 
-The next cycle should reconcile GitHub state and look for the next thin,
-independently-shippable slice; with #63 taking the "editable units" gap, nothing
-else concrete is currently queued (rooms and cascading-follow both await a human
-call).
+The backlog is now nine issues deep and every *known* gap that doesn't need a human
+call is ticketed. The next cycle should reconcile GitHub state, run the README
+backstop check again (it caught real drift this run), and resist inventing work:
+rooms and cascading-follow both still await a human answer, and there is no other
+concrete queued slice.
+
+**A note on testability for UI-behavior issues (#76, #77).** Neither is reachable by
+today's test setup as-is: every test is a pure module, `vitest.config.ts` pins
+`environment: "node"`, and there is no DOM testing library or Cypress. Both issues
+therefore ask for a test that would **fail if the fix were reverted** and point at
+`src/ui/menuNavigation.ts` as the precedent for lifting a component's decision into a
+pure helper, while explicitly permitting the `jsdom` switch that `vitest.config.ts`'s
+own comment already invites. If the Engineer Agent lands either as component tests,
+that infrastructure choice is worth recording here — it unblocks a whole class of
+future UI issues.
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
 pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
@@ -362,6 +400,39 @@ Newest first (reverse-chronological). Add each new entry at the **top** of this 
   as shipped. Standing lesson: **when a UI-shell issue lands, re-read the older issues
   that target the shell it replaced** — #33 sat stale for a day pointing at a button
   row that was gone, and only a human caught it.
+- 2026-07-29 — Thirteenth Product Agent run (cycle). Reconciled with GitHub: **#60**
+  (opening resize, PR #65) and **#66** (Export menu, PR #69) merged since the last
+  cycle — both moved to "Current state"; **PR #75** is open implementing #61 (awaiting
+  review/acceptance, out of cycle scope). Created **three** issues, and notably none of
+  them were invented: two were gaps this file had explicitly parked *for a cycle run to
+  groom*, and the third came from the README backstop check.
+  **#76** — commit a typed wall length / opening width when the user clicks away onto
+  the canvas. Verified the mechanism in code rather than restating the 2026-07-27
+  hypothesis: the canvas `onPointerDown` calls `selectNone()`, React unmounts the
+  focused `<input>`, and **removing a focused element fires no `blur`** — so
+  `onBlur={commit}` never runs; clicking a *different* wall loses the draft for a
+  second reason (`key`ed on the selected id → remount). One shared fix for both fields.
+  **#77** — ignore canvas shortcuts while a toolbar control has focus. Confirmed the
+  listener's only guard skips `INPUT`/`TEXTAREA`/`SELECT`/`contentEditable`, so
+  **buttons leak**, and the leak is wider than this file recorded: the **arrows** leak
+  too, not just `h`/`s`/`[`/`]`/`Delete`. Also corrected a prior note — PR #69 didn't
+  "fix the arrow-key case," it worked around it locally with `stopPropagation` in
+  `Menu.tsx` *only while the menu is open*, and that file's own comment says a closed
+  trigger "leaks them as before." Three product calls made so the criteria couldn't
+  contradict the story: toolbar focus suppresses the canvas verbs; **`Escape` is the
+  exception** (non-destructive, universally "get me out"); **undo/redo stay global**
+  (app commands, not canvas verbs). `Delete` semantics on the canvas are unchanged.
+  **#78** — README docs drift: PR #65 shipped the opening-width field and touched no
+  docs, so the README still implies openings are delete-and-redraw. This is exactly the
+  case the backstop exists for; filed as a thin docs-only issue for a code PR rather
+  than edited here. Everything else in the README verified accurate (Export menu
+  described correctly; "Not yet" correctly lists SVG export, mid-span split, rooms).
+  One cross-cutting observation recorded under "focus next": #76 and #77 are the first
+  issues whose *behavior* no current test can reach (all tests are pure modules,
+  `environment: "node"`, no DOM library or Cypress), so both require a
+  fails-if-reverted test and explicitly permit the `jsdom` switch that
+  `vitest.config.ts`'s own comment invites. Open questions for the human unchanged
+  (rooms scope; rigid-chain vs. hinge cascading follow).
 - 2026-07-28 — Clarify run on PR #69 (implements #66). One new scope call from the
   human: the menu entries' `font-size: 13px` in `src/ui/Menu.module.css` is a literal
   hand-matched to `.toolbar .button`'s *undeclared* UA control font, which differs per
