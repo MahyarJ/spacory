@@ -9,10 +9,11 @@
 # does AT MOST ONE pipeline action (highest priority first), so a short tick can
 # never stampede a stack of expensive agent runs. A flock guarantees overlapping
 # ticks don't pile up; `agent:*` in-flight labels make double-firing visible and
-# survive restarts. Engineer runs (which create branches and edit files) execute in
-# a throwaway git worktree, never the primary checkout — so a concurrent
+# survive restarts. BOTH agent runs (engineer, which creates branches and edits
+# files; and product, which edits project-memory.md and may switch branches) execute
+# in a throwaway git worktree, never the primary checkout — so a concurrent
 # manual/interactive run in the primary tree can't have its HEAD or working files
-# yanked out mid-run (see run-engineer.sh, which self-isolates).
+# yanked out mid-run (see run-engineer.sh / run-product.sh, which self-isolate).
 #
 #   The label state machine (this script owns every transition):
 #
@@ -315,9 +316,12 @@ pr_for_issue() {  # $1=issue number
 }
 
 # ── agent runners (headless) ─────────────────────────────────────────────────
-# Product runs stay in the primary checkout on purpose: they commit
-# project-memory.md to main (see commit_memory) and only post comments — they never
-# create a feature branch.
+# Product runs self-isolate in a throwaway worktree too (see run-product.sh): they
+# edit project-memory.md and may `git switch`, which would otherwise corrupt a
+# concurrent run sharing the primary checkout (the bug where a cycle yanked a live
+# session onto main). Because project-memory.md lives on main, the isolated run
+# lands it back on main from the worktree via `git push origin HEAD:main`; the
+# commit_memory safety net below is the outer backstop for the rare in-place run.
 run_product()  { "$SCRIPT_DIR/run-product.sh"  "$@"; }
 
 # Engineer runs create branches, switch HEAD, and edit files — the exact thing that
@@ -356,10 +360,12 @@ run_with_retry() {  # $1=log-label  $2..=command to run
 }
 
 # Safety net: project-memory.md is the Product Agent's shared memory and belongs on
-# main (the Engineer never reads it). The agent is supposed to commit+push it itself
-# (see the product-agent skill), but if a run left it dirty, land it on main here so
-# it isn't swept into a feature branch or lost. Deterministic, best-effort, never
-# fails the tick. Only ever touches project-memory.md.
+# main (the Engineer never reads it). Isolated product runs now land it on main from
+# their own worktree (run-product.sh's land_memory), so the primary checkout is
+# normally clean by the time we get here and this no-ops. It remains as an outer
+# backstop for an in-place run (SPACORY_AGENT_ISOLATED=1) that left it dirty: land it
+# on main so it isn't swept into a feature branch or lost. Deterministic,
+# best-effort, never fails the tick. Only ever touches project-memory.md.
 commit_memory() {
   git diff --quiet -- project-memory.md \
     && git diff --cached --quiet -- project-memory.md && return 0
@@ -683,11 +689,13 @@ main() {
 }
 
 # A mkdir-based lock: portable (macOS has no `flock`) and atomic. cycle and tick
-# share ONE lock on purpose — both touch the primary checkout's shared state (the
-# product runs commit project-memory.md to main; commit_memory switches branches),
-# which would corrupt each other if run at once. (Engineer runs no longer factor in
-# here — they're isolated in per-run worktrees; see run-engineer.sh.) A stale lock
-# older than 2h is reclaimed so a crashed run can't wedge the loop forever.
+# share ONE lock on purpose. The agent runs themselves are now isolated in per-run
+# worktrees (run-engineer.sh / run-product.sh), so they no longer fight over the
+# primary checkout's HEAD — but the dispatcher still touches shared state directly:
+# commit_memory's backstop git ops run in the primary tree, and two product runs (or
+# a cycle racing a tick) would otherwise push project-memory.md to main concurrently.
+# So the lock stays. A stale lock older than 2h is reclaimed so a crashed run can't
+# wedge the loop forever.
 LOCK="${TMPDIR:-/tmp}/spacory-dispatch.lock.d"
 
 reclaim_stale_lock() {

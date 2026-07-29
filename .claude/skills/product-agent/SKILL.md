@@ -88,23 +88,33 @@ uncommitted. A dirty memory file pollutes the working tree that the next agent r
 is invisible to every other branch and lost on a crash.
 
 So in any mode that **edits** the file (`cycle` always; `clarify`/`triage` when a
-decision changes the spec — **not** `acceptance`, which is read-only), follow this
-exactly:
+decision changes the spec — **not** `acceptance`, which is read-only), first find
+out **where your checkout is** — run `git symbolic-ref -q --short HEAD` — because a
+headless run is isolated and an interactive one isn't:
 
-1. **Be on `main` before you edit.** Product modes touch no code and need no branch.
-   Run `git switch main` first (the file is identical across branches, so this is
-   safe). Do this **only** when you're going to edit the file — never switch
-   branches during read-only `acceptance`.
-2. **Edit, then commit only that file.** Stage nothing but the memory file:
-   `git add project-memory.md && git commit -m "Update project memory: <what changed>"`.
-   Never bundle it with any other change.
-3. **Push to `main`:** `git push origin main`, so other branches and the next run
-   pick it up immediately.
-4. **No AI attribution** in the commit (repo rule — no `Co-Authored-By`/"Generated
-   with" trailers).
+- **It prints nothing (detached `HEAD`).** You're in an **isolated worktree** a
+  headless run created, based at `origin/main`. The run harness (`run-product.sh`)
+  commits and pushes `project-memory.md` to `main` for you when the run ends, so
+  just **edit and save the file — then stop.** Do **not** run `git switch`,
+  `git commit`, or `git push`: there is no branch to be on, and `git switch main`
+  would fail because `main` is checked out in the primary tree. (This is the case
+  that used to yank a human's HEAD onto `main`.)
 
-End every run with a clean working tree — `git status` must show no pending
-`project-memory.md` changes.
+- **It prints a branch name.** You're running in place (an interactive
+  `/product-agent` session). Land it yourself:
+  1. **Be on `main` before you edit.** If the branch isn't `main`, `git switch main`
+     first (the file is identical across branches, so this is safe in a single
+     checkout). Never switch branches during read-only `acceptance`.
+  2. **Edit, then commit only that file.** Stage nothing but the memory file:
+     `git add project-memory.md && git commit -m "Update project memory: <what changed>"`.
+     Never bundle it with any other change.
+  3. **Push to `main`:** `git push origin main`.
+  4. **No AI attribution** in the commit (repo rule — no `Co-Authored-By`/"Generated
+     with" trailers).
+
+Either way, end every run with a clean working tree — `git status` must show no
+pending `project-memory.md` changes (in the detached case the harness clears it; in
+the branch case your own commit does).
 
 ---
 

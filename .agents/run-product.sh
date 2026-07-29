@@ -19,6 +19,24 @@
 #   .agents/run-product.sh clarify 9                        # answer product Qs on #9
 #   .agents/run-product.sh triage 42                        # triage idea issue #42
 #
+# Isolation: a product run edits project-memory.md and (per the skill) commits it to
+# main, and it may `git switch` branches — the exact thing that corrupts a concurrent
+# run (a manual/interactive session, or the parallel review+acceptance in do_review)
+# sharing one working tree. Historically these ran in the caller's checkout and could
+# yank a human's HEAD onto main mid-session. So, exactly like run-engineer.sh, this
+# script now re-runs itself inside a throwaway git worktree detached at the
+# freshly-fetched origin/main and tears it down afterwards. project-memory.md lives
+# on main, so — unlike an engineer feature branch — the isolated run lands it back on
+# main from the worktree via `git push origin HEAD:main` (see land_memory below); the
+# agent is told to just edit-and-leave the file when it's in a detached worktree.
+# Set SPACORY_AGENT_ISOLATED=1 to skip the wrapper and run in place (the wrapper uses
+# the guard to avoid double-wrapping; a disposable CI checkout can set it too).
+#
+# Env overrides (isolation):
+#   SPACORY_AGENT_ISOLATED   set to skip the worktree wrapper and run in place.
+#   SPACORY_WORKTREE_BASE    where per-run worktrees live
+#                            (default: $TMPDIR/spacory-agent-worktrees).
+#
 # Env overrides:
 #   CLAUDE_PERMISSION_MODE   default: acceptEdits
 #                            (use "bypassPermissions" for fully unattended runs)
@@ -40,7 +58,9 @@ PROMPT="$SCRIPT_DIR/product-agent-prompt.md"
 command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PATH" >&2; exit 1; }
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
-PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
+# Keep the caller's exact argv so we can re-invoke ourselves verbatim inside the
+# isolation worktree below (preserving a multi-word extra-instruction argument).
+ORIG_ARGS=("$@")
 
 # acceptance, clarify and triage each take a number; cycle is the default and
 # takes none.
@@ -61,6 +81,39 @@ case "${1:-}" in
     ;;
 esac
 EXTRA="${*:-}"
+
+# ── isolation: run in a throwaway git worktree, never the caller's checkout ────
+# (args are validated above, so a bad invocation fails before we create anything.)
+SPACORY_WORKTREE_BASE="${SPACORY_WORKTREE_BASE:-${TMPDIR:-/tmp}/spacory-agent-worktrees}"
+if [ -z "${SPACORY_AGENT_ISOLATED:-}" ]; then
+  command -v git >/dev/null 2>&1 || { echo "error: git required to isolate the run" >&2; exit 1; }
+  git -C "$REPO_ROOT" fetch --quiet origin \
+    || { echo "error: git fetch failed; cannot isolate the run" >&2; exit 1; }
+  mkdir -p "$SPACORY_WORKTREE_BASE"
+  WORKTREE="$SPACORY_WORKTREE_BASE/prod-$$-${RANDOM}"
+  git -C "$REPO_ROOT" worktree add --detach --quiet "$WORKTREE" origin/main \
+    || { echo "error: git worktree add failed ($WORKTREE)" >&2; exit 1; }
+  # Reuse the caller's installed deps so any verify the agent runs works without
+  # a fresh npm install.
+  if [ -d "$REPO_ROOT/node_modules" ] && [ ! -e "$WORKTREE/node_modules" ]; then
+    ln -s "$REPO_ROOT/node_modules" "$WORKTREE/node_modules"
+  fi
+  cleanup_worktree() {
+    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
+    git -C "$REPO_ROOT" worktree prune 2>/dev/null || true
+  }
+  trap cleanup_worktree EXIT
+  echo "→ isolating product run in worktree ${WORKTREE##*/} (detached at origin/main)" >&2
+  # Re-invoke the worktree's OWN copy so REPO_ROOT resolves to it; the guard stops
+  # that copy from isolating again (or the dispatcher from double-wrapping).
+  set +e
+  SPACORY_AGENT_ISOLATED=1 "$WORKTREE/.agents/run-product.sh" "${ORIG_ARGS[@]}"
+  rc=$?
+  set -e
+  exit "$rc"
+fi
+
+PERMISSION_MODE="${CLAUDE_PERMISSION_MODE:-acceptEdits}"
 
 case "$MODE" in
   acceptance)
@@ -97,9 +150,49 @@ $TASK"
 
 cd "$REPO_ROOT"
 
+# Deterministic memory-landing safety net for the isolated run. The agent edits
+# project-memory.md in this (detached, based-at-origin/main) worktree and — per the
+# skill — leaves the git work to us, because `git switch main` would fail while main
+# is checked out in the primary tree. So after the run we commit any dirty memory
+# file and push it to main with `HEAD:main` (fetch+rebase first to absorb a race).
+# Guarded to only ever land project-memory.md: if HEAD carries anything else we
+# refuse to push, so an opted-out (SPACORY_AGENT_ISOLATED=1) run in a real checkout
+# can't shove unrelated commits onto main. Best-effort; never fails the run.
+land_memory() {
+  if ! git diff --quiet -- project-memory.md 2>/dev/null \
+     || ! git diff --cached --quiet -- project-memory.md 2>/dev/null; then
+    git add project-memory.md 2>/dev/null || true
+    git commit -m "Update project memory (headless product run)" >/dev/null 2>&1 || true
+  fi
+  # Nothing committed beyond origin/main? Then there's nothing to push.
+  [ -z "$(git rev-list origin/main..HEAD 2>/dev/null)" ] && return 0
+  local changed; changed="$(git diff --name-only origin/main...HEAD 2>/dev/null || true)"
+  if [ "$changed" != "project-memory.md" ]; then
+    echo "warning: HEAD is ahead of origin/main with non-memory changes ($changed); not auto-landing on main" >&2
+    return 0
+  fi
+  git fetch --quiet origin main 2>/dev/null || true
+  git rebase --quiet origin/main >/dev/null 2>&1 || git rebase --abort >/dev/null 2>&1 || true
+  if git push origin HEAD:main >/dev/null 2>&1; then
+    echo "→ landed project-memory.md on main" >&2
+  else
+    echo "warning: push of project-memory.md to main failed (origin/main advanced?); memory NOT landed" >&2
+  fi
+}
+
+echo "→ Product Agent  [$MODE]${NUM:+ #$NUM}  running…" >&2
+
 args=( -p "$TASK"
        --append-system-prompt-file "$PROMPT"
        --permission-mode "$PERMISSION_MODE" )
 [ -n "${CLAUDE_MODEL:-}" ] && args+=( --model "$CLAUDE_MODEL" )
 
-exec claude "${args[@]}"
+# Not `exec`: we need to land project-memory.md from this worktree before it's torn
+# down by the wrapper's cleanup trap.
+set +e
+claude "${args[@]}"
+rc=$?
+set -e
+
+land_memory
+exit "$rc"
