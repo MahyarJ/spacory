@@ -3,6 +3,7 @@ import { useApp } from "@app/store";
 import { clampScale } from "@app/viewport";
 import {
   getConnectionPoints,
+  pickAnyWallEndpoint,
   pickWallEndpoint,
   type WallEndpointRef,
 } from "@geometry/connectivity";
@@ -249,6 +250,18 @@ export function FloorPlan() {
     }
   };
 
+  // Arm a single-wall-endpoint drag (detach). Shared by the select-first
+  // handle grab and the Cmd/Ctrl accelerator so both produce the same gesture.
+  const beginEndpointDrag = (
+    ref: WallEndpointRef,
+    startCoord: Point,
+    grabWorld: Point,
+    snap: boolean,
+  ) => {
+    setMovingEndpoint({ ref, startCoord, grabWorld, snap });
+    useApp.getState().beginLiveDrag();
+  };
+
   const onPointerDown: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
     // Capture on the <svg> itself (currentTarget), not e.target — a clicked
@@ -283,14 +296,33 @@ export function FloorPlan() {
         const selWall = plan.walls.find((w) => w.id === selId);
         const end = selWall ? pickWallEndpoint(selWall, world, 10) : null;
         if (selWall && end) {
-          setMovingEndpoint({
-            ref: { wallId: selWall.id, end },
-            startCoord: selWall[end],
-            grabWorld: world,
-            snap: !e.altKey,
-          });
-          useApp.getState().beginLiveDrag();
+          beginEndpointDrag(
+            { wallId: selWall.id, end },
+            selWall[end],
+            world,
+            !e.altKey,
+          );
           return;
+        }
+      }
+
+      // Cmd/Ctrl accelerator: detach the nearest endpoint of *any* wall without
+      // selecting it first. Tested before connection points and walls so it
+      // wins over starting a junction/wall drag. At a shared junction it detaches
+      // the topmost wall (see `pickAnyWallEndpoint`); only a genuinely ambiguous
+      // grab (endpoints equidistant but at different spots) reports a tie and
+      // falls through, where the user disambiguates via the select-first handles.
+      if (e.metaKey || e.ctrlKey) {
+        const pick = pickAnyWallEndpoint(plan.walls, world, 10);
+        if (pick.kind === "hit") {
+          const wall = plan.walls.find((w) => w.id === pick.ref.wallId);
+          if (wall) {
+            // Keep the OS/browser out of it (text selection, drag-start, the
+            // macOS Ctrl+click menu) now that the gesture is ours.
+            e.preventDefault();
+            beginEndpointDrag(pick.ref, wall[pick.ref.end], world, !e.altKey);
+            return;
+          }
         }
       }
 
