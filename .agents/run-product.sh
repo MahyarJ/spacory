@@ -171,13 +171,28 @@ land_memory() {
     echo "warning: HEAD is ahead of origin/main with non-memory changes ($changed); not auto-landing on main" >&2
     return 0
   fi
-  git fetch --quiet origin main 2>/dev/null || true
-  git rebase --quiet origin/main >/dev/null 2>&1 || git rebase --abort >/dev/null 2>&1 || true
-  if git push origin HEAD:main >/dev/null 2>&1; then
-    echo "→ landed project-memory.md on main" >&2
-  else
-    echo "warning: push of project-memory.md to main failed (origin/main advanced?); memory NOT landed" >&2
-  fi
+  # Push HEAD:main, retrying the fetch+rebase+push a few times. The worktree is torn
+  # down right after this, so a lost push means a lost memory commit — and the
+  # dispatch lock only serializes *our* runs, not an external push to main. Re-basing
+  # onto the advanced origin/main and retrying wins the race in practice; we only
+  # warn (never fail the run) once a few attempts can't land it.
+  local tries=0
+  while :; do
+    git fetch --quiet origin main 2>/dev/null || true
+    git rebase --quiet origin/main >/dev/null 2>&1 || git rebase --abort >/dev/null 2>&1 || true
+    if git push origin HEAD:main >/dev/null 2>&1; then
+      if [ "$tries" -eq 0 ]; then
+        echo "→ landed project-memory.md on main" >&2
+      else
+        echo "→ landed project-memory.md on main (attempt $((tries + 1)))" >&2
+      fi
+      return 0
+    fi
+    tries=$((tries + 1))
+    [ "$tries" -ge 3 ] && break
+    sleep 2
+  done
+  echo "warning: could not land project-memory.md on main after $tries attempts (origin/main kept advancing, or network down); NOT landed" >&2
 }
 
 echo "→ Product Agent  [$MODE]${NUM:+ #$NUM}  running…" >&2
