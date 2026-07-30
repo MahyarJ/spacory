@@ -159,8 +159,23 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   the submitted #85 was an epic spanning gestures + layout + two device classes:
   - **#84 — canvas touch gestures** (tap-and-drag scrolls instead of drawing; owns
     `touch-action`, one/two-finger pan, pinch zoom). **Higher user impact — on iPad
-    you currently cannot draw at all.** Still `agent:triage` as of this run;
-    a separate triage pass grooms it.
+    you currently cannot draw at all.** **Triaged & enriched 2026-07-30**, retitled
+    "Make the canvas drawable by touch: one-finger tool gestures, two-finger pan and
+    pinch zoom." Premise confirmed in code: **zero `touch-action` declarations in
+    `src/`**, so the browser claims the finger drag before `FloorPlan.tsx`'s pointer
+    handlers see it. Two same-root-cause gaps folded in: touch has no pan/zoom path
+    (pan = `e.button === 2` right-drag or the Pan tool, zoom = `onWheel` only) and
+    there is **no `onPointerCancel`**, so a browser-stolen gesture leaves
+    `drawingWall`/`moving*`/`beginLiveDrag()` stuck. Product calls: **one finger =
+    the active tool's gesture, two fingers = pan + pinch with any tool active**
+    (never forces a trip to the Pan tool); pinch anchors on the finger midpoint the
+    way wheel zoom anchors on the cursor; **never disable page zoom** to fix it
+    (no `user-scalable=no`/`maximum-scale=1` — suppression is scoped to the canvas
+    via `touch-action`); the **multi-touch viewport math must live in a pure tested
+    module** (`src/app/viewport.ts`, beside `clampScale`/`computeFitView`) since
+    there's no browser e2e and jsdom can't do real multi-touch; one undo entry per
+    completed touch edit, none for pan/pinch, and `pointercancel` aborts without
+    committing.
   - **#85 — the app shell + toolbar at tablet widths** (triaged & enriched this
     run, retitled "Make the toolbar and app shell usable at tablet (iPad) widths").
     Product calls: the desktop `Tip: Right-drag to pan, Wheel to zoom` label is
@@ -376,7 +391,9 @@ selection), #21 (error boundary), #52 (custom door swing glyph, follow-up to #51
 width on click-away to the canvas), #77 (ignore canvas shortcuts while a toolbar
 control has focus), plus the new responsive front: **#84** (iPad tap-and-drag
 scrolls instead of drawing — still `agent:triage`, needs its own triage pass) and
-**#85** (tablet-width app shell + toolbar — triaged & enriched 2026-07-30).
+**#85** (tablet-width app shell + toolbar — triaged & enriched 2026-07-30). Both are now groomed and
+awaiting a human promotion to `agent:ready`; **#84 should go first** (on iPad you
+cannot draw at all today, whereas #85 is layout discomfort).
 Closed since the last cycle: **#33** (SVG export, merged as PR #82), **#61**
 (Cmd/Ctrl+drag detach, merged as PR #75), **#78** (README opening-width docs, merged
 as PR #81); #60 and #66 merged before that. Do **not** re-propose any of these.
@@ -436,6 +453,36 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-30 — Triage run on human-submitted idea #84 ("iPad Wall drawing is not
+  possible as it scrolls the canvas") — the companion pass to #85's triage earlier
+  today. Verified the report in code instead of trusting it: there is **no
+  `touch-action` declaration anywhere in `src/`**, so the default `touch-action: auto`
+  lets the browser take a finger drag as a page scroll and fire `pointercancel` before
+  `FloorPlan.tsx`'s handlers can act — the user's description was exactly right.
+  Accepted and enriched into "Make the canvas drawable by touch: one-finger tool
+  gestures, two-finger pan and pinch zoom." Deliberately folded in **two gaps with the
+  same root cause** rather than ticketing them separately, because fixing
+  `touch-action` without them ships a canvas you can draw on but can't navigate: touch
+  has no pan/zoom equivalent at all (pan is right-drag or the Pan tool; zoom is
+  `onWheel`), and there is **no `onPointerCancel` handler**, so a browser-stolen
+  gesture strands `drawingWall`/`moving`/`movingPoint`/`movingEndpoint` and an open
+  `beginLiveDrag()`. Product calls pinned: **one finger = the active tool's gesture,
+  two fingers = pan + pinch with any tool active** (making two-finger pan
+  tool-independent avoids the awkward "switch to Pan, move, switch back" loop that a
+  literal reading would have produced); pinch anchors the world point under the finger
+  midpoint, mirroring wheel zoom's cursor anchoring; **never fix this by disabling
+  page zoom** (`user-scalable=no`/`maximum-scale=1` is the tempting one-line "fix" and
+  an accessibility regression — suppression is scoped to the canvas element); the
+  **multi-touch viewport math must live in a pure tested module** (`src/app/viewport.ts`)
+  with the specific cases named, since there's still no browser e2e and jsdom has no
+  real multi-touch — otherwise nothing about this feature would be automatically
+  verifiable; and undo semantics stated explicitly (one entry per completed touch edit,
+  none for pan/pinch, `pointercancel` aborts without committing). README delta given
+  exactly (the Canvas bullet; "Not yet" needs no change — it never mentioned touch).
+  Kept independent of #85: this issue owns **canvas gestures**, #85 owns **chrome
+  layout**. Explicit follow-ups left out: stylus / Apple Pencil specifics, finger-sizing
+  the on-canvas handle hit radii, phone-width layout, and any new touch-only gestures
+  (double-tap zoom, long-press, rotate). Did not add `agent:ready` (a human promotes it).
 - 2026-07-30 — Triage run on human-submitted idea #85 ("Responsive design kick off").
   The submission was a **staged epic** ("responsive primitives → iPad/tablets → then
   phones", motivated by touch *and* styluses/Apple Pencil). Accepted the direction but
