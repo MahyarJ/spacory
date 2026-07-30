@@ -2,7 +2,13 @@ import { PlanParseError, parsePlan, serializePlan } from "@app/io";
 import { useApp } from "@app/store";
 import { buildExportSvg } from "@geometry/exportSvg";
 import { Menu } from "@ui/Menu";
-import { Download, FileJson, Image as ImageIcon, Upload } from "lucide-react";
+import {
+  Download,
+  FileJson,
+  Image as ImageIcon,
+  Shapes,
+  Upload,
+} from "lucide-react";
 import { useRef } from "react";
 import { ICON_SIZE } from "./constants";
 import styles from "./Toolbar.module.css";
@@ -73,6 +79,15 @@ export function ProjectActions() {
 
   const onExportPng = () => exportPlanAsPng(useApp.getState().plan);
 
+  // The vector export is the same markup PNG rasterizes, saved verbatim — so it
+  // skips the canvas step entirely.
+  const onExportSvg = () => {
+    const plan = useApp.getState().plan;
+    const { markup } = buildExportSvg(plan);
+    const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+    downloadBlob(blob, `${sanitizeFilename(plan.meta.name)}.svg`);
+  };
+
   const onImportClick = () => fileInputRef.current?.click();
 
   const onFileChange: React.ChangeEventHandler<HTMLInputElement> = async (
@@ -117,6 +132,12 @@ export function ProjectActions() {
             label: "PNG",
             icon: <ImageIcon size={ICON_SIZE} />,
             onSelect: onExportPng,
+          },
+          {
+            key: "svg",
+            label: "SVG",
+            icon: <Shapes size={ICON_SIZE} />,
+            onSelect: onExportSvg,
           },
         ]}
       />

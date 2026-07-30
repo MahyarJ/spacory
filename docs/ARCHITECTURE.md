@@ -110,6 +110,8 @@ replaced the old "cover cap" approach.
 
 ## Tooling
 
-- **Vitest** (`*.test.ts`, randomized order) for the pure modules.
+- **Vitest** (`*.test.ts`, randomized order) for the pure modules, plus a few
+  component tests (`*.test.tsx`) that opt into jsdom +
+  `@testing-library/react` per file — see `DECISIONS.md`.
 - **Biome** for lint + format (`biome.json`).
 - **GitHub Actions**: `biome ci` → `tsc -b` → `npm test` on push/PR to `main`.
