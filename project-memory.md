@@ -147,6 +147,34 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   **`Escape` the one exception** (non-destructive, universally "get me out"; the open
   menu still consumes its own Escape first), and **undo/redo stay global** (app
   commands, not canvas verbs). `Delete` semantics on the canvas are unchanged.
+- **Desktop-only UI; no responsive or touch support — now a two-issue front
+  (#84, #85; triaged 2026-07-30 from human-submitted ideas).** Verified in code:
+  `src/theme.css` holds the only `@media` queries in `src/` (both
+  `prefers-color-scheme`), there are **no width breakpoints and no `touch-action`
+  declarations anywhere**, `.toolbar` is a single non-wrapping flex row of ~14
+  controls that **clips Undo/Redo off-screen at iPad portrait width (768 px)**,
+  toolbar buttons are ~28–30 px tall (under a comfortable touch target), and
+  `App.module.css` uses `100vh` (which on iOS Safari hides the bottom of the canvas
+  under the browser chrome). Split into two independent issues on purpose, because
+  the submitted #85 was an epic spanning gestures + layout + two device classes:
+  - **#84 — canvas touch gestures** (tap-and-drag scrolls instead of drawing; owns
+    `touch-action`, one/two-finger pan, pinch zoom). **Higher user impact — on iPad
+    you currently cannot draw at all.** Still `agent:triage` as of this run;
+    a separate triage pass grooms it.
+  - **#85 — the app shell + toolbar at tablet widths** (triaged & enriched this
+    run, retitled "Make the toolbar and app shell usable at tablet (iPad) widths").
+    Product calls: the desktop `Tip: Right-drag to pan, Wheel to zoom` label is
+    **hidden** on a coarse pointer rather than replaced with touch instructions
+    (promising gestures #84 hasn't built yet would be a lie), that hint decision
+    goes in a **pure tested helper** (the `src/ui/menuNavigation.ts` shape) since
+    jsdom has no layout engine to assert the CSS on, ≥44 px targets under
+    `@media (pointer: coarse)`, `dvh`/`dvw` for the shell, **breakpoints as shared
+    tokens** in `theme.css` (the reusable "primitives" the human asked for), and
+    **pinch-zoom must not be disabled** (no `user-scalable=no`).
+  Explicit follow-ups left out of both: **phone-width layout** (below ~600 px),
+  **stylus / Apple Pencil specifics** (pressure, tilt, palm rejection — the human
+  called these out as motivating, worth its own issue once touch drawing works),
+  and finger-sizing the **on-canvas** interaction targets (belongs with #84).
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -341,16 +369,17 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-29): #10 (prune stale selection), #20 (fit
-shortcut/zoom to selection), #21 (error boundary), #33 (SVG export — respecced as an
-entry in the shipped Export menu), #52 (custom door swing glyph, follow-up to #51),
-#61 (Cmd/Ctrl+drag to detach an endpoint without pre-selecting — implemented by
-**open PR #75**, awaiting review/acceptance), #63 (switch display units
-cm/m/mm/in/ft), plus this cycle's three: **#76** (commit a typed wall length /
-opening width on click-away to the canvas), **#77** (ignore canvas shortcuts while a
-toolbar control has focus), **#78** (README: document the opening width field).
-#60 (opening resize, via PR #65) and #66 (Export menu, via PR #69) merged since the
-last cycle; #30/#45 merged before that. Do **not** re-propose any of these.
+Current open issues (as of 2026-07-30, read during the #85 triage run — a cycle run
+should re-reconcile): #10 (prune stale selection), #20 (fit shortcut/zoom to
+selection), #21 (error boundary), #52 (custom door swing glyph, follow-up to #51),
+#63 (switch display units cm/m/mm/in/ft), #76 (commit a typed wall length / opening
+width on click-away to the canvas), #77 (ignore canvas shortcuts while a toolbar
+control has focus), plus the new responsive front: **#84** (iPad tap-and-drag
+scrolls instead of drawing — still `agent:triage`, needs its own triage pass) and
+**#85** (tablet-width app shell + toolbar — triaged & enriched 2026-07-30).
+Closed since the last cycle: **#33** (SVG export, merged as PR #82), **#61**
+(Cmd/Ctrl+drag detach, merged as PR #75), **#78** (README opening-width docs, merged
+as PR #81); #60 and #66 merged before that. Do **not** re-propose any of these.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -367,15 +396,21 @@ backstop check again (it caught real drift this run), and resist inventing work:
 rooms and cascading-follow both still await a human answer, and there is no other
 concrete queued slice.
 
-**A note on testability for UI-behavior issues (#76, #77).** Neither is reachable by
-today's test setup as-is: every test is a pure module, `vitest.config.ts` pins
-`environment: "node"`, and there is no DOM testing library or Cypress. Both issues
-therefore ask for a test that would **fail if the fix were reverted** and point at
-`src/ui/menuNavigation.ts` as the precedent for lifting a component's decision into a
-pure helper, while explicitly permitting the `jsdom` switch that `vitest.config.ts`'s
-own comment already invites. If the Engineer Agent lands either as component tests,
-that infrastructure choice is worth recording here — it unblocks a whole class of
-future UI issues.
+**A note on testability for UI-behavior issues (#76, #77, #85) — updated 2026-07-30,
+the gap is now half closed.** This file previously recorded "no DOM testing library
+or Cypress"; that is **out of date**. `vitest.config.ts` still defaults to
+`environment: "node"` for the pure modules, but its comment now documents that
+**component tests opt into jsdom with a `@vitest-environment jsdom` docblock**, and
+`src/features/toolbar/ProjectActions.test.tsx` is a working example. So component
+behavior *is* reachable now — cite that file as the precedent when writing UI issues.
+Two limits still bind: jsdom has **no layout engine** (so CSS layout/responsive
+criteria can't be asserted there — #85's layout criteria are prose-verified while its
+one real *decision*, which hint text to show, is required to live in a pure helper),
+and there is still **no Cypress / real-browser e2e**, so genuine pointer-gesture
+behavior (#84's touch drawing) has no automated harness. Keep asking for a test that
+would **fail if the fix were reverted**, and keep pointing at
+`src/ui/menuNavigation.ts` as the pattern for lifting a component's decision into a
+pure module.
 
 Prefer issues that are vertically thin, independently shippable, and that lean on the
 pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
@@ -401,6 +436,35 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-07-30 — Triage run on human-submitted idea #85 ("Responsive design kick off").
+  The submission was a **staged epic** ("responsive primitives → iPad/tablets → then
+  phones", motivated by touch *and* styluses/Apple Pencil). Accepted the direction but
+  **narrowed the issue to stage one**, since one ticket spanning gestures + shell
+  layout + two device classes isn't independently shippable — and the human's own
+  wording already staged it. Retitled to "Make the toolbar and app shell usable at
+  tablet (iPad) widths." Verified the "desktop-only" premise in code rather than
+  taking it on faith, and it's worse than cosmetic: `.toolbar` is a single
+  non-wrapping flex row of ~14 controls that **clips Undo/Redo off-screen at 768 px**,
+  buttons are ~28–30 px tall, `App.module.css` uses `100vh` (iOS Safari hides the
+  canvas bottom under browser chrome), and there are **zero width breakpoints or
+  `touch-action` declarations** in `src/`. Key sequencing call: **canvas touch
+  gestures belong to #84, not #85** — #84 ("tap and drag scrolls the canvas") is the
+  higher-impact bug (on iPad you can't draw at all) and owns `touch-action` / pan /
+  pinch; the two are independent and can land in either order, but #84 should be
+  promoted first. #84 was left on `agent:triage` for its own pass (one mode per run).
+  Product calls pinned in #85: hide the desktop `Right-drag to pan, Wheel to zoom` tip
+  on a coarse pointer rather than replacing it with touch instructions (don't promise
+  gestures #84 hasn't built); put that hint decision in a **pure tested helper**;
+  ≥44 px targets under `@media (pointer: coarse)`; `dvh`/`dvw`; breakpoints as
+  **shared tokens** in `theme.css` (the "primitives" the human asked for, and what the
+  phone pass reuses); and **never disable pinch-zoom** (no `user-scalable=no`) — an
+  accessibility regression that's tempting as an overflow "fix". Left phone-width
+  layout, stylus/Pencil specifics, and finger-sizing the on-canvas handles as explicit
+  follow-ups. Also corrected two pieces of stale memory found while reading: the
+  open-issue list (#33/#61/#78 have merged as PRs #82/#75/#81) and the testability
+  note — **jsdom component tests now exist** (`ProjectActions.test.tsx`, via a
+  `@vitest-environment jsdom` docblock), though there's still no browser e2e and jsdom
+  has no layout engine. Did not add `agent:ready` (a human promotes it).
 - 2026-07-29 — Clarify run on issue #33 (SVG export). The human flagged that the
   spec predated the Export menu: it asked for "a new Export SVG button next to Export
   PNG," a toolbar that no longer exists now that #66 shipped as PR #69. Rewrote the
