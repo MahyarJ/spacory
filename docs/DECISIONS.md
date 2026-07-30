@@ -217,6 +217,20 @@ endpoint hit-tests, before connection points and walls — so the accelerator
 wins over starting a junction or whole-wall drag, but the existing behavior for
 a selected wall is untouched.
 
+## Component tests: jsdom per-file, not globally
+
+**Decision.** A handful of component tests (currently
+`src/features/toolbar/ProjectActions.test.tsx`) run under jsdom +
+`@testing-library/react`, opted into with a `// @vitest-environment jsdom`
+docblock. The Vitest default environment stays `node`.
+
+**Why.** Some behavior only exists once a component is wired up — that the Export
+menu really offers an "SVG" entry, and that selecting it hands a `.svg` blob to
+the download helper, can't be reached by testing a pure function. Rather than
+verify that by hand (which doesn't regress-guard), test it where it lives. Keeping
+jsdom per-file rather than global means the many pure geometry/io/history tests
+don't pay for a DOM they never touch.
+
 ## Click-away commits an inline draft field via a document-capture pre-commit
 
 **Decision.** The options bar's inline number fields (wall length, opening width)

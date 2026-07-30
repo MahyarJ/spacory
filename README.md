@@ -29,15 +29,15 @@ connected room structures.
 - ♻️ **Autosave** — the working plan and the viewport (pan/zoom) are persisted to
   `localStorage` and restored on reload
 - 💾 **Import / export** — load a plan from JSON, and get it back out through the
-  toolbar's **Export** menu, which groups the available formats (JSON plan file
-  and PNG image today)
+  toolbar's **Export** menu, which groups the available formats (JSON plan file,
+  PNG image and SVG vector image)
 - 🧭 **Canvas** — pan (right-drag or Pan tool) and zoom (wheel); "Fit" frames the
   whole plan in one click
 - 🎨 **Theming** — dark / light / system, via CSS variables
 - ⚡ Built with **Vite + React + TypeScript**
 
-Not yet: SVG (vector) image export, splitting a wall where another ends mid-span,
-and rooms / enclosed areas. See [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope
+Not yet: splitting a wall where another ends mid-span, and rooms / enclosed
+areas. See [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope
 notes.
 
 ---
