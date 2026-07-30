@@ -28,14 +28,60 @@ reads). Run `.agents/dispatch.sh setup` once to create the labels.
  PR agent:review ──review + acceptance──▶ agent:changes   (if either asks for changes)
                                     └────▶ agent:accepted  (if both pass)
  PR agent:changes ──resolve──▶ PR agent:review            (loops, capped by SPACORY_MAX_ROUNDS)
+ PR agent:conflict ──reconcile──▶ PR agent:review         (merge main in, resolve conflicts, push)
  issue/PR agent:clarify ──clarify──▶ spec refined; PR ▶ agent:review, issue ▶ backlog
  PR agent:accepted ──▶ human merges  (or SPACORY_AUTOMERGE=1 + CI green)
  anything ──▶ agent:blocked          (needs a human; the dispatcher leaves it alone)
 ```
 
+**Merge conflicts (the "main moved under me" door).** When another PR merges,
+`main` advances and an open PR's branch can start **conflicting** with it. A conflict
+only actually matters at the **merge boundary** — `review` reads the PR's own diff and
+`resolve` edits its branch, both fine while it conflicts with `main` — so the loop
+gates it there rather than scanning every resting PR each tick: when a PR reaches
+**`agent:accepted`**, `maybe_merge` checks its mergeability and, if it's `CONFLICTING`,
+routes it to **`agent:conflict`** instead of merging. (You can also label any PR
+`agent:conflict` by hand to force a reconcile sooner.) A PR in `agent:conflict` is the
+**highest-priority** action: the Engineer's **`reconcile`** mode merges the latest
+`main` **into** the branch (a merge commit + plain push — never a rebase or
+force-push; the PR squash-merges anyway, so the merge commit never reaches `main`),
+resolves the conflicts preserving **both** sides' intent, re-verifies, and pushes. The
+PR returns to **`agent:review`** to be re-judged against the merged base. If a conflict
+needs a product call to resolve, the Engineer asks on the PR and stops (blocked), same
+as any other ambiguity.
+
+**The freshness gate (behind main, without a textual conflict).** `CONFLICTING` only
+catches *textual* conflicts. Under a fast merge rate a PR can be perfectly
+`MERGEABLE`, pass CI, and still break `main` once merged — because main changed an API
+it depends on and CI only ever ran against the branch's now-**stale base**. So at the
+**merge boundary only** — when a PR reaches `agent:accepted` (`maybe_merge`) — the
+dispatcher also checks whether the branch is **behind** `main` (via the compare API's
+`behind_by`, so it works whether or not branch protection is on) and, if so, routes it
+to `agent:conflict` → `reconcile`. That merges main in cleanly and sends the PR back
+through review, so CI validates the **actual merged result** before we (or a human)
+merge. The check is deliberately **scoped to the accept boundary** — not to
+implement/resolve or the review queue — so fast-moving main never churns every
+intermediate run; a PR only needs to be current at the moment it's about to land.
+(`implement` already branches from freshly-fetched `origin/main` every run, so a PR is
+never stale *at creation* — staleness only accrues afterward, as other PRs merge.)
+
+**Complementary GitHub setting.** For defense in depth, enable **"Require branches to
+be up to date before merging"** in `main`'s branch protection. GitHub then blocks a
+merge until the branch is current and re-runs required checks against the merged
+result — a server-side backstop to the dispatcher's freshness gate (and it makes
+`gh pr view --json mergeStateStatus` report `BEHIND`, which the gate picks up too).
+
+**Trade-off under a very fast main.** If `main` merges faster than a full
+reconcile → review → accept cycle (a few minutes of agent runs), a PR can end up
+"chasing" main — reconciled, re-accepted, found behind again, reconciled again. This is
+inherent to requiring up-to-date merges (GitHub's own "Update branch" button has the
+same treadmill) and self-corrects once the burst quiets. A reconcile counts as a fresh
+attempt, so it resets the review-round budget rather than tripping the non-convergence
+cap on what is legitimate churn.
+
 In-flight states (`agent:triaging` / `implementing` / `reviewing` / `resolving` /
-`clarifying`) are set while an agent is running so a crash or restart is visible
-and can't double-fire.
+`reconciling` / `clarifying`) are set while an agent is running so a crash or restart
+is visible and can't double-fire.
 
 ### Enqueuing work
 
@@ -89,11 +135,12 @@ Unparseable → blocked.
 
 ## Priority per tick (drain before pulling new work)
 
-1. `agent:changes` PR → **resolve**
-2. `agent:clarify` issue/PR → **clarify** (issue: Product; PR: Product + Engineer in parallel), then transition
-3. `agent:review` PR → **review + acceptance** (run in parallel), then transition
-4. `agent:triage` issue → **triage** (groom the idea), then transition
-5. `agent:ready` issue with no PR → **implement**
+1. `agent:conflict` PR → **reconcile** (merge `main` in, resolve conflicts), then transition — reached via a hand-label or `maybe_merge` routing an accepted-but-conflicting/behind PR here
+2. `agent:changes` PR → **resolve**
+3. `agent:clarify` issue/PR → **clarify** (issue: Product; PR: Product + Engineer in parallel), then transition
+4. `agent:review` PR → **review + acceptance** (run in parallel), then transition
+5. `agent:triage` issue → **triage** (groom the idea), then transition
+6. `agent:ready` issue with no PR → **implement**
 
 One action per tick, so a short interval can never stampede a stack of expensive
 agent runs. A single `mkdir` lock (macOS has no `flock`) is shared by the tick
@@ -125,7 +172,7 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the budget last reset** before a PR is blocked. Resets on either of two signals: a **fresh attempt** (the PR re-enters the review loop from outside — a reopen from `accepted`/`blocked`, a `clarify`, a rebase-relabel, or first implement) or a **spec edit** (the linked issue body changes). So a converged PR reopened for one more change starts fresh |
+| `SPACORY_MAX_ROUNDS` | `5` | resolve↔review rounds **since the budget last reset** before a PR is blocked. Resets on either of two signals: a **fresh attempt** (the PR re-enters the review loop from outside — a reopen from `accepted`/`blocked`, a `clarify`, a `reconcile`, a rebase-relabel, or first implement) or a **spec edit** (the linked issue body changes). So a converged PR reopened for one more change starts fresh |
 | `SPACORY_AUTOMERGE` | `0` | `1` = squash-merge an accepted PR once CI is green |
 | `SPACORY_AGENT_RETRIES` | `1` | extra attempts for an agent run that exits non-zero before blocking (a non-zero exit is always an infra fault — a stalled stream, a killed process — never a "changes requested" verdict, so a retry can't mask a real rejection). `0` = block on first failure |
 | `SPACORY_AGENT_RETRY_BACKOFF_SECS` | `20` | wait between those attempts |
@@ -160,11 +207,24 @@ since it's fully unattended. The same `dispatch.sh` logic lifts over unchanged.
 
 - **One action per tick** + **mkdir lock** → no stampede, no overlap.
 - **In-flight labels** → double-firing is visible and prevented across restarts.
+- **Conflicts can't reach a merge.** At the merge boundary (`maybe_merge`), an accepted
+  PR that's `CONFLICTING` is routed to `agent:conflict` and reconciled (highest
+  priority) rather than merged — so neither automerge nor a human ever lands a branch
+  that can't merge. (A human can also hand-label `agent:conflict` to force it sooner.)
+  `reconcile` only ever merges `main` in — never rebases or force-pushes (force-push is
+  denied by policy). A reconcile that can't resolve a conflict without a product
+  decision blocks and asks, never guesses.
+- **Stale-based code can't reach main.** At the merge boundary (`maybe_merge`) an
+  accepted PR that is merely **behind** `main` — no textual conflict — is reconciled
+  first, so CI validates the merged result and semantic drift can't slip through on a
+  green-against-a-stale-base PR. Scoped to the accept boundary so fast-moving main
+  doesn't churn intermediate runs; pair with GitHub's "require branches up to date"
+  protection for a server-side backstop.
 - **Round cap** (`SPACORY_MAX_ROUNDS`) → a non-converging PR is blocked, not looped
   forever. Counted only **since the budget last reset**, on two principled signals: a
   **fresh attempt** (the PR re-entering the resolve↔review loop from outside it — a
-  reopen from `accepted`/`blocked`, a `clarify`, a rebase-relabel, or first implement)
-  or a **spec edit** (the linked issue body changing). Both are read off the
+  reopen from `accepted`/`blocked`, a `clarify`, a `reconcile`, a rebase-relabel, or
+  first implement) or a **spec edit** (the linked issue body changing). Both are read off the
   dispatcher-owned label timeline / issue metadata, so there's no human-vs-agent
   ambiguity. So evolving requirements and a converged PR reopened for one more change
   don't burn the budget; the cap trips on genuine agent-vs-agent stalling *within a
