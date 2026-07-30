@@ -217,6 +217,23 @@ latest_comment() {  # $1=pr $2=after-iso $3=header-substring
     | grep -F "$3" | tail -1 | cut -f2- || true
 }
 
+# Isolate the decision text the agents put on their `**Verdict:** …` line — the
+# parsing contract spelled out in the product-agent / engineer-agent skills. The
+# comment bodies are fed in already newline-flattened (latest_comment /
+# latest_issue_comment turn every newline into a space), and the Verdict line is the
+# LAST line of the comment, so everything after the final "verdict:" marker IS the
+# verdict clause. Classifying only this clause — instead of the whole comment —
+# stops incidental prose elsewhere in the write-up from being read as a verdict:
+# e.g. an out-of-scope note mentioning "palm rejection" used to flip an *accepted*
+# triage to "rejected" (see docs/DECISIONS.md). If a comment carries no marker at all
+# (older/hand-written), fall back to the whole body so it still classifies as before.
+verdict_clause() {  # $1=flattened comment body
+  case "$1" in
+    *[Vv]erdict:*) printf '%s' "${1##*[Vv]erdict:}" ;;   # tail after the last marker
+    *)             printf '%s' "$1" ;;
+  esac
+}
+
 # classify a verdict comment body → pass | changes | defer | none
 #   defer = a CONDITIONAL accept: the code is approved but a non-code artifact
 #   (a stale PR body/title, or the linked issue's spec drifting from what shipped)
@@ -226,7 +243,7 @@ latest_comment() {  # $1=pr $2=after-iso $3=header-substring
 #   Order matters: "changes requested" and the "…pending…" conditional are both
 #   checked before the bare accept/approve, since each contains that word.
 verdict_of() {  # $1=body
-  local body_lc; body_lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  local body_lc; body_lc="$(verdict_clause "$1" | tr '[:upper:]' '[:lower:]')"
   [ -z "$body_lc" ] && { echo none; return; }
   case "$body_lc" in
     *"changes requested"*)                        echo changes ;;
@@ -248,7 +265,7 @@ latest_issue_comment() {  # $1=issue $2=header-substring
 # classify a Product triage verdict body → accepted | rejected | needs | none.
 # Order matters: reject wins over accept if both words somehow appear.
 triage_verdict_of() {  # $1=body
-  local lc; lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  local lc; lc="$(verdict_clause "$1" | tr '[:upper:]' '[:lower:]')"
   [ -z "$lc" ] && { echo none; return; }
   case "$lc" in
     *reject*)                                            echo rejected ;;
