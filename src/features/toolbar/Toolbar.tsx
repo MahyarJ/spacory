@@ -76,9 +76,9 @@ export function Toolbar() {
           <Redo2 size={ICON_SIZE} />
           Redo
         </button>
-        <span className={styles.label}>
-          Tip: Right-drag to pan, Wheel to zoom
-        </span>
+        {/* The pan/zoom tip used to sit here; it is now a caption in the
+            canvas's bottom-right corner (`CanvasHint`), where it reads as
+            advice about the canvas and no longer widens this row. */}
       </div>
       <HintBar />
     </>

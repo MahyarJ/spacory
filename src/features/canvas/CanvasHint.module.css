@@ -1,0 +1,19 @@
+/* Floating caption anchored to the bottom-right of the canvas. Positioned
+   (rather than a toolbar row) so showing or hiding it never reflows the canvas
+   — the same reason WallOptionsBar floats at the top-left, which also keeps the
+   two from ever colliding. */
+.hint {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 5;
+  padding: 4px 8px;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-grid);
+  border-radius: 8px;
+  font-size: 12px;
+  opacity: 0.8;
+  /* It sits over drawable canvas: a passive caption must not swallow a click or
+     the start of a drag in that corner. */
+  pointer-events: none;
+}

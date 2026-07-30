@@ -283,3 +283,52 @@ write path alongside the existing `commit()` chokepoint.
 so the later `blur` (when the field survives, e.g. clicking the same element)
 adds no second or empty undo entry. Every path — Enter, blur, click-away —
 shares one `parseDraft` validation, so an invalid draft is rejected identically.
+
+## Responsive breakpoints live as tokens in `theme.css`, touch sizing as a pointer query
+
+**Decision.** The named breakpoint (`--sp-bp-tablet`) and the touch-target floor
+(`--sp-touch-target`) are tokens in `src/theme.css`. Anything that varies **by
+width** is expressed as a token flip inside the single `@media (max-width: 768px)`
+block in that same file, so the pixel literal is spelled out exactly once; CSS
+modules only read `var(--sp-toolbar-gap)` / `var(--sp-toolbar-padding-x)`.
+Anything that varies **by pointer** — the 44px control floors — is a
+`@media (pointer: coarse)` block in the CSS module beside the control it sizes,
+reading the shared token for the value.
+
+**Why the split.** CSS cannot interpolate a custom property into a media
+condition (`@media (max-width: var(--sp-bp-tablet))` is invalid), so a breakpoint
+"token" only actually prevents duplication if the width-dependent rules
+themselves are centralized. Pointer queries carry no such literal, so keeping
+them next to the controls costs nothing and keeps a button's sizing readable in
+one place. A phone-width pass adds `--sp-bp-phone` and a second flip block the
+same way.
+
+**Why the toolbar wraps rather than scrolls.** At 768px the row is wider than the
+viewport, and a non-wrapping row clipped Undo/Redo off-screen with no way to
+reach them. `flex-wrap: wrap` is invisible at desktop widths (nothing wraps) and
+needs no breakpoint at all, where a horizontal scroller would hide controls
+behind a gesture.
+
+## The canvas pan/zoom tip is a positioned caption, and a pure function decides it
+
+**Decision.** The `Tip: Right-drag to pan, Wheel to zoom` advice moved out of the
+toolbar row into `CanvasHint` (`src/features/canvas/`), absolutely positioned at
+the canvas's bottom-right with `pointer-events: none`. *Which* text to show is
+`canvasHintForPointer` in `src/app/canvasHint.ts` — a pure function of the
+pointer kind, which `usePointerKind` (`src/ui/`) reads from `matchMedia`.
+
+**Why it moved.** It is advice about the canvas, so it reads as a caption there
+rather than as the 14th control in a row of controls — and it was the single
+widest contributor to the row's overflow at tablet widths, so relocating it fixes
+the clipping at the source instead of only below a breakpoint. It floats (rather
+than occupying layout) for the same reason `WallOptionsBar` does: toggling it
+must never reflow the canvas. `pointer-events: none` is not optional — it now
+sits over drawable canvas, and a passive hint that ate the start of a drag would
+be a worse bug than the overflow.
+
+**Why a pure helper for one string.** jsdom has no layout engine, so the layout
+half of responsive work isn't unit-testable; the pointer decision is the part
+that *can* be pinned down, and it carries a real product rule — a coarse pointer
+is shown **nothing**, not a touch equivalent, because touch pan/zoom gestures
+don't exist yet. Encoded in a component that would be a comment; encoded in
+`canvasHint.ts` it is a test.

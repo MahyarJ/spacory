@@ -21,3 +21,12 @@
   background: color-mix(in srgb, var(--sp-accent) 14%, transparent);
   border: 1px solid var(--sp-accent);
 }
+
+/* Touch: the segments are the tap targets, so they carry the floor; the pill
+   around them grows with them. */
+@media (pointer: coarse) {
+  .btn {
+    min-height: var(--sp-touch-target);
+    min-width: var(--sp-touch-target);
+  }
+}

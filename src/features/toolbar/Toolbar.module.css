@@ -1,8 +1,12 @@
 .toolbar {
   display: flex;
-  gap: 8px;
+  /* Wrap rather than overflow: at tablet widths the row is wider than the
+     viewport, and a non-wrapping row clips its rightmost controls (Undo /
+     Redo) off-screen with no way to reach them. */
+  flex-wrap: wrap;
+  gap: var(--sp-toolbar-gap);
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px var(--sp-toolbar-padding-x);
   background: var(--sp-panel);
   border-bottom: 1px solid var(--sp-grid);
 
@@ -39,8 +43,15 @@
     flex: 1;
   }
 
-  .label {
-    opacity: 0.8;
-    font-size: 13px;
+  /* Touch: a 13px label with 6px of padding is a ~28px target, too small to
+     hit reliably with a finger. Floor it in both dimensions, and only for a
+     coarse pointer — mouse sizing is unchanged. */
+  @media (pointer: coarse) {
+    .button {
+      min-height: var(--sp-touch-target);
+      min-width: var(--sp-touch-target);
+      justify-content: center;
+      padding: 6px 12px;
+    }
   }
 }

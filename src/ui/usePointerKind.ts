@@ -1,0 +1,39 @@
+import type { PointerKind } from "@app/canvasHint";
+import { useEffect, useState } from "react";
+
+const COARSE_POINTER_QUERY = "(pointer: coarse)";
+
+function readPointerKind(): PointerKind {
+  // jsdom (and any non-browser host) has no matchMedia; read that as the
+  // desktop default rather than guessing touch.
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return "fine";
+  }
+  return window.matchMedia(COARSE_POINTER_QUERY).matches ? "coarse" : "fine";
+}
+
+/**
+ * The primary pointer's kind, tracked live.
+ *
+ * Derived here rather than added to the store: it is a property of the device,
+ * not of the plan, so it has no business flowing through `commit()`.
+ */
+export function usePointerKind(): PointerKind {
+  const [kind, setKind] = useState<PointerKind>(readPointerKind);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(COARSE_POINTER_QUERY);
+    const onChange = () => setKind(query.matches ? "coarse" : "fine");
+    // Re-read on mount too: plugging in a mouse (or toggling device emulation)
+    // can change the answer between the first render and here.
+    onChange();
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
+  return kind;
+}
