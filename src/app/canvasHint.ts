@@ -1,5 +1,4 @@
-/** The two pointer classes the canvas hint distinguishes. */
-export type PointerKind = "fine" | "coarse";
+import type { PointerKind } from "@ui/usePointerKind";
 
 /** The desktop pan/zoom advice, worded as it read in the toolbar row. */
 export const CANVAS_POINTER_HINT = "Tip: Right-drag to pan, Wheel to zoom";

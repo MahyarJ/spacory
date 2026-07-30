@@ -1,5 +1,7 @@
-import type { PointerKind } from "@app/canvasHint";
 import { useEffect, useState } from "react";
+
+/** The two pointer classes the chrome distinguishes. */
+export type PointerKind = "fine" | "coarse";
 
 const COARSE_POINTER_QUERY = "(pointer: coarse)";
 

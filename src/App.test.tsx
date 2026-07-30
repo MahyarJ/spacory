@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 /**
- * Point `matchMedia` at a fixed answer for `(pointer: coarse)`. jsdom has none
- * of its own, and its absence already reads as a fine pointer — so only the
- * coarse case needs stubbing.
+ * Point `matchMedia` at a fixed answer for `(pointer: coarse)`. jsdom's own
+ * implementation always reports `matches: false`, which already reads as a fine
+ * pointer — so only the coarse case needs stubbing.
  */
 function stubCoarsePointer(coarse: boolean) {
   vi.stubGlobal("matchMedia", (query: string) => ({

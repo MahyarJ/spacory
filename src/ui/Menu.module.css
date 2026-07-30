@@ -60,6 +60,5 @@
 @media (pointer: coarse) {
   .item {
     min-height: var(--sp-touch-target);
-    padding: 6px 10px;
   }
 }

@@ -23,7 +23,10 @@
      re-derived across CSS modules. A phone pass adds --sp-bp-phone and a
      second block the same way.
 
-     Tablet: iPad portrait is 768 CSS px, the width the chrome has to fit. */
+     Tablet: iPad portrait is 768 CSS px, the width the chrome has to fit.
+     This token is documentation, not a constraint: no rule can read it (a
+     custom property is invalid in a media condition), so the `max-width`
+     block below re-spells the literal and the two must be kept in sync. */
   --sp-bp-tablet: 768px;
   /* Comfortable minimum touch target. Consumed by the `pointer: coarse`
      rules in the chrome's CSS modules (toolbar, menu, theme switch), which
@@ -52,7 +55,11 @@
 html,
 body,
 #root {
-  height: 100%;
+  /* Dynamic viewport units, matching `.app`: a percentage here would resolve
+     against the initial containing block (the *large* viewport on iOS Safari),
+     so the chain would disagree with the app's `100dvh` by the browser-chrome
+     delta and leave either a bare strip below the app or a scrolling document. */
+  height: 100dvh;
   margin: 0;
   background: var(--sp-bg);
   color: var(--sp-text);

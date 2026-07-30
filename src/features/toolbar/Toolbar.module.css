@@ -45,13 +45,13 @@
 
   /* Touch: a 13px label with 6px of padding is a ~28px target, too small to
      hit reliably with a finger. Floor it in both dimensions, and only for a
-     coarse pointer — mouse sizing is unchanged. */
+     coarse pointer — mouse sizing is unchanged. Nothing else about the button
+     changes: same padding, same font, same alignment, so the look-and-feel is
+     the desktop one at a reachable size. */
   @media (pointer: coarse) {
     .button {
       min-height: var(--sp-touch-target);
       min-width: var(--sp-touch-target);
-      justify-content: center;
-      padding: 6px 12px;
     }
   }
 }
