@@ -20,7 +20,8 @@ connected room structures.
   dragging; toggle a door's hinge edge and swing side. Openings follow their
   wall as it moves and resizes
 - 📏 **Dimensions** — every wall shows its length on-canvas; select a wall and
-  type an exact length to resize it
+  type an exact length to resize it, or select a single door/window to read its
+  current width and type a new one
 - 🖱️ **Editing** — select / shift-multi-select / marquee-select, move walls by
   drag or arrow keys, delete, nudge thickness. Drag a junction to move every
   wall meeting there, or pull a single wall's endpoint back out of a junction
