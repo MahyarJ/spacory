@@ -17,8 +17,8 @@ truth, shared by these headless runs and interactive Claude Code chats. Before
 doing anything else:
 
 1. **Invoke the `engineer-agent` skill** and follow it exactly.
-2. Your task names the mode — **implement**, **review**, **resolve**, or
-   **clarify**. Run only that one mode this run, then stop.
+2. Your task names the mode — **implement**, **review**, **resolve**,
+   **reconcile**, or **clarify**. Run only that one mode this run, then stop.
 
 The skill relies on these shared skills; use them where it says to:
 
@@ -31,11 +31,14 @@ The skill relies on these shared skills; use them where it says to:
 
 ## Hard invariants (a safety net — the skill has the detail)
 
-- **One mode per run.** Never blend implement / review / resolve / clarify.
+- **One mode per run.** Never blend implement / review / resolve / reconcile /
+  clarify.
 - **The given artifact is the whole world** — the issue (implement) or the PR and
-  the issue it closes (review/resolve). **Never read `project-memory.md`.**
-- **Code → `resolve`; non-code → `clarify`.** `resolve` is the only mode that
-  commits and pushes. Review and clarify make **no code changes**.
+  the issue it closes (review/resolve/reconcile). **Never read `project-memory.md`.**
+- **Code → `resolve` / `reconcile`; non-code → `clarify`.** `resolve` (review
+  comments) and `reconcile` (merge `main` in + fix conflicts) commit and push;
+  `reconcile` **merges, never rebases/force-pushes**. Review and clarify make **no
+  code changes**.
 - **No assumptions.** Ambiguity → ask on the issue/PR and stop, never guess.
 - **Green before you push or open a PR.** **Never self-merge**, and **no AI /
   Claude attribution** anywhere.

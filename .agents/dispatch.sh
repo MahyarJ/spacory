@@ -21,10 +21,20 @@
 #     issue  agent:ready        ── implement ──▶  PR agent:review
 #     PR     agent:review        ── review + acceptance ──▶  agent:changes | agent:clarify | agent:accepted
 #     PR     agent:changes       ── resolve  ──▶  PR agent:review   (loops, capped)
+#     PR     agent:conflict      ── reconcile ──▶  PR agent:review  (merge main in, fix conflicts)
 #     issue/PR agent:clarify      ── clarify  ──▶  spec refined; PR→agent:review, issue→backlog
 #     PR     agent:accepted      ── human merges (or SPACORY_AUTOMERGE=1 + CI green)
 #                                   …unless the head moves past the sign-off → agent:review
 #     *      agent:blocked       ── needs a human; never touched again automatically
+#
+#   A branch CONFLICTS with main when another PR merges and moves the base under it.
+#   That can surface at ANY resting phase (review, changes, accepted), so every tick
+#   scans those PRs for GitHub's CONFLICTING verdict and relabels them agent:conflict
+#   (highest priority): a conflicting branch can't be merged, nor sensibly reviewed /
+#   resolved against a stale base. reconcile merges the latest main into the branch,
+#   resolves the conflicts, pushes, and returns the PR to agent:review to be re-judged
+#   against the merged base. It merges (never rebases/force-pushes) — the PR
+#   squash-merges anyway, so the merge commit never reaches main.
 #
 #   A review verdict of "accepted/approve PENDING non-code fixes" is a CONDITIONAL
 #   accept (the code is fine but the PR body/title or the linked issue's spec is out
@@ -51,11 +61,13 @@
 #   review_rounds), legitimate spec growth no longer burns the loop guard.
 #
 #   Priority per tick (drain PRs before pulling new work):
-#     1. agent:changes   PR       → resolve
-#     2. agent:clarify   issue/PR → clarify (issue: Product; PR: Product + Engineer), then transition
-#     3. agent:review    PR       → review + acceptance (in parallel), then transition
-#     4. agent:triage    issue    → triage (groom an idea), then transition
-#     5. agent:ready     issue (no open PR) → implement
+#     0. detect_conflicts: relabel any CONFLICTING resting PR → agent:conflict
+#     1. agent:conflict  PR       → reconcile (merge main in, fix conflicts)
+#     2. agent:changes   PR       → resolve
+#     3. agent:clarify   issue/PR → clarify (issue: Product; PR: Product + Engineer), then transition
+#     4. agent:review    PR       → review + acceptance (in parallel), then transition
+#     5. agent:triage    issue    → triage (groom an idea), then transition
+#     6. agent:ready     issue (no open PR) → implement
 #   The product `cycle` (issue creation) is NOT run here — schedule it separately
 #   (see .agents/launchd/com.spacory.agents.cycle.plist.template). Keeping ticket
 #   *creation* on its own slow cadence stops a runaway cycle from flooding the
@@ -72,8 +84,8 @@
 #                         Counted only SINCE the budget last reset, on either of two
 #                         principled signals: a FRESH ATTEMPT (the PR re-entered the
 #                         review loop from outside — a reopen from accepted/blocked, a
-#                         clarify, a rebase-relabel, the first implement) or a SPEC
-#                         EDIT (the linked issue body changed). So a converged PR
+#                         clarify, a reconcile, a rebase-relabel, the first implement)
+#                         or a SPEC EDIT (the linked issue body changed). So a converged PR
 #                         reopened for one more change, and evolving requirements, both
 #                         start fresh — the cap trips on genuine agent-vs-agent
 #                         non-convergence within a single attempt (see review_rounds /
@@ -155,6 +167,8 @@ ensure_labels() {
     "agent:reviewing|c5def5|Review + acceptance in flight"
     "agent:changes|d93f0b|Changes requested — awaiting Engineer resolve"
     "agent:resolving|fbca04|Engineer Agent is resolving review comments"
+    "agent:conflict|d93f0b|Branch conflicts with main — awaiting Engineer reconcile"
+    "agent:reconciling|fbca04|Engineer Agent is merging main in & resolving conflicts"
     "agent:clarify|c2e0c6|A human question/comment to answer — awaiting clarify (Product for an issue; Product + Engineer for a PR)"
     "agent:clarifying|fbca04|Clarify in flight (Product; also Engineer on a PR)"
     "agent:accepted|0e8a16|Passed review + acceptance — awaiting human merge"
@@ -179,7 +193,7 @@ swap_label() { remove_label "$1" "$2" "$3"; add_label "$1" "$2" "$4"; }
 block() {  # $1=issue|pr $2=number $3=reason
   local kind="$1" num="$2" reason="$3"
   # strip any in-flight/queue labels, mark blocked.
-  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:clarify agent:clarifying; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:conflict agent:reconciling agent:clarify agent:clarifying; do
     remove_label "$kind" "$num" "$l"
   done
   add_label "$kind" "$num" "agent:blocked"
@@ -281,7 +295,7 @@ loop_entry_time() {  # $1=pr
 # "clean slate" signals (not a growing special-case list):
 #   (a) a FRESH ATTEMPT began — the PR re-entered the review loop from outside it
 #       (see loop_entry_time): a reopen from accepted/blocked, a clarify round, a
-#       rebase-then-relabel, or the first implement.
+#       reconcile (agent:conflict→review), a rebase-then-relabel, or the first implement.
 #   (b) the SPEC MOVED — the linked issue's body was last edited (a human, directly
 #       or via agent:clarify); legitimate spec growth isn't non-convergence.
 # "" (no signal at all) sorts before every ISO timestamp, so a missing value safely
@@ -303,13 +317,39 @@ budget_reset_time() {  # $1=pr
 
 # count Engineer-review rounds this PR has seen SINCE its budget last reset (loop
 # guard). Only reviews posted after budget_reset_time count — so a fresh attempt (a
-# reopen from accepted/blocked, a clarify, a rebase-relabel) OR a spec edit resets the
-# clock. The cap trips on genuine agent-vs-agent stalling, not on evolving
+# reopen from accepted/blocked, a clarify, a reconcile, a rebase-relabel) OR a spec
+# edit resets the clock. The cap trips on genuine agent-vs-agent stalling, not on evolving
 # requirements or on a converged PR being reopened for one more change.
 review_rounds() {  # $1=pr
   local since; since="$(budget_reset_time "$1")"
   gh pr view "$1" --json comments \
     --jq "[.comments[] | select(.createdAt > \"$since\") | select(.body | test(\"Engineer review\"))] | length"
+}
+
+# GitHub's mergeability verdict for a PR → MERGEABLE | CONFLICTING | UNKNOWN.
+# UNKNOWN means GitHub hasn't finished (re)computing the merge yet — common for a few
+# seconds after any push — so callers must treat ONLY the explicit "CONFLICTING" as a
+# conflict and let UNKNOWN recompute on the next tick. Never guess from UNKNOWN.
+pr_mergeable() {  # $1=pr
+  gh pr view "$1" --json mergeable --jq '.mergeable // "UNKNOWN"' 2>/dev/null || echo "UNKNOWN"
+}
+
+# Is the PR's branch strictly BEHIND main — i.e. main has commits the branch doesn't,
+# so the PR's green CI validated a STALE base and a semantic drift (an API main changed
+# out from under the branch) could slip through even though pr_mergeable says MERGEABLE
+# (that only catches TEXTUAL conflicts)? Returns 0 (behind) / 1 (current or unknown).
+#
+# Uses the compare API's behind_by, which is protection-INDEPENDENT — unlike
+# mergeStateStatus=BEHIND, which GitHub only reports when "require branches up to date"
+# is enabled. So this fires whether or not that branch protection is on (see
+# AUTOMATION.md, which recommends enabling it as the complementary CI-level gate). Any
+# API error → treated as "not behind" so an unknown never triggers a needless reconcile.
+pr_behind_main() {  # $1=pr
+  local head; head="$(gh pr view "$1" --json headRefName --jq '.headRefName' 2>/dev/null)" || return 1
+  [ -n "$head" ] || return 1
+  local behind
+  behind="$(gh api "repos/:owner/:repo/compare/main...$head" --jq '.behind_by // 0' 2>/dev/null || echo 0)"
+  [ "${behind:-0}" -gt 0 ]
 }
 
 ci_green() {  # $1=pr → 0 if all required checks passed (or none exist)
@@ -421,6 +461,53 @@ do_resolve() {  # $1=pr
   fi
 }
 
+do_reconcile() {  # $1=pr — merge the latest main into a conflicting branch, then re-review
+  local pr="$1"
+  log "→ reconcile PR #$pr (branch conflicts with main)"
+  swap_label pr "$pr" agent:conflict agent:reconciling
+  if run_with_retry "engineer reconcile #$pr" run_engineer reconcile "$pr"; then
+    # The merge changed the PR head and combined two code paths, so it must be
+    # re-judged against the merged base — route to review, exactly like resolve. This
+    # is a non-loop→loop transition, so (like a rebase-relabel) it resets the
+    # review-round budget: a conflict is an EXTERNAL event (main moved), not agent
+    # non-convergence, so it shouldn't burn the loop guard. Should the branch still
+    # read CONFLICTING next tick (main moved again, or the merge didn't take), it
+    # re-enters here as a genuinely new conflict; the review-round cap downstream is
+    # the backstop against any pathological churn.
+    swap_label pr "$pr" agent:reconciling agent:review
+    log "✓ reconciled PR #$pr → agent:review"
+  else
+    block pr "$pr" "engineer reconcile run failed"
+  fi
+}
+
+# Scan the PRs "resting" in an agent-managed queue state and hand any whose branch
+# now CONFLICTs with main to reconcile. main moves underneath a PR whenever another
+# PR merges, so a conflict can surface long after the PR was written — while it waits
+# in review, in changes, or already accepted. We relabel to agent:conflict; the tick
+# actions it (priority 1) this same pass.
+#
+# Only the RESTING queue states are scanned — never an in-flight `agent:*ing` label
+# (a run is actively touching that branch) nor agent:blocked/clarify (a human owns
+# it). And only the explicit "CONFLICTING" verdict acts; "UNKNOWN" (GitHub still
+# recomputing, e.g. right after a resolve push) is skipped so a transient state can't
+# misfire — it settles by the next tick. Swapping the resting label → agent:conflict
+# loses no state we can't rebuild: after reconcile the PR goes to agent:review and is
+# re-judged from scratch against the merged base (a changes-state PR simply earns its
+# changes verdict again on that fresh review — correct, since its head moved).
+detect_conflicts() {
+  local label pr
+  for label in agent:review agent:changes agent:accepted; do
+    for pr in $(list_prs "$label"); do
+      if [ "$(pr_mergeable "$pr")" = CONFLICTING ]; then
+        swap_label pr "$pr" "$label" agent:conflict
+        log "⚠︎ PR #$pr ($label) conflicts with main → agent:conflict"
+        notify "🔀 Spacory agents: PR #$pr now conflicts with main — queued for reconcile."
+      fi
+    done
+  done
+}
+
 do_review() {  # $1=pr — review + acceptance in parallel, then transition on verdicts
   local pr="$1"
   log "→ review + acceptance PR #$pr"
@@ -468,6 +555,33 @@ do_review() {  # $1=pr — review + acceptance in parallel, then transition on v
 
 maybe_merge() {  # $1=pr — only if the human opted in AND CI is green
   local pr="$1"
+  # A PR that just got accepted this tick hasn't been through detect_conflicts yet,
+  # so guard here too: a conflicting branch can't be merged (by us or a human), so
+  # route it to reconcile instead of attempting a merge that would fail — or, when
+  # automerge is off, instead of telling the human it's "ready to merge" when it
+  # isn't. Only the explicit CONFLICTING acts; UNKNOWN recomputes and is caught by
+  # detect_conflicts on a later tick.
+  if [ "$(pr_mergeable "$pr")" = CONFLICTING ]; then
+    swap_label pr "$pr" agent:accepted agent:conflict
+    log "⚠︎ accepted PR #$pr conflicts with main → agent:conflict (reconcile before merge)"
+    notify "🔀 Spacory agents: accepted PR #$pr conflicts with main — reconciling before merge."
+    return
+  fi
+  # Freshness gate (the merge boundary ONLY): even with no textual conflict, a branch
+  # that's BEHIND main had its green CI run against a stale base, so a semantic drift
+  # could land on merge. Reconcile it first (merge main in → re-review) so CI validates
+  # the actual MERGED result before we/anyone merge. Scoped to here — not to
+  # implement/resolve or the review queue — so fast-moving main doesn't churn every
+  # intermediate run; a PR only needs to be current at the moment it's about to land.
+  # (Caveat: if main merges faster than a reconcile→review→accept cycle, a PR can
+  # "chase" it — inherent to requiring up-to-date merges; it settles once the burst
+  # quiets. See AUTOMATION.md.)
+  if pr_behind_main "$pr"; then
+    swap_label pr "$pr" agent:accepted agent:conflict
+    log "⚠︎ accepted PR #$pr is behind main → agent:conflict (reconcile so CI validates the merge)"
+    notify "🔀 Spacory agents: accepted PR #$pr is behind main — reconciling so CI validates the merged result before merge."
+    return
+  fi
   if [ "$AUTOMERGE" != "1" ]; then
     notify "✅ Spacory agents: PR #$pr accepted — ready for you to merge."
     return
@@ -646,6 +760,7 @@ reclaim_orphaned_inflight() {
   reclaim_inflight issue agent:implementing agent:ready
   reclaim_inflight pr    agent:reviewing    agent:review
   reclaim_inflight pr    agent:resolving    agent:changes
+  reclaim_inflight pr    agent:reconciling  agent:conflict
   # agent:clarify can sit on either an issue or a PR, so its in-flight twin can too.
   reclaim_inflight pr    agent:clarifying   agent:clarify
   reclaim_inflight issue agent:clarifying   agent:clarify
@@ -682,6 +797,11 @@ dispatch_once() {
   # worktree an engineer run leaked when it died.
   reclaim_orphaned_inflight
   prune_stale_worktrees
+  # A branch that conflicts with main can't be merged and can't be sensibly
+  # reviewed/resolved against a stale base, so reconciling it comes first. Detect
+  # conflicts on resting PRs (relabel → agent:conflict), then drain that queue.
+  detect_conflicts
+  for n in $(list_prs "agent:conflict"); do do_reconcile "$n"; return; done
   for n in $(list_prs "agent:changes"); do do_resolve "$n"; return; done
   # Human questions/refinements come next — answer them before more review or
   # implement churn. agent:clarify can sit on either an issue or a PR.
@@ -707,7 +827,7 @@ dispatch_once() {
 print_status() {
   echo "Spacory agent pipeline ($(gh repo view --json nameWithOwner -q .nameWithOwner)):"
   local l
-  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:clarify agent:clarifying agent:accepted agent:blocked; do
+  for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:conflict agent:reconciling agent:clarify agent:clarifying agent:accepted agent:blocked; do
     printf '  %-20s' "$l"
     gh issue list --state open --label "$l" --json number --jq '[.[].number] | map("#\(.)") | join(" ")' 2>/dev/null | tr -d '\n'
     printf ' | '

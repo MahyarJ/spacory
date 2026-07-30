@@ -9,6 +9,7 @@
 #   implement  the issue is the only spec → branch + PR (default mode)
 #   review     read-only pass over a PR   → posts a code-review comment
 #   resolve    address a PR's comments    → new commits pushed to the PR's branch
+#   reconcile  branch conflicts with main → merge main in, fix conflicts, push
 #   clarify    answer technical questions → posts a reply comment (no code changes)
 #
 # Usage:
@@ -17,6 +18,7 @@
 #   .agents/run-engineer.sh '#2' "prefer geometry" # leading # ok; optional note
 #   .agents/run-engineer.sh review 14              # review PR #14 (comments only)
 #   .agents/run-engineer.sh resolve 14             # resolve PR #14's review comments
+#   .agents/run-engineer.sh reconcile 14           # merge main into PR #14, fix conflicts
 #   .agents/run-engineer.sh clarify 14             # answer technical questions on #14
 #
 # Fan-out: review and acceptance are independent read-only passes — run them in
@@ -60,7 +62,7 @@ command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PA
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
 usage() {
-  echo "usage: $(basename "$0") [implement|review|resolve|clarify] <number> [extra instruction]" >&2
+  echo "usage: $(basename "$0") [implement|review|resolve|reconcile|clarify] <number> [extra instruction]" >&2
   echo "       (a bare number defaults to: implement <number>)" >&2
   exit 2
 }
@@ -72,7 +74,7 @@ ORIG_ARGS=("$@")
 # First arg may be a mode word; otherwise it's the number and the mode is implement.
 MODE="implement"
 case "${1:-}" in
-  implement|review|resolve|clarify) MODE="$1"; shift ;;
+  implement|review|resolve|reconcile|clarify) MODE="$1"; shift ;;
 esac
 
 NUM="${1:-}"
@@ -119,6 +121,7 @@ case "$MODE" in
   implement) TASK="Implement GitHub issue #$NUM." ;;
   review)    TASK="Review pull request #$NUM (Engineer Agent review mode): leave a code-review comment on the PR and make no code changes." ;;
   resolve)   TASK="Resolve the review comments on pull request #$NUM (Engineer Agent resolve mode): push fixes to the PR's branch." ;;
+  reconcile) TASK="Reconcile the merge conflicts on pull request #$NUM (Engineer Agent reconcile mode): merge the latest origin/main into the PR's branch, resolve the conflicts preserving BOTH sides' intent, re-verify, and push. Merge — never rebase or force-push. This is NOT resolving review comments." ;;
   clarify)   TASK="Answer the technical questions on #$NUM (Engineer Agent clarify mode): reply on the thread answering the engineering questions, defer any product questions to the Product Agent, and make no CODE changes. This mode DOES own the PR's own non-code metadata: if the thread shows a settled decision that the PR's title or description is stale/inaccurate, fix it with \`gh pr edit\` — that is your artifact and no other mode will touch it." ;;
 esac
 [ -n "$EXTRA" ] && TASK="$TASK Note for this run: $EXTRA"
@@ -126,8 +129,8 @@ esac
 # Lead the prompt with the slash-command form so Claude Code deterministically
 # expands the engineer-agent skill (the documented user-invoked path) instead of
 # relying on the model to invoke it from the appended shim. $MODE is exactly the
-# skill's mode word (implement|review|resolve|clarify); the descriptive task below
-# still selects the mode and carries any extra note.
+# skill's mode word (implement|review|resolve|reconcile|clarify); the descriptive
+# task below still selects the mode and carries any extra note.
 TASK="/engineer-agent $MODE $NUM
 
 $TASK"
