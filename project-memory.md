@@ -105,6 +105,21 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   Export menu**, appended after "JSON" and "PNG" — *not* a fourth flat toolbar
   button, which would undo #66. Menu structure/styling and the existing entries
   stay out of scope; the icon glyph is the engineer's choice.
+- **Exports clip door swing arcs near the plan's edge — open gap, no issue yet
+  (found 2026-07-30 on PR #82).** `getPlanBounds` (`src/geometry/bounds.ts`) pads each
+  item only by `item.thickness / 2` around its wall centerline, but a door's swing arc
+  has `radius = opening length` (`getDoorGeometry`, `src/geometry/itemGeometry.ts`) and
+  sweeps *perpendicular* to the wall. So an ~80 cm door on a perimeter wall opening
+  outward overflows the content box by roughly its own leaf length, and
+  `EXPORT_MARGIN = 40` cm doesn't cover it — the arc is cut off at the export edge.
+  **Affects PNG export too** (both formats frame off `buildExportSvg`, since #4), so
+  this is pre-existing and *not* caused by #33/#82, whose scope explicitly excludes
+  `buildExportSvg`'s visual output. Product call (clarify on #82, 2026-07-30): fix it
+  in the **bounds**, not by inflating `EXPORT_MARGIN` — a fixed margin can't scale with
+  wider openings and would pad every plan, whereas including the arc's actual extent in
+  `getPlanBounds` is exact, testable pure logic, and fixes both formats at once. Also
+  audit the window midline/leaf line for the same overflow. Next cycle should scope this
+  as its own thin issue.
 - **Export formats grouped under one Export menu — done (#66, merged as PR #69).**
   `ProjectActions.tsx` renders Import (JSON) as its own button plus a `Menu`
   (`src/ui/Menu.tsx`) labelled **Export** whose `items` are `json` and `png`.
