@@ -5,6 +5,31 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## The dispatcher classifies an agent verdict from its `**Verdict:**` line only
+
+**Decision.** `verdict_of` and `triage_verdict_of` in `.agents/dispatch.sh` no
+longer substring-match the whole comment body. Both run it through `verdict_clause`
+first, which isolates the text after the final `**Verdict:**` marker — the one-line
+verdict the product-agent / engineer-agent skills require every comment to end with.
+Only that clause is classified. If a comment carries no marker (older or
+hand-written), it falls back to scanning the whole body, so nothing regresses.
+
+**Why.** The classifiers are ordered substring matches (`*reject*` before
+`*accept*`; `*"changes requested"*` before `*accepted*`) run over the entire
+flattened comment. Incidental prose anywhere in the write-up could therefore flip
+the verdict. This actually happened on a **triage accept** whose out-of-scope note
+mentioned "palm rejection" (Apple Pencil): `*reject*` matched, the idea was
+classified `rejected`, and the dispatcher fired a "rejected in triage (closed, with
+rationale)" Telegram message — contradicting the agent's own "accepted & enriched"
+self-notify, while the issue stayed correctly open. The same latent trap sat in
+`verdict_of` (a PR review saying "no changes requested to geometry" would read as
+`changes`). The skills already mandate the terminal `**Verdict:**` line as the
+machine-readable contract, so scoping classification to that clause is the
+narrowest robust fix — the surrounding rationale prose is now free to use words
+like "reject" or "changes" without hijacking the verdict.
+
+---
+
 ## Miter limit is a multiple of half-thickness, not a fixed cm value
 
 **Decision.** `computeWallGeometry` (`src/geometry/junction.ts`) caps each
