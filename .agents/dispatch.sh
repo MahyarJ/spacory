@@ -27,11 +27,12 @@
 #                                   …unless the head moves past the sign-off → agent:review
 #     *      agent:blocked       ── needs a human; never touched again automatically
 #
-#   A branch CONFLICTS with main when another PR merges and moves the base under it.
-#   That can surface at ANY resting phase (review, changes, accepted), so every tick
-#   scans those PRs for GitHub's CONFLICTING verdict and relabels them agent:conflict
-#   (highest priority): a conflicting branch can't be merged, nor sensibly reviewed /
-#   resolved against a stale base. reconcile merges the latest main into the branch,
+#   A branch CONFLICTS with (or falls BEHIND) main when another PR merges and moves
+#   the base under it. This only truly matters at the MERGE boundary — review/resolve
+#   work fine against a conflicting branch — so we gate it there rather than scanning
+#   every resting PR each tick: maybe_merge routes an accepted PR that's conflicting or
+#   behind to agent:conflict, and a human can hand-label any PR agent:conflict to force
+#   a reconcile. reconcile (highest priority) merges the latest main into the branch,
 #   resolves the conflicts, pushes, and returns the PR to agent:review to be re-judged
 #   against the merged base. It merges (never rebases/force-pushes) — the PR
 #   squash-merges anyway, so the merge commit never reaches main.
@@ -61,7 +62,6 @@
 #   review_rounds), legitimate spec growth no longer burns the loop guard.
 #
 #   Priority per tick (drain PRs before pulling new work):
-#     0. detect_conflicts: relabel any CONFLICTING resting PR → agent:conflict
 #     1. agent:conflict  PR       → reconcile (merge main in, fix conflicts)
 #     2. agent:changes   PR       → resolve
 #     3. agent:clarify   issue/PR → clarify (issue: Product; PR: Product + Engineer), then transition
@@ -481,33 +481,6 @@ do_reconcile() {  # $1=pr — merge the latest main into a conflicting branch, t
   fi
 }
 
-# Scan the PRs "resting" in an agent-managed queue state and hand any whose branch
-# now CONFLICTs with main to reconcile. main moves underneath a PR whenever another
-# PR merges, so a conflict can surface long after the PR was written — while it waits
-# in review, in changes, or already accepted. We relabel to agent:conflict; the tick
-# actions it (priority 1) this same pass.
-#
-# Only the RESTING queue states are scanned — never an in-flight `agent:*ing` label
-# (a run is actively touching that branch) nor agent:blocked/clarify (a human owns
-# it). And only the explicit "CONFLICTING" verdict acts; "UNKNOWN" (GitHub still
-# recomputing, e.g. right after a resolve push) is skipped so a transient state can't
-# misfire — it settles by the next tick. Swapping the resting label → agent:conflict
-# loses no state we can't rebuild: after reconcile the PR goes to agent:review and is
-# re-judged from scratch against the merged base (a changes-state PR simply earns its
-# changes verdict again on that fresh review — correct, since its head moved).
-detect_conflicts() {
-  local label pr
-  for label in agent:review agent:changes agent:accepted; do
-    for pr in $(list_prs "$label"); do
-      if [ "$(pr_mergeable "$pr")" = CONFLICTING ]; then
-        swap_label pr "$pr" "$label" agent:conflict
-        log "⚠︎ PR #$pr ($label) conflicts with main → agent:conflict"
-        notify "🔀 Spacory agents: PR #$pr now conflicts with main — queued for reconcile."
-      fi
-    done
-  done
-}
-
 do_review() {  # $1=pr — review + acceptance in parallel, then transition on verdicts
   local pr="$1"
   log "→ review + acceptance PR #$pr"
@@ -555,12 +528,15 @@ do_review() {  # $1=pr — review + acceptance in parallel, then transition on v
 
 maybe_merge() {  # $1=pr — only if the human opted in AND CI is green
   local pr="$1"
-  # A PR that just got accepted this tick hasn't been through detect_conflicts yet,
-  # so guard here too: a conflicting branch can't be merged (by us or a human), so
-  # route it to reconcile instead of attempting a merge that would fail — or, when
-  # automerge is off, instead of telling the human it's "ready to merge" when it
-  # isn't. Only the explicit CONFLICTING acts; UNKNOWN recomputes and is caught by
-  # detect_conflicts on a later tick.
+  # The merge boundary is the ONE place a conflict/staleness actually matters, so this
+  # is where we gate it (review/resolve work fine against a conflicting branch; the
+  # conflict only blocks the merge). A conflicting branch can't be merged (by us or a
+  # human), so route it to reconcile instead of attempting a merge that would fail —
+  # or, when automerge is off, instead of telling the human it's "ready to merge" when
+  # it isn't. maybe_merge runs for every accepted PR every tick (bottom of the tick +
+  # right after do_review accepts), so this catches a conflict whenever it surfaces.
+  # Only the explicit CONFLICTING acts; UNKNOWN (GitHub still recomputing) recomputes
+  # and is re-checked next tick.
   if [ "$(pr_mergeable "$pr")" = CONFLICTING ]; then
     swap_label pr "$pr" agent:accepted agent:conflict
     log "⚠︎ accepted PR #$pr conflicts with main → agent:conflict (reconcile before merge)"
@@ -797,10 +773,11 @@ dispatch_once() {
   # worktree an engineer run leaked when it died.
   reclaim_orphaned_inflight
   prune_stale_worktrees
-  # A branch that conflicts with main can't be merged and can't be sensibly
-  # reviewed/resolved against a stale base, so reconciling it comes first. Detect
-  # conflicts on resting PRs (relabel → agent:conflict), then drain that queue.
-  detect_conflicts
+  # Reconcile first: a branch that conflicts with (or is behind) main can't merge,
+  # so bringing it current takes priority. A PR reaches agent:conflict when a human
+  # hand-labels it, or when maybe_merge finds an accepted PR conflicting/behind at the
+  # merge boundary and routes it here — we reconcile exactly when it matters (about to
+  # land), not speculatively while it's still under review.
   for n in $(list_prs "agent:conflict"); do do_reconcile "$n"; return; done
   for n in $(list_prs "agent:changes"); do do_resolve "$n"; return; done
   # Human questions/refinements come next — answer them before more review or

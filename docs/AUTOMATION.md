@@ -35,18 +35,20 @@ reads). Run `.agents/dispatch.sh setup` once to create the labels.
 ```
 
 **Merge conflicts (the "main moved under me" door).** When another PR merges,
-`main` advances and an open PR's branch can start **conflicting** with it — at any
-resting phase (waiting in review, in changes, or already accepted). Every tick asks
-GitHub for each such PR's mergeability and relabels any that report `CONFLICTING` to
-**`agent:conflict`**, the **highest-priority** action: a conflicting branch can't be
-merged, nor sensibly reviewed/resolved against a stale base. The Engineer's
-**`reconcile`** mode then merges the latest `main` **into** the branch (a merge
-commit + plain push — never a rebase or force-push; the PR squash-merges anyway, so
-the merge commit never reaches `main`), resolves the conflicts preserving **both**
-sides' intent, re-verifies, and pushes. The PR returns to **`agent:review`** to be
-re-judged against the merged base. If a conflict needs a product call to resolve, the
-Engineer asks on the PR and stops (blocked), same as any other ambiguity. You can
-also label a PR `agent:conflict` by hand to force a reconcile.
+`main` advances and an open PR's branch can start **conflicting** with it. A conflict
+only actually matters at the **merge boundary** — `review` reads the PR's own diff and
+`resolve` edits its branch, both fine while it conflicts with `main` — so the loop
+gates it there rather than scanning every resting PR each tick: when a PR reaches
+**`agent:accepted`**, `maybe_merge` checks its mergeability and, if it's `CONFLICTING`,
+routes it to **`agent:conflict`** instead of merging. (You can also label any PR
+`agent:conflict` by hand to force a reconcile sooner.) A PR in `agent:conflict` is the
+**highest-priority** action: the Engineer's **`reconcile`** mode merges the latest
+`main` **into** the branch (a merge commit + plain push — never a rebase or
+force-push; the PR squash-merges anyway, so the merge commit never reaches `main`),
+resolves the conflicts preserving **both** sides' intent, re-verifies, and pushes. The
+PR returns to **`agent:review`** to be re-judged against the merged base. If a conflict
+needs a product call to resolve, the Engineer asks on the PR and stops (blocked), same
+as any other ambiguity.
 
 **The freshness gate (behind main, without a textual conflict).** `CONFLICTING` only
 catches *textual* conflicts. Under a fast merge rate a PR can be perfectly
@@ -133,8 +135,7 @@ Unparseable → blocked.
 
 ## Priority per tick (drain before pulling new work)
 
-0. **detect conflicts** — relabel any resting PR GitHub reports `CONFLICTING` → `agent:conflict`
-1. `agent:conflict` PR → **reconcile** (merge `main` in, resolve conflicts), then transition
+1. `agent:conflict` PR → **reconcile** (merge `main` in, resolve conflicts), then transition — reached via a hand-label or `maybe_merge` routing an accepted-but-conflicting/behind PR here
 2. `agent:changes` PR → **resolve**
 3. `agent:clarify` issue/PR → **clarify** (issue: Product; PR: Product + Engineer in parallel), then transition
 4. `agent:review` PR → **review + acceptance** (run in parallel), then transition
@@ -206,12 +207,13 @@ since it's fully unattended. The same `dispatch.sh` logic lifts over unchanged.
 
 - **One action per tick** + **mkdir lock** → no stampede, no overlap.
 - **In-flight labels** → double-firing is visible and prevented across restarts.
-- **Conflicts can't reach a merge.** Every tick relabels any `CONFLICTING` resting PR
-  to `agent:conflict` and reconciles it (highest priority) before review/resolve or a
-  human/automerge can act on a branch that can't merge. `reconcile` only ever merges
-  `main` in — never rebases or force-pushes (force-push is denied by policy). A
-  reconcile that can't resolve a conflict without a product decision blocks and asks,
-  never guesses.
+- **Conflicts can't reach a merge.** At the merge boundary (`maybe_merge`), an accepted
+  PR that's `CONFLICTING` is routed to `agent:conflict` and reconciled (highest
+  priority) rather than merged — so neither automerge nor a human ever lands a branch
+  that can't merge. (A human can also hand-label `agent:conflict` to force it sooner.)
+  `reconcile` only ever merges `main` in — never rebases or force-pushes (force-push is
+  denied by policy). A reconcile that can't resolve a conflict without a product
+  decision blocks and asks, never guesses.
 - **Stale-based code can't reach main.** At the merge boundary (`maybe_merge`) an
   accepted PR that is merely **behind** `main` — no textual conflict — is reconciled
   first, so CI validates the merged result and semantic drift can't slip through on a
