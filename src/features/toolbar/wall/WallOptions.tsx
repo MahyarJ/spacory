@@ -4,6 +4,8 @@ import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
+import { parseDraft } from "./draftField";
+import { useCommitOnClickAway } from "./useCommitOnClickAway";
 import styles from "./WallOptions.module.css";
 
 const PRESETS = [7, 10, 12, 15, 20, 40]; // cm
@@ -93,8 +95,8 @@ function WallLengthField({ wall, units }: { wall: Wall; units: Units }) {
   }, [current]);
 
   const commit = () => {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed >= MIN_WALL_LENGTH) {
+    const parsed = parseDraft(value, MIN_WALL_LENGTH);
+    if (parsed !== null) {
       setSelectedWallLength(parsed);
     } else {
       // Reject invalid input (non-numeric, zero, negative, below minimum):
@@ -102,9 +104,11 @@ function WallLengthField({ wall, units }: { wall: Wall; units: Units }) {
       setValue(String(current));
     }
   };
+  const fieldRef = useCommitOnClickAway(commit);
 
   return (
     <form
+      ref={fieldRef}
       className={styles.lengthField}
       onSubmit={(e) => {
         e.preventDefault();
@@ -144,8 +148,8 @@ function OpeningWidthField({ item, units }: { item: Item; units: Units }) {
   }, [current]);
 
   const commit = () => {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed >= MIN_OPENING_WIDTH) {
+    const parsed = parseDraft(value, MIN_OPENING_WIDTH);
+    if (parsed !== null) {
       setSelectedOpeningWidth(parsed);
     } else {
       // Reject invalid input (non-numeric, zero, negative, below minimum):
@@ -153,9 +157,11 @@ function OpeningWidthField({ item, units }: { item: Item; units: Units }) {
       setValue(String(current));
     }
   };
+  const fieldRef = useCommitOnClickAway(commit);
 
   return (
     <form
+      ref={fieldRef}
       className={styles.lengthField}
       onSubmit={(e) => {
         e.preventDefault();

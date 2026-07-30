@@ -230,3 +230,31 @@ the download helper, can't be reached by testing a pure function. Rather than
 verify that by hand (which doesn't regress-guard), test it where it lives. Keeping
 jsdom per-file rather than global means the many pure geometry/io/history tests
 don't pay for a DOM they never touch.
+
+## Click-away commits an inline draft field via a document-capture pre-commit
+
+**Decision.** The options bar's inline number fields (wall length, opening width)
+commit their draft on a `pointerdown` that lands **outside** the field while the
+field still holds focus, using a listener on `document`'s **capture** phase
+(`src/features/toolbar/wall/draftField.ts`, wired up by the shared
+`useCommitOnClickAway` hook beside it).
+
+**Why a listener rather than a blur handler.** `onBlur={commit}` cannot cover
+clicking back onto the canvas: that click clears (or moves) the selection, the
+field is rendered conditionally on there *being* a single selection, and removing
+a focused element from the DOM does **not** fire `blur` — so the typed value was
+silently dropped. Capture-phase on `document` runs ahead of React's root-level
+handler, so the value is applied while the field and the selection it targets
+still exist.
+
+**Why not commit on unmount instead.** An effect cleanup runs *after* the
+selection has already changed, so `setSelectedWallLength` /
+`setSelectedOpeningWidth` — which act on the *current* selection — would either
+bail out or, worse, apply the old draft to the newly selected element. Keeping
+the commit ahead of the selection change avoids inventing an id-targeted second
+write path alongside the existing `commit()` chokepoint.
+
+**Why it can't double-commit.** Both store actions already skip a no-op resize,
+so the later `blur` (when the field survives, e.g. clicking the same element)
+adds no second or empty undo entry. Every path — Enter, blur, click-away —
+shares one `parseDraft` validation, so an invalid draft is rejected identically.
