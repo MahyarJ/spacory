@@ -169,7 +169,7 @@ ensure_labels() {
     "agent:resolving|fbca04|Engineer Agent is resolving review comments"
     "agent:conflict|d93f0b|Branch conflicts with main — awaiting Engineer reconcile"
     "agent:reconciling|fbca04|Engineer Agent is merging main in & resolving conflicts"
-    "agent:clarify|c2e0c6|A human question/comment to answer — awaiting clarify (Product for an issue; Product + Engineer for a PR)"
+    "agent:clarify|c2e0c6|A human question/comment to answer — clarify (Product on an issue; Product + Engineer on a PR)"
     "agent:clarifying|fbca04|Clarify in flight (Product; also Engineer on a PR)"
     "agent:accepted|0e8a16|Passed review + acceptance — awaiting human merge"
     "agent:blocked|b60205|Needs a human; the dispatcher will not touch it"
