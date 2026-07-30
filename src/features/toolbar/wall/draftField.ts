@@ -8,11 +8,12 @@
  */
 
 /**
- * A pointer target or the focused element. Kept structural (rather than `Node`)
- * so the tests can stand in plain objects for DOM nodes — this module never
- * does more with one than compare identity via `contains`.
+ * A pointer target or the focused element. Structural rather than `Node` itself
+ * so the node-environment tests can stand in lightweight fakes — this module
+ * never does more with one than compare identity via `contains` — but narrow
+ * enough that an arbitrary object isn't one.
  */
-export type TargetNode = object;
+export type TargetNode = { readonly nodeType: number };
 
 /** A node we can ask "is this target inside me?" — an element in the app. */
 export interface DraftFieldNode {
@@ -45,7 +46,8 @@ export interface PointerDownSource {
  * this, so an invalid draft is rejected identically everywhere.
  */
 export function parseDraft(draft: string, min: number): number | null {
-  // `Number("")` is 0, which would sneak past the finite check.
+  // `Number("")` is 0 — rejected below anyway while every minimum is > 0, but
+  // spell out the rule so it doesn't quietly depend on that.
   if (draft.trim() === "") return null;
   const parsed = Number(draft);
   if (!Number.isFinite(parsed) || parsed < min) return null;

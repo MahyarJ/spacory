@@ -3,8 +3,9 @@ import { useApp } from "@app/store";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import clsx from "clsx";
-import { useEffect, useRef, useState } from "react";
-import { commitDraftOnOutsidePointerDown, parseDraft } from "./draftField";
+import { useEffect, useState } from "react";
+import { parseDraft } from "./draftField";
+import { useCommitOnClickAway } from "./useCommitOnClickAway";
 import styles from "./WallOptions.module.css";
 
 const PRESETS = [7, 10, 12, 15, 20, 40]; // cm
@@ -78,37 +79,6 @@ export function WallOptions() {
       )}
     </div>
   );
-}
-
-/**
- * Commit a draft field when the user clicks away onto the canvas (or anywhere
- * else outside it), which otherwise unmounts the focused input without ever
- * firing `blur`. Returns the ref to put on the field's root element.
- *
- * Shared by both fields so they behave identically — see `draftField.ts` for
- * why this listens on the document's capture phase.
- */
-function useCommitOnClickAway(commit: () => void) {
-  const fieldRef = useRef<HTMLFormElement>(null);
-  // Keep the latest commit (it closes over the current draft) behind a ref so
-  // the listener is installed once, on mount.
-  const commitRef = useRef(commit);
-  useEffect(() => {
-    commitRef.current = commit;
-  });
-
-  useEffect(
-    () =>
-      commitDraftOnOutsidePointerDown({
-        source: document,
-        getField: () => fieldRef.current,
-        getActiveElement: () => document.activeElement,
-        commit: () => commitRef.current(),
-      }),
-    [],
-  );
-
-  return fieldRef;
 }
 
 /** Numeric length editor for the currently selected wall. */

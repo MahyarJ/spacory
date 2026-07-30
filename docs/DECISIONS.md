@@ -236,7 +236,8 @@ don't pay for a DOM they never touch.
 **Decision.** The options bar's inline number fields (wall length, opening width)
 commit their draft on a `pointerdown` that lands **outside** the field while the
 field still holds focus, using a listener on `document`'s **capture** phase
-(`src/features/toolbar/wall/draftField.ts`).
+(`src/features/toolbar/wall/draftField.ts`, wired up by the shared
+`useCommitOnClickAway` hook beside it).
 
 **Why a listener rather than a blur handler.** `onBlur={commit}` cannot cover
 clicking back onto the canvas: that click clears (or moves) the selection, the

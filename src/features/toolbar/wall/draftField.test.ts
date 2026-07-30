@@ -31,6 +31,15 @@ describe("parseDraft", () => {
 });
 
 /**
+ * A DOM node stand-in. Only its identity matters — the module never does more
+ * with one than compare it via `contains` — but it carries the `nodeType` the
+ * real thing has, so it satisfies `TargetNode` rather than sidestepping it.
+ */
+function fakeNode(name: string): TargetNode & { name: string } {
+  return { nodeType: 1 /* ELEMENT_NODE */, name };
+}
+
+/**
  * A field element stand-in: `inside` are the nodes it contains (its input,
  * label, unit suffix), everything else — the canvas — is outside.
  */
@@ -39,8 +48,8 @@ function fakeField(...inside: TargetNode[]): DraftFieldNode {
 }
 
 describe("isCommittingPointerDown", () => {
-  const input = { name: "input" };
-  const canvas = { name: "canvas" };
+  const input = fakeNode("input");
+  const canvas = fakeNode("canvas");
   const field = fakeField(input);
 
   it("commits when a focused field is clicked away from", () => {
@@ -83,8 +92,8 @@ function fakePointerDownSource() {
 
 describe("commitDraftOnOutsidePointerDown", () => {
   it("commits on a press outside the focused field, and stops on cleanup", () => {
-    const input = { name: "input" };
-    const canvas = { name: "canvas" };
+    const input = fakeNode("input");
+    const canvas = fakeNode("canvas");
     const commit = vi.fn();
     const dom = fakePointerDownSource();
 
@@ -187,12 +196,12 @@ function mountField(
 }
 
 describe("click-away commits the typed value", () => {
-  const canvas = { name: "canvas" };
+  const canvas = fakeNode("canvas");
 
   it("applies a typed wall length when the canvas is pressed", () => {
     useApp.getState().loadPlan(planWith([wall("w1", 250)]));
     useApp.setState({ selectedWalls: new Set(["w1"]) });
-    const input = { name: "wall-length-input" };
+    const input = fakeNode("wall-length-input");
     const dom = fakePointerDownSource();
     mountField(
       dom,
@@ -211,7 +220,7 @@ describe("click-away commits the typed value", () => {
   it("applies a typed opening width when the canvas is pressed", () => {
     useApp.getState().loadPlan(planWith([wall("w1", 250)], [door("w1", 80)]));
     useApp.setState({ selectedItems: new Set(["d1"]) });
-    const input = { name: "opening-width-input" };
+    const input = fakeNode("opening-width-input");
     const dom = fakePointerDownSource();
     mountField(
       dom,
@@ -229,7 +238,7 @@ describe("click-away commits the typed value", () => {
   it("produces exactly one undo entry, restoring the previous length", () => {
     useApp.getState().loadPlan(planWith([wall("w1", 250)]));
     useApp.setState({ selectedWalls: new Set(["w1"]) });
-    const input = { name: "wall-length-input" };
+    const input = fakeNode("wall-length-input");
     const dom = fakePointerDownSource();
     mountField(
       dom,
@@ -257,7 +266,7 @@ describe("click-away commits the typed value", () => {
   it("leaves the plan untouched when the draft is invalid", () => {
     useApp.getState().loadPlan(planWith([wall("w1", 250)]));
     useApp.setState({ selectedWalls: new Set(["w1"]) });
-    const input = { name: "wall-length-input" };
+    const input = fakeNode("wall-length-input");
     const dom = fakePointerDownSource();
     mountField(
       dom,
