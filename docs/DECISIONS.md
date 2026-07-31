@@ -348,3 +348,37 @@ that *can* be pinned down, and it carries a real product rule — a coarse point
 is shown **nothing**, not a touch equivalent, because touch pan/zoom gestures
 don't exist yet. Encoded in a component that would be a comment; encoded in
 `canvasHint.ts` it is a test.
+
+## PR previews and production share one `gh-pages` branch
+
+**Decision.** GitHub Pages serves the site from the **`gh-pages` branch**, not
+from the GitHub Actions source. A merge to `main` publishes the build to that
+branch's **root** (`deploy.yml`), and every open PR publishes to
+**`preview/pr-<N>/`** on the same branch (`pr-preview.yml`, via
+`rossjrw/pr-preview-action`), which comments the live link and deletes the
+folder on close. To let a build run at either depth, Vite's `base` is relative
+(`./`) rather than `/spacory/`.
+
+**Why one branch.** Pages has a single source, so production and previews can
+only coexist as different *paths* under one deployment — root versus
+`preview/pr-N/`. A main deploy therefore must not clean the preview subtree,
+so `deploy.yml` uses `clean-exclude: preview/`. The relative base is what
+makes the identical `dist` resolve its assets correctly whether it lands at the
+root or three folders deep; nothing in the app reads `import.meta.env.BASE_URL`
+or hard-codes `/spacory/`, so the switch is transparent.
+
+**Why `pull_request`, not `pull_request_target`.** Previews build from the PR's
+head code, so running the deploy with a write-scoped token on
+`pull_request_target` would hand repo-write to untrusted forked code. Same-repo
+branches (the agent workflow) get a write token under plain `pull_request` and
+work; forked PRs get a read-only token and simply skip the deploy. That's the
+safe trade for a public repo.
+
+**Two settings follow `pr-preview-action`'s own guidance.** The preview job's
+concurrency is `preview-${{ github.ref }}` with cancellation **off** (a
+cancelled run desyncs the deployed files from the sticky comment), and the main
+deploy sets `force: false` so a rebase — not a stale-clone force-push — lands it,
+which can't clobber a preview committed in the same window. The sticky comment
+`pr-preview-action` posts is the preview link; we deliberately don't register a
+GitHub deployment environment for a "View deployment" button, since it only
+duplicates that comment at the cost of extra plumbing.
