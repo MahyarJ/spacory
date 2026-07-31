@@ -59,9 +59,14 @@ name**: if you acted on it, say what you did; if you didn't or you disagree, say
 **Never silently drop a comment** — folding a suggestion into a commit without
 acknowledging it on the thread reads as "ignored," even when the code did change.
 
-Keep depth **proportionate**: the comment that *opens* a topic is detailed and
-reasoned; follow-up replies — usually the resolve rounds — are concise and to the
-point (acknowledge, state the outcome, move on).
+Keep it **short and written for a human.** These comments are read by a person
+deciding what to merge — not mined by an agent — so lead with the outcome, skip
+the play-by-play, and don't restate the spec or narrate the diff back at the
+reader. A **blocking** finding gets exactly enough reasoning to act on; anything
+else gets a line, or is left out. Don't write a section per criterion or a
+paragraph per point — that's noise a human has to wade through. Follow-up replies
+(the resolve rounds especially) are shorter still: acknowledge, state the
+outcome, move on.
 
 **Close the loop *visibly*, and mind where the comment lives.** GitHub only threads
 **inline** (diff) review comments — a **top-level** conversation comment is a flat
@@ -244,20 +249,30 @@ user-value / UX / scope judgments to the Product Agent's acceptance pass.
 ```bash
 gh pr comment <PR_NUMBER> --body "🛠️ **Engineer review**
 
-**Blocking**
-- <file:line> — <problem and why it must change>
+<one or two lines: is the change correct, and the one thing that matters most>
 
-**Nits (non-blocking)**
-- <suggestion>
+**Blocking** (omit this whole section when nothing blocks)
+- <file:line> — <the problem, and just enough why to fix it>
 
 **Verdict:** <approve / changes requested / approve pending non-code fixes> — <one-line rationale>"
 ```
 
-Mark each finding **blocking** (must change before merge) or **nit** (optional). Be
-specific and cite `file:line`. **Do not** modify code, approve via `gh`, or merge. If
-there are no blocking findings, say so plainly. If the thread has open
-questions/suggestions (from anyone), answer them here too (see *Answering the
-thread*) rather than leaving them hanging.
+Open with a one- or two-line read of the change, then list **Blocking** findings
+**only if there are any** — each cited to `file:line` with just enough reasoning
+to act on. These route to `resolve`, so they must be actionable; when nothing
+blocks, drop the section and say so in the opening line. **Do not** modify code,
+approve via `gh`, or merge. If the thread has open questions/suggestions (from
+anyone), answer them concisely here too (see *Answering the thread*) rather than
+leaving them hanging.
+
+**Nits are optional and written for a human, not an agent.** The resolve pass is
+driven by *blocking* findings, so a nit is never something the loop fixes on its
+own — it's a note a person may choose to turn into a fresh `agent:changes`
+request. So: raise a nit only if a human might actually want it acted on, phrase
+it so they can decide at a glance, and prefer **no nits** over a dump of
+everything you noticed. If no agent will ever action it and no human will care,
+leave it out. A handful of genuinely useful nits is fine; a wall of them is
+exactly the noise this section is trying to prevent.
 
 **A conditional approval is NOT an `approve` — the verdict word decides what the
 loop does next, so it must carry the condition.** The dispatcher parses only the

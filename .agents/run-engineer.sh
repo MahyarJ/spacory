@@ -46,6 +46,9 @@
 #   CLAUDE_MODEL             default: the session default model. Set in
 #                            .agents/.env to pin (dispatch.sh sources it); this
 #                            repo pins "opus".
+#   CLAUDE_EFFORT            default: the CLI's default effort. Set in
+#                            .agents/.env to pin a reasoning-effort level (e.g.
+#                            "high"); passed through as `--effort`.
 #
 # Note: for an unattended headless run to not stall, the commands the agent uses
 # must be permitted. This repo's .claude/settings.json allows git, npm, `gh pr`
@@ -142,5 +145,6 @@ args=( -p "$TASK"
        --append-system-prompt-file "$PROMPT"
        --permission-mode "$PERMISSION_MODE" )
 [ -n "${CLAUDE_MODEL:-}" ] && args+=( --model "$CLAUDE_MODEL" )
+[ -n "${CLAUDE_EFFORT:-}" ] && args+=( --effort "$CLAUDE_EFFORT" )
 
 exec claude "${args[@]}"

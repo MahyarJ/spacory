@@ -53,8 +53,11 @@ open. Fold your responses into the comment you post this run, addressing each op
 point **by name**: if the answer changes the spec, say how; if you're deferring a
 technical point to the Engineer Agent, say so. **Never silently drop a comment.**
 
-Keep depth **proportionate**: the comment that *opens* a topic is detailed and
-reasoned; follow-up replies are concise and to the point.
+Keep it **short and written for a human.** These comments are read by a person
+deciding what to merge — not mined by an agent — so lead with the outcome and
+don't restate the spec back at the reader. Don't reproduce the acceptance-criteria
+checklist or write a paragraph per criterion; surface only what the reader needs
+to act (see *Post one acceptance comment*). Follow-up replies are shorter still.
 
 **Close the loop *visibly*, and mind where the comment lives.** GitHub only threads
 **inline** (diff) review comments — a **top-level** conversation comment is a flat
@@ -322,20 +325,22 @@ to the Engineer Agent's review — don't duplicate them.
 ```bash
 gh pr comment <PR_NUMBER> --body "🪐 **Product acceptance**
 
-**Acceptance criteria**
-- [x] <criterion> — met: <how observed>
-- [ ] <criterion> — NOT met: <what's missing>
+<one or two lines: does the user get what the story promised — the observable thing they can now do that they couldn't before>
 
-**Product notes**
-- <UX / user-value / scope observation>
+**Needs attention** (omit this whole section when nothing is outstanding)
+- <an unmet criterion, a criterion the code deliberately deviated from, a UX/scope concern, or a non-code artifact to fix — with why it matters>
 
 **Verdict:** <accepted / changes requested / accepted pending non-code fixes> — <one-line rationale>"
 ```
 
-Mark unmet acceptance criteria clearly — those are blocking. Do **not** modify code
-or merge. If everything is met, say so plainly and mark it accepted. If the thread
-has open product/scope questions or suggestions (from anyone), answer them in the
-**Product notes** rather than leaving them hanging (see *Answering the thread*);
+You still walk **every** criterion in your analysis (Step 2) — but the comment
+does **not** reproduce that checklist. Surface only what the reader needs: which
+criteria are **unmet** (blocking), any deliberate-and-correct **deviation** worth
+recording, the headline user-observable outcome, and any non-code artifact to fix.
+A clean pass is a couple of lines plus the verdict — don't enumerate the criteria
+you found satisfied. Do **not** modify code or merge. If the thread has open
+product/scope questions or suggestions (from anyone), answer them concisely under
+**Needs attention** rather than leaving them hanging (see *Answering the thread*);
 defer purely technical points to the Engineer Agent.
 
 **A conditional acceptance is NOT an `accepted` — the verdict word decides what the
@@ -351,8 +356,8 @@ human can merge with the record still wrong (this has actually happened). So:
   which would otherwise become the permanent, wrong record), or the **PR body no
   longer describes the change** → `accepted pending non-code fixes`. The dispatcher
   routes that to a `clarify` pass (Product edits the issue body, Engineer edits the
-  PR metadata), then re-judges. Name the exact artifact and edit in **Product
-  notes**.
+  PR metadata), then re-judges. Name the exact artifact and edit under **Needs
+  attention**.
 - Only when **nothing** is outstanding use a plain `accepted`.
 
 ---
