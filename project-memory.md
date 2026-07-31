@@ -176,6 +176,22 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
     there's no browser e2e and jsdom can't do real multi-touch; one undo entry per
     completed touch edit, none for pan/pinch, and `pointercancel` aborts without
     committing.
+    **Delivered by PR #91 (accepted 2026-07-31 on `13325d8`; awaiting merge).**
+    Clarify pass 2026-07-31 settled the leftovers: **abandoning a gesture restores
+    the *selection*, not just the plan** — `cancelLiveDrag` snapshots
+    `selectedConnectionPoint` in `beginLiveDrag` and puts it back, and the arm order
+    matters (select *then* snapshot, so a wall grab doesn't resurrect the junction
+    selection it replaced). Two review rounds converged on that rule and
+    `DECISIONS.md` records only the plan rollback, so **fold one sentence about the
+    selection restore into its `cancelLiveDrag` vs `endLiveDrag` paragraph** in the
+    next docs pass (deliberately not held against #91 — one doc line doesn't justify
+    another CI round on an approved PR). Also decided: **do not advertise the new
+    touch gestures on the canvas** — two-finger pan/pinch is the gesture people
+    arrive with from maps and photos, and a standing label spends the smallest
+    viewport's scarce space teaching it; if discoverability proves to be a real
+    problem, the answer is a **dismissible first-run hint**, which needs its own
+    issue. #84's Docs criterion was amended the same day (it still claimed the
+    "Not yet:" line needed no change, which #85 falsified).
   - **#85 — the app shell + toolbar at tablet widths** (triaged & enriched this
     run, retitled "Make the toolbar and app shell usable at tablet (iPad) widths").
     Product calls: the desktop `Tip: Right-drag to pan, Wheel to zoom` label is
@@ -476,6 +492,35 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-07-31 — Clarify pass on **PR #91** (#84's touch-gesture implementation, already
+  accepted on `13325d8`). Nothing product-blocking was left; three things settled.
+  **(1) Repaired #84's spec — reversing my own acceptance note.** Both acceptance
+  passes recorded "#84 needs no repair," and that was wrong on one bullet: the Docs
+  criterion still said *"No change to the 'Not yet:' line is needed (it doesn't
+  currently mention touch),"* true when written and falsified when **#85 merged in
+  between** and added both a "touch drawing gestures on the canvas" entry under
+  "Not yet:" and a Tablet-ready bullet promising drawing "still needs a mouse." PR #91
+  correctly removed both, so the criterion described a README that contradicts what
+  shipped — a permanently wrong record for anyone reading #84 later. Amended the
+  criterion to the delta that actually shipped, dated and with the original's reasoning
+  preserved. **Lesson worth carrying: when a sibling issue merges between grooming and
+  implementation, the older issue's *exact-delta* README criterion is the thing most
+  likely to go stale** — check it during acceptance instead of waving the deviation
+  through as "no repair needed."
+  **(2) Declined to hold #91 for a `DECISIONS.md` line.** The Engineer's non-blocking
+  nit was right that the `cancelLiveDrag` vs `endLiveDrag` paragraph documents only the
+  plan rollback, not the *selection* restore that two review rounds converged on. Real
+  and worth the durable record, but one doc sentence doesn't justify another commit +
+  CI round on an approved PR — recorded above under the #84 bullet to fold into the
+  next docs pass instead (the store's doc comments carry it meanwhile).
+  **(3) Reaffirmed the canvas-hint decision** from the first acceptance: keep the hint
+  desktop-only, don't advertise the touch gestures on the canvas; if discoverability
+  proves to be a real problem the answer is a **dismissible first-run hint**, its own
+  issue in a future cycle, not a standing label on the smallest viewport. The PR-body
+  staleness the last review flagged (the `cancelLiveDrag` bullet, `263` → `265` tests,
+  the "11 tests, 9 fail on revert" count) is the Engineer Agent's artifact and was
+  deferred to them by name.
 
 - 2026-07-30 — Triage run on human-submitted idea #84 ("iPad Wall drawing is not
   possible as it scrolls the canvas") — the companion pass to #85's triage earlier
