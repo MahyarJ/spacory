@@ -423,8 +423,13 @@ export function FloorPlan() {
           last: world,
           snap: !e.altKey,
         });
-        useApp.getState().beginLiveDrag();
+        // Select first, then snapshot: `selectWall` clears any connection-point
+        // selection, and `beginLiveDrag` records the selection as it stands so
+        // an abandoned drag restores *this* gesture's state — snapshotting first
+        // would resurrect the junction on top of the wall selection.
+        // (`beginLiveDrag` only reads `plan.items`, which `selectWall` leaves alone.)
         if (!selectedWalls.has(hitW.id)) selectWall(hitW.id, additive);
+        useApp.getState().beginLiveDrag();
         return;
       }
 

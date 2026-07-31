@@ -210,6 +210,35 @@ describe("FloorPlan touch gestures", () => {
       expect(walls()).toHaveLength(0);
     });
 
+    it("leaves the wall selected, not the junction, when it abandons a wall drag", () => {
+      const plan = cornerPlan();
+      setup({ tool: "select", plan });
+
+      // Select the junction the two walls share, then grab w1's body — that
+      // selects the wall, which deselects the junction.
+      down(1, 400, 0);
+      up(1, 400, 0);
+      expect(useApp.getState().selectedConnectionPoint).toEqual({
+        x: 400,
+        y: 0,
+      });
+
+      down(1, 100, 0);
+      move(1, 100, 60); // live preview: w1 slides 60cm down
+      down(2, 500, 400); // ...and a second finger abandons the drag
+
+      // Regression: rolling the drag back used to restore the junction
+      // selection the wall grab had replaced, so the arrow keys moved the
+      // junction while the highlighted wall stayed put.
+      expect(useApp.getState().selectedConnectionPoint).toBeNull();
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+      // The whole wall moved one grid step, dragging w2's shared end along.
+      expect(walls()[0].a).toEqual({ x: 20, y: 0 });
+      expect(walls()[0].b).toEqual({ x: 420, y: 0 });
+      expect(walls()[1].a).toEqual({ x: 420, y: 0 });
+      expect(walls()[1].b).toEqual({ x: 400, y: 300 });
+    });
+
     it("leaves a leftover finger unable to draw after the pinch", () => {
       setup({ tool: "wall" });
 
