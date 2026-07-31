@@ -58,7 +58,11 @@ body,
   /* Dynamic viewport units, matching `.app`: a percentage here would resolve
      against the initial containing block (the *large* viewport on iOS Safari),
      so the chain would disagree with the app's `100dvh` by the browser-chrome
-     delta and leave either a bare strip below the app or a scrolling document. */
+     delta and leave either a bare strip below the app or a scrolling document.
+     `100vh` first as the fallback for an engine without `dvh`, matching
+     `.app`. */
+  height: 100vh;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: intentional fallback */
   height: 100dvh;
   margin: 0;
   background: var(--sp-bg);

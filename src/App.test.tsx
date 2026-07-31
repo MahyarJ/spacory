@@ -18,10 +18,18 @@ function stubCoarsePointer(coarse: boolean) {
   }));
 }
 
-/** The toolbar row — the element that holds the "Spacory" brand heading. */
+/**
+ * The toolbar row — the element that holds the "Spacory" brand heading.
+ *
+ * The assertions built on this are *negative* ("the row does not contain the
+ * tip"), so identifying the wrong element would make them pass vacuously.
+ * Assert what the row must contain before handing it back.
+ */
 function toolbarRow(): HTMLElement {
   const brand = screen.getByRole("heading", { name: "Spacory" });
-  return brand.parentElement as HTMLElement;
+  const row = brand.parentElement as HTMLElement;
+  expect(row.contains(screen.getByRole("button", { name: /Undo/ }))).toBe(true);
+  return row;
 }
 
 describe("App shell — the pan/zoom tip", () => {

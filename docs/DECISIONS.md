@@ -303,6 +303,22 @@ them next to the controls costs nothing and keeps a button's sizing readable in
 one place. A phone-width pass adds `--sp-bp-phone` and a second flip block the
 same way.
 
+**Why the touch floor grows the hit area, not the control.** A 44px `min-height`
+on a 28px button is a visible restyle: the toolbar gets taller, buttons that were
+wide-and-short turn square, and the theme switch's `border-radius: 999px`
+segments become circles. None of that is what the floor is *for* — the
+requirement is that a finger can hit the control, not that the control looks
+different on a touch screen. So under `pointer: coarse` each control gets an
+invisible `::after` overlay `--sp-touch-target` tall, centred on its box: the
+tap target is finger-sized while the painted control is pixel-identical to the
+desktop one. Horizontally a plain `min-width` does the job — every toolbar
+button is an icon plus a label and already exceeds the target, so it never
+binds, and a width floor (unlike an overlay) can't reach into the neighbour
+beside it. The one thing the overlays do cost is a taller `row-gap` once the row
+wraps, so two rows' targets don't overlap. `Menu`'s entries keep a real
+`min-height` instead: they are stacked full-width rows, where overlapping hit
+areas would mean tapping one entry and triggering the next.
+
 **Why the toolbar wraps rather than scrolls.** At 768px the row is wider than the
 viewport, and a non-wrapping row clipped Undo/Redo off-screen with no way to
 reach them. `flex-wrap: wrap` is invisible at desktop widths (nothing wraps) and

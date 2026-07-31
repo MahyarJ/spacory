@@ -22,11 +22,24 @@
   border: 1px solid var(--sp-accent);
 }
 
-/* Touch: the segments are the tap targets, so they carry the floor; the pill
-   around them grows with them. */
+/* Touch: the segments are the tap targets, so they carry the floor — but as
+   the same invisible overlay the toolbar buttons use, not as a taller box. The
+   pill is `border-radius: 999px`, so a 44px-tall segment renders as a large
+   circle next to 28px-tall controls; extending the hit area instead keeps the
+   compact pill a touch user sees on desktop. */
 @media (pointer: coarse) {
   .btn {
-    min-height: var(--sp-touch-target);
+    position: relative;
     min-width: var(--sp-touch-target);
+  }
+
+  .btn::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--sp-touch-target);
+    transform: translateY(-50%);
   }
 }

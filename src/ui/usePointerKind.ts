@@ -6,8 +6,9 @@ export type PointerKind = "fine" | "coarse";
 const COARSE_POINTER_QUERY = "(pointer: coarse)";
 
 function readPointerKind(): PointerKind {
-  // jsdom (and any non-browser host) has no matchMedia; read that as the
-  // desktop default rather than guessing touch.
+  // A host without matchMedia (SSR, a non-browser test host) reads as the
+  // desktop default rather than guessing touch. jsdom does implement it — it
+  // always reports `matches: false`, which lands on the same answer.
   if (
     typeof window === "undefined" ||
     typeof window.matchMedia !== "function"
@@ -33,6 +34,9 @@ export function usePointerKind(): PointerKind {
     // Re-read on mount too: plugging in a mouse (or toggling device emulation)
     // can change the answer between the first render and here.
     onChange();
+    // Guarded for the same hosts the read above guards: a MediaQueryList that
+    // predates (or stubs out) the EventTarget interface would throw here.
+    if (typeof query.addEventListener !== "function") return;
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
   }, []);

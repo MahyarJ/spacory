@@ -2,8 +2,14 @@
   display: flex;
   flex-direction: column;
   /* Dynamic viewport units: on iOS Safari `100vh` measures past the browser
-     chrome, which pushes the bottom of the canvas out of sight. */
+     chrome, which pushes the bottom of the canvas out of sight. The static
+     units come first as a fallback — an engine without `dvh` drops the second
+     declaration, and without the first `.app` would fall back to `height: auto`
+     and collapse the canvas. */
+  height: 100vh;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: intentional fallback */
   height: 100dvh;
+  width: 100vw;
   width: 100dvw;
   overflow: hidden;
 }
