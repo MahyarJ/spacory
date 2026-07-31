@@ -345,6 +345,45 @@ be a worse bug than the overflow.
 **Why a pure helper for one string.** jsdom has no layout engine, so the layout
 half of responsive work isn't unit-testable; the pointer decision is the part
 that *can* be pinned down, and it carries a real product rule — a coarse pointer
-is shown **nothing**, not a touch equivalent, because touch pan/zoom gestures
-don't exist yet. Encoded in a component that would be a comment; encoded in
-`canvasHint.ts` it is a test.
+is shown **nothing**, not a touch equivalent, because right-drag and the wheel
+have no touch counterpart, and whether to advertise the gestures that replaced
+them (below) is a separate call. Encoded in a component that would be a comment;
+encoded in `canvasHint.ts` it is a test.
+
+## Touch on the canvas: one finger drives the tool, two drive the viewport
+
+**Decision.** The canvas sets `touch-action: none` (in
+`FloorPlan.module.css`) and reads the contacts itself: **one** finger runs the
+active tool's gesture exactly as a mouse left-drag does, and **two or more** pan
+and pinch-zoom regardless of the tool. The page's `<meta name="viewport">` is
+left alone — no `user-scalable=no`, no `maximum-scale=1`.
+
+**Why scope the suppression to the canvas.** Without a `touch-action`
+declaration the browser claims a finger drag as a page scroll before the pointer
+handlers see it, then fires `pointercancel` — on a tablet you could not draw at
+all. Killing the browser's own pinch page-wide would fix that too, but it takes
+an accessibility affordance away from the toolbar and every dialog for the sake
+of one element. `touch-action: none` on that one element is the narrow fix.
+
+**Why two fingers work with any tool.** Requiring a switch to the Pan tool to
+move around makes drawing on a tablet a mode-toggling chore. Since two contacts
+are unambiguous — no tool uses them — the second finger can safely mean "move the
+view". It does mean a second finger landing mid-drag has to **abandon** the
+gesture in flight rather than commit it: hence `cancelLiveDrag()` in the store,
+which rolls the live preview back to the last committed plan (unlike
+`endLiveDrag()`, which keeps it — right for a drag that ended where it started,
+wrong for one that never got to finish). `pointercancel` takes the same path.
+
+**Why the pinch math is a pure module.** `computePinchView` (`src/app/viewport.ts`)
+turns the anchor (both contacts and the viewport at gesture start) plus the two
+current positions into the new `ViewState`. jsdom cannot do real multi-touch, so
+the arithmetic — pan, zoom, the midpoint staying anchored, the scale clamp — is
+only testable outside the component. It is deliberately **anchor-absolute** rather
+than accumulated per move: once the scale clamps, incremental updates drift and
+the midpoint stops holding. One rule ("the world point under the starting midpoint
+must sit under the current midpoint") covers pan, pinch, and both at once.
+
+**Why pan stopped using `movementX`/`movementY`.** Browsers only populate those
+for mouse pointers, so the Pan tool moved nothing under a finger. The canvas now
+tracks each contact's last position and pans by its delta, which is identical for
+a mouse and defined for touch.

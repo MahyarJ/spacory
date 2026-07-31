@@ -73,6 +73,72 @@ export function computeFitView(
   };
 }
 
+/**
+ * A pointer position in canvas-local pixels (client coordinates minus the
+ * canvas's top-left corner) — the same space `panX`/`panY` live in.
+ */
+export interface CanvasPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Where a two-finger gesture started: both contact positions plus the viewport
+ * at that moment. Held for the whole gesture so pan and zoom are derived from
+ * the anchor rather than accumulated per move, which would drift once the scale
+ * clamps.
+ */
+export interface PinchAnchor {
+  a: CanvasPoint;
+  b: CanvasPoint;
+  view: ViewState;
+}
+
+function midpoint(a: CanvasPoint, b: CanvasPoint): CanvasPoint {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+function distance(a: CanvasPoint, b: CanvasPoint): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+/**
+ * The viewport for a two-finger gesture, given where the fingers started
+ * (`anchor`) and where they are now: zoom by how much they have spread, and pan
+ * so the world point that was under the starting midpoint sits under the current
+ * midpoint. That single rule covers all three cases the canvas needs —
+ * translating both fingers equally pans without zooming, spreading them in place
+ * zooms about the midpoint (mirroring how wheel zoom pins the point under the
+ * cursor), and doing both at once pans and zooms together.
+ *
+ * Pure — no React, no DOM. The zoom is clamped to [MIN_SCALE, MAX_SCALE], and
+ * the pan is derived from the *clamped* scale so the midpoint stays anchored
+ * even at the limits. Fingers that start on the same spot give no scale
+ * reference, so that degenerate case pans without zooming instead of dividing
+ * by zero.
+ */
+export function computePinchView(
+  anchor: PinchAnchor,
+  a: CanvasPoint,
+  b: CanvasPoint,
+): ViewState {
+  const startDistance = distance(anchor.a, anchor.b);
+  const ratio = startDistance > 0 ? distance(a, b) / startDistance : 1;
+  const scale = clampScale(anchor.view.scale * ratio);
+
+  const from = midpoint(anchor.a, anchor.b);
+  const to = midpoint(a, b);
+  // The world point under the starting midpoint, in the pre-gesture viewport...
+  const worldX = (from.x - anchor.view.panX) / anchor.view.scale;
+  const worldY = (from.y - anchor.view.panY) / anchor.view.scale;
+  // ...has to land under the current midpoint: to = pan + world * scale.
+  return {
+    scale,
+    panX: to.x - worldX * scale,
+    panY: to.y - worldY * scale,
+  };
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }

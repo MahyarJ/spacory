@@ -55,9 +55,9 @@ describe("App shell — the pan/zoom tip", () => {
     render(<App />);
 
     expect(screen.queryByText(CANVAS_POINTER_HINT)).toBeNull();
-    // Nothing took its place: touch pan/zoom gestures don't exist yet (#84),
-    // so no gesture advice of any kind is offered. (The "Pan" *tool* button is
-    // still there — this looks for hint text, not controls.)
+    // Nothing took its place: the canvas hint is desktop-only, so no gesture
+    // advice of any kind is offered on a touch screen. (The "Pan" *tool* button
+    // is still there — this looks for hint text, not controls.)
     expect(screen.queryByText(/drag to pan|pinch|two.finger/i)).toBeNull();
     // The controls it used to sit beside are still there and reachable.
     expect(screen.getByRole("button", { name: /Undo/ })).toBeTruthy();

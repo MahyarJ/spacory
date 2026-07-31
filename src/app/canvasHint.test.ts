@@ -10,8 +10,9 @@ describe("canvasHintForPointer", () => {
   });
 
   it("gives a coarse pointer no hint at all", () => {
-    // Not a touch-gesture equivalent: those gestures don't exist yet (#84), so
-    // there is nothing truthful to put in its place.
+    // The hint is desktop-only by design: right-drag and the wheel have no touch
+    // counterpart, and advertising the touch gestures that replace them is a
+    // separate product call.
     expect(canvasHintForPointer("coarse")).toBeNull();
   });
 });

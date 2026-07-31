@@ -139,6 +139,14 @@ interface AppState {
   beginLiveDrag: () => void;
   /** Clear the pre-drag item snapshot when a live drag ends without committing. */
   endLiveDrag: () => void;
+  /**
+   * Abandon a live drag: roll the plan back to the last committed state and drop
+   * the snapshot. Unlike `endLiveDrag` (which keeps whatever the preview moved,
+   * for a drag that ended where it started), this undoes the preview itself —
+   * for a gesture that never gets a chance to finish, e.g. a `pointercancel` or
+   * a second finger turning a drag into a pan/pinch. Adds no history entry.
+   */
+  cancelLiveDrag: () => void;
   /** Push the current plan onto the undo stack as a single history entry. */
   commitPlan: () => void;
 }
@@ -599,6 +607,9 @@ export const useApp = create<AppState>((set, get) => ({
   liveDragItems: null,
   beginLiveDrag: () => set({ liveDragItems: get().plan.items }),
   endLiveDrag: () => set({ liveDragItems: null }),
+  // The live preview mutated `plan` without touching history, so the committed
+  // present *is* the pre-drag plan — restoring it discards the preview.
+  cancelLiveDrag: () => set({ plan: history.present, liveDragItems: null }),
   commitPlan: () => {
     const { selectedConnectionPoint } = get();
     const next: Plan = {
