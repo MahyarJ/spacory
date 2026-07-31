@@ -1,6 +1,11 @@
 import { assertNever, type Point, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
-import { clampScale } from "@app/viewport";
+import {
+  type CanvasPoint,
+  clampScale,
+  computePinchView,
+  type PinchAnchor,
+} from "@app/viewport";
 import {
   getConnectionPoints,
   pickAnyWallEndpoint,
@@ -88,6 +93,21 @@ export function FloorPlan() {
     grabWorld: Point; // pointer world position at grab time
     snap: boolean; // snap-to-grid on this drag
   }>(null);
+
+  // Every contact currently down on the canvas, in canvas-local pixels, keyed by
+  // pointerId. Touch means several at once, so we track them instead of assuming
+  // a single pointer. Refs, not state: the pointer handlers read and write these
+  // on every move and must never be a render behind.
+  const pointers = useRef(new Map<number, CanvasPoint>());
+  // The live two-finger gesture: which contacts drive it, and the anchor its
+  // pan/zoom is derived from.
+  const pinch = useRef<{ ids: [number, number]; anchor: PinchAnchor } | null>(
+    null,
+  );
+  // Set the moment a gesture becomes multi-touch, cleared when the last finger
+  // lifts. Keeps a leftover finger from resuming the tool gesture that the
+  // second finger abandoned.
+  const multiTouch = useRef(false);
 
   useEffect(() => {
     const resize = () => {
@@ -222,6 +242,47 @@ export function FloorPlan() {
     );
   };
 
+  // Pointer position in canvas-local pixels — the space `panX`/`panY` and the
+  // pinch math work in (see computePinchView).
+  const toCanvas = (clientX: number, clientY: number): CanvasPoint => {
+    const rect = svgRef.current!.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  // (Re-)anchor the two-finger gesture on the first two contacts at their
+  // current positions and the current viewport. Re-anchoring instead of keeping
+  // the original anchor is what stops the view jumping when the driving pair
+  // changes (a third finger lands, or one of the two lifts while others remain).
+  const anchorPinch = () => {
+    const [first, second] = [...pointers.current.entries()];
+    if (!first || !second) {
+      pinch.current = null;
+      return;
+    }
+    pinch.current = {
+      ids: [first[0], second[0]],
+      anchor: { a: first[1], b: second[1], view: useApp.getState().view },
+    };
+  };
+
+  // Abandon whatever tool gesture is in flight without committing anything:
+  // drop the drafts and roll back a live drag's preview. Shared by
+  // `pointercancel` (the browser took the gesture away) and by the second finger
+  // landing, which turns the gesture into a pan/pinch. The live-drag check reads
+  // the store rather than React state so it holds even when two contacts arrive
+  // before a re-render.
+  const abortGesture = () => {
+    if (useApp.getState().liveDragItems) useApp.getState().cancelLiveDrag();
+    setMoving(null);
+    setMovingPoint(null);
+    setMovingEndpoint(null);
+    setDrawingWall(null);
+    setOpening(null);
+    setDragging(false);
+    setMarquee(null);
+    setIsPanning(false);
+  };
+
   // Build and commit an opening item from a resolved offset/length. Shared by
   // both creation gestures (click-click and drag) so they produce identical
   // items given the same placement.
@@ -267,6 +328,19 @@ export function FloorPlan() {
     // Capture on the <svg> itself (currentTarget), not e.target — a clicked
     // child (e.g. a wall <polygon>) can re-render mid-drag and drop the capture.
     e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, toCanvas(e.clientX, e.clientY));
+
+    // Two or more contacts means pan/pinch, whatever the tool is — so you never
+    // have to switch to the Pan tool to move around. The one-finger gesture the
+    // first contact started is abandoned rather than committed as a garbage edit.
+    if (pointers.current.size >= 2) {
+      if (!multiTouch.current) {
+        multiTouch.current = true;
+        abortGesture();
+      }
+      anchorPinch();
+      return;
+    }
 
     if (e.button === 2 || tool === "pan") {
       setIsPanning(true);
@@ -349,8 +423,13 @@ export function FloorPlan() {
           last: world,
           snap: !e.altKey,
         });
-        useApp.getState().beginLiveDrag();
+        // Select first, then snapshot: `selectWall` clears any connection-point
+        // selection, and `beginLiveDrag` records the selection as it stands so
+        // an abandoned drag restores *this* gesture's state — snapshotting first
+        // would resurrect the junction on top of the wall selection.
+        // (`beginLiveDrag` only reads `plan.items`, which `selectWall` leaves alone.)
         if (!selectedWalls.has(hitW.id)) selectWall(hitW.id, additive);
+        useApp.getState().beginLiveDrag();
         return;
       }
 
@@ -409,18 +488,35 @@ export function FloorPlan() {
 
   const onPointerMove: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
+    // Track the contact's new position before anything reads it, keeping its
+    // previous one to derive a delta from.
+    const previous = pointers.current.get(e.pointerId);
+    const local = toCanvas(e.clientX, e.clientY);
+    if (previous) pointers.current.set(e.pointerId, local);
+
+    if (pinch.current) {
+      const [idA, idB] = pinch.current.ids;
+      const a = pointers.current.get(idA);
+      const b = pointers.current.get(idB);
+      const anchor = pinch.current.anchor;
+      if (a && b) setView(() => computePinchView(anchor, a, b));
+      return;
+    }
+    // A finger left over from a multi-touch gesture must not start drawing.
+    if (multiTouch.current) return;
+
     const world = toWorld(e.clientX, e.clientY);
     setCursor(world);
     if (marquee) {
       setMarquee({ ...marquee, x1: world.x, y1: world.y });
       return;
     }
-    if (isPanning) {
-      setView((v) => ({
-        ...v,
-        panX: v.panX + e.movementX,
-        panY: v.panY + e.movementY,
-      }));
+    if (isPanning && previous) {
+      // Pan by the contact's own delta rather than `movementX/movementY`, which
+      // browsers only populate for mouse pointers — a finger reports zero.
+      const dx = local.x - previous.x;
+      const dy = local.y - previous.y;
+      setView((v) => ({ ...v, panX: v.panX + dx, panY: v.panY + dy }));
     }
 
     // start dragging (wall creation, or opening creation along a wall)
@@ -526,11 +622,25 @@ export function FloorPlan() {
     }
   };
 
+  // Forget a lifted/cancelled contact and re-settle the multi-touch state:
+  // re-anchor while two contacts remain (so the view doesn't jump when the
+  // driving pair changes), otherwise end the pinch. Returns true if the event
+  // belonged to a multi-touch gesture, i.e. no tool gesture should act on it.
+  const releasePointer = (pointerId: number): boolean => {
+    pointers.current.delete(pointerId);
+    if (pointers.current.size >= 2) anchorPinch();
+    else pinch.current = null;
+    const wasMultiTouch = multiTouch.current;
+    if (pointers.current.size === 0) multiTouch.current = false;
+    return wasMultiTouch;
+  };
+
   const onPointerUp: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
+    if (releasePointer(e.pointerId)) return;
     if (isPanning) setIsPanning(false);
     if (dragging && drawingWall && tool === "wall") {
       const world = toWorld(e.clientX, e.clientY);
@@ -619,6 +729,18 @@ export function FloorPlan() {
     }
   };
 
+  // The browser took the gesture away mid-drag (a system gesture, the contact
+  // going out of range). Nothing is committed: drafts vanish and a live drag is
+  // rolled back, so the canvas isn't left half-dragging.
+  const onPointerCancel: React.PointerEventHandler<SVGSVGElement> = (e) => {
+    if (!svgRef.current) return;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (releasePointer(e.pointerId)) return;
+    abortGesture();
+  };
+
   const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
     const delta = -e.deltaY;
     const factor = Math.exp(delta * 0.001);
@@ -691,6 +813,7 @@ export function FloorPlan() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onWheel={onWheel}
       >
         <title>Floor plan canvas</title>

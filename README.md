@@ -31,17 +31,18 @@ connected room structures.
 - 💾 **Import / export** — load a plan from JSON, and get it back out through the
   toolbar's **Export** menu, which groups the available formats (JSON plan file,
   PNG image and SVG vector image)
-- 🧭 **Canvas** — on desktop, pan (right-drag or Pan tool) and zoom (wheel);
-  "Fit" frames the whole plan in one click
+- 🧭 **Canvas** — pan (right-drag, two-finger drag, or the Pan tool) and zoom
+  (wheel or pinch); "Fit" frames the whole plan in one click
 - 🎨 **Theming** — dark / light / system, via CSS variables
-- 📱 **Tablet-ready chrome** — the toolbar and app shell adapt to tablet
-  viewport widths (the toolbar wraps instead of clipping its controls) and every
-  control is a comfortable touch target on a touch screen. Drawing gestures on
-  the canvas itself are not there yet — that still needs a mouse
+- 📱 **Tablet-ready** — the toolbar and app shell adapt to tablet viewport
+  widths (the toolbar wraps instead of clipping its controls) and every control
+  is a comfortable touch target on a touch screen. On the canvas, one finger runs
+  the active tool (draw, place, select, drag) and two fingers pan and pinch-zoom
+  whatever the tool
 - ⚡ Built with **Vite + React + TypeScript**
 
 Not yet: splitting a wall where another ends mid-span, rooms / enclosed areas,
-touch drawing gestures on the canvas, and a phone-width layout. See
+stylus/Apple Pencil specifics, and a phone-width layout. See
 [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope notes.
 
 ---

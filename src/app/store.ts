@@ -135,10 +135,28 @@ interface AppState {
    * exact pre-drag offsets, rather than compounding tick-over-tick.
    */
   liveDragItems: Item[] | null;
-  /** Capture the pre-drag item snapshot at the start of a live drag gesture. */
+  /**
+   * `selectedConnectionPoint` as it stood when a live drag gesture started, or
+   * `null` when nothing was selected / no gesture is in progress. A junction
+   * drag advances the selected point on every tick alongside the plan, so
+   * abandoning the gesture has to put the selection back too (see
+   * `cancelLiveDrag`) or the handle renders away from the junction and the next
+   * nudge re-derives an empty endpoint set from the stale coordinate.
+   */
+  liveDragConnectionPoint: Point | null;
+  /** Capture the pre-drag item/selection snapshot at the start of a live drag gesture. */
   beginLiveDrag: () => void;
-  /** Clear the pre-drag item snapshot when a live drag ends without committing. */
+  /** Clear the pre-drag snapshot when a live drag ends without committing. */
   endLiveDrag: () => void;
+  /**
+   * Abandon a live drag: roll the plan back to the last committed state, put the
+   * connection-point selection back where the drag found it, and drop the
+   * snapshot. Unlike `endLiveDrag` (which keeps whatever the preview moved,
+   * for a drag that ended where it started), this undoes the preview itself —
+   * for a gesture that never gets a chance to finish, e.g. a `pointercancel` or
+   * a second finger turning a drag into a pan/pinch. Adds no history entry.
+   */
+  cancelLiveDrag: () => void;
   /** Push the current plan onto the undo stack as a single history entry. */
   commitPlan: () => void;
 }
@@ -467,6 +485,7 @@ export const useApp = create<AppState>((set, get) => ({
       // Loading a document ends any in-progress drag; drop its pre-drag snapshot
       // so a stale one can't reconcile the new plan against the old doc's items.
       liveDragItems: null,
+      liveDragConnectionPoint: null,
       // A held connection-point selection has no reliable meaning against a
       // freshly loaded plan (wall ids may collide with an unrelated junction
       // in the new doc), so drop it rather than risk a following nudge
@@ -597,8 +616,31 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
   liveDragItems: null,
-  beginLiveDrag: () => set({ liveDragItems: get().plan.items }),
-  endLiveDrag: () => set({ liveDragItems: null }),
+  liveDragConnectionPoint: null,
+  beginLiveDrag: () =>
+    set({
+      liveDragItems: get().plan.items,
+      liveDragConnectionPoint: get().selectedConnectionPoint,
+    }),
+  endLiveDrag: () =>
+    set({ liveDragItems: null, liveDragConnectionPoint: null }),
+  // The live preview mutated `plan` without touching history, so the committed
+  // present *is* the pre-drag plan — restoring it discards the preview. The
+  // junction drag also advanced `selectedConnectionPoint`, so put that back from
+  // the snapshot and re-derive its membership from the rolled-back walls, or the
+  // selection would point at a coordinate the plan no longer has.
+  cancelLiveDrag: () => {
+    const { liveDragConnectionPoint } = get();
+    set({
+      plan: history.present,
+      liveDragItems: null,
+      liveDragConnectionPoint: null,
+      selectedConnectionPoint: liveDragConnectionPoint,
+      selectedConnectionPointEndpoints: liveDragConnectionPoint
+        ? findConnectedEndpoints(history.present.walls, liveDragConnectionPoint)
+        : [],
+    });
+  },
   commitPlan: () => {
     const { selectedConnectionPoint } = get();
     const next: Plan = {
@@ -615,6 +657,7 @@ export const useApp = create<AppState>((set, get) => ({
     set({
       plan: history.present,
       liveDragItems: null,
+      liveDragConnectionPoint: null,
       selectedConnectionPointEndpoints: selectedConnectionPoint
         ? findConnectedEndpoints(history.present.walls, selectedConnectionPoint)
         : [],

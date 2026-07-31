@@ -8,6 +8,14 @@
      trigger the browser's native text-selection on SVG labels underneath. */
   user-select: none;
   -webkit-user-select: none;
+  /* Touch gestures on the canvas belong to the canvas. Without this the default
+     `touch-action: auto` lets the browser claim a finger drag as a page
+     scroll/zoom and fire `pointercancel`, so the drag never reaches the drawing
+     code at all. Deliberately scoped to this element rather than taken away from
+     the page (no `user-scalable=no` in index.html): the browser's own pinch stays
+     an accessibility affordance everywhere else. Pan and pinch zoom are
+     reimplemented here against the app's viewport (see FloorPlan.tsx). */
+  touch-action: none;
 }
 
 .badge {

@@ -1,8 +1,10 @@
 import type { Bounds } from "@geometry/bounds";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  type CanvasPoint,
   clampScale,
   computeFitView,
+  computePinchView,
   DEFAULT_VIEW,
   loadPersistedView,
   MAX_SCALE,
@@ -46,6 +48,107 @@ describe("clampScale", () => {
   it("clamps below the minimum and above the maximum", () => {
     expect(clampScale(0)).toBe(MIN_SCALE);
     expect(clampScale(1000)).toBe(MAX_SCALE);
+  });
+});
+
+describe("computePinchView", () => {
+  const at = (x: number, y: number): CanvasPoint => ({ x, y });
+
+  /** Two fingers 200px apart, horizontally, on an already panned/zoomed view. */
+  const anchor = (view: ViewState = { panX: -50, panY: 30, scale: 1.5 }) => ({
+    a: at(300, 400),
+    b: at(500, 400),
+    view,
+  });
+
+  /** Where a canvas-local point maps to in world coordinates under `view`. */
+  const worldUnder = (view: ViewState, p: CanvasPoint) => ({
+    x: (p.x - view.panX) / view.scale,
+    y: (p.y - view.panY) / view.scale,
+  });
+
+  it("pans without zooming when both fingers translate equally", () => {
+    const start = anchor();
+    const v = computePinchView(start, at(340, 470), at(540, 470));
+
+    expect(v.scale).toBe(start.view.scale);
+    expect(v.panX).toBeCloseTo(start.view.panX + 40);
+    expect(v.panY).toBeCloseTo(start.view.panY + 70);
+  });
+
+  it("doubles the zoom when the fingers spread to twice the distance", () => {
+    const start = anchor();
+    // Same midpoint (400, 400), distance 200 → 400.
+    const v = computePinchView(start, at(200, 400), at(600, 400));
+
+    expect(v.scale).toBeCloseTo(start.view.scale * 2);
+  });
+
+  it("halves the zoom when the fingers pinch to half the distance", () => {
+    const start = anchor();
+    const v = computePinchView(start, at(350, 400), at(450, 400));
+
+    expect(v.scale).toBeCloseTo(start.view.scale / 2);
+  });
+
+  it("keeps the world point under the midpoint anchored while zooming", () => {
+    const start = anchor();
+    const before = worldUnder(start.view, at(400, 400));
+    const v = computePinchView(start, at(250, 400), at(550, 400));
+
+    // The midpoint didn't move, so the same world point must still be under it.
+    const after = worldUnder(v, at(400, 400));
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+  });
+
+  it("anchors on the moved midpoint when panning and pinching at once", () => {
+    const start = anchor();
+    const before = worldUnder(start.view, at(400, 400));
+    // Midpoint slides to (500, 340) while the distance grows 200 → 300.
+    const v = computePinchView(start, at(350, 340), at(650, 340));
+
+    expect(v.scale).toBeCloseTo(start.view.scale * 1.5);
+    const after = worldUnder(v, at(500, 340));
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+  });
+
+  it("clamps the zoom, still anchoring the midpoint at the limit", () => {
+    const start = anchor({ panX: 0, panY: 0, scale: MAX_SCALE });
+    const before = worldUnder(start.view, at(400, 400));
+    // A 10x spread would blow past MAX_SCALE.
+    const v = computePinchView(start, at(-600, 400), at(1400, 400));
+
+    expect(v.scale).toBe(MAX_SCALE);
+    const after = worldUnder(v, at(400, 400));
+    expect(after.x).toBeCloseTo(before.x);
+    expect(after.y).toBeCloseTo(before.y);
+  });
+
+  it("clamps a pinch below MIN_SCALE", () => {
+    const start = anchor({ panX: 0, panY: 0, scale: MIN_SCALE });
+    const v = computePinchView(start, at(399, 400), at(401, 400));
+
+    expect(v.scale).toBe(MIN_SCALE);
+  });
+
+  it("pans without zooming when both fingers start on the same spot", () => {
+    // No starting distance means no scale reference — must not divide by zero.
+    const start = { a: at(200, 200), b: at(200, 200), view: DEFAULT_VIEW };
+    const v = computePinchView(start, at(230, 180), at(230, 180));
+
+    expect(v.scale).toBe(DEFAULT_VIEW.scale);
+    expect(v.panX).toBeCloseTo(DEFAULT_VIEW.panX + 30);
+    expect(v.panY).toBeCloseTo(DEFAULT_VIEW.panY - 20);
+  });
+
+  it("is order-independent in the two fingers", () => {
+    const start = anchor();
+    const straight = computePinchView(start, at(320, 380), at(560, 420));
+    const swapped = computePinchView(start, at(560, 420), at(320, 380));
+
+    expect(swapped).toEqual(straight);
   });
 });
 
