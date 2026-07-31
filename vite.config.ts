@@ -4,8 +4,10 @@ import { defineConfig } from "vite";
 import { patchCssModules } from "vite-css-modules";
 
 export default defineConfig({
-  // Served from https://<user>.github.io/spacory/ on GitHub Pages.
-  base: "/spacory/",
+  // Relative asset base so a build runs unchanged at the Pages root
+  // (https://<user>.github.io/spacory/) and inside a PR-preview subfolder
+  // (…/spacory/pr-preview/pr-N/). See docs/DECISIONS.md.
+  base: "./",
   plugins: [
     react(),
     patchCssModules({

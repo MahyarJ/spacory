@@ -1,0 +1,55 @@
+name: PR preview
+
+# Deploys every open pull request to its own live URL under
+# `pr-preview/pr-<N>/` on the `gh-pages` branch (the Pages source), posts a
+# sticky comment with the link, and removes the folder when the PR closes.
+#
+# Uses `pull_request` (not `pull_request_target`), so previews build for
+# same-repo branches — which covers the agent workflow. Forked PRs get a
+# read-only token and are skipped by GitHub for the deploy step; that's an
+# accepted limitation over the security cost of running with a write token
+# against untrusted head code.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+# Push access to gh-pages, and comment access to post the preview link.
+permissions:
+  contents: write
+  pull-requests: write
+
+# One run per PR; a new push supersedes an in-flight preview build.
+concurrency:
+  group: gh-pages-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        if: github.event.action != 'closed'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: github.event.action != 'closed'
+        run: npm ci
+
+      - name: Build
+        if: github.event.action != 'closed'
+        run: npm run build
+
+      - name: Deploy / update / remove preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: dist
+          umbrella-dir: pr-preview
+          # gh-pages is shared with the production deploy (deploy.yml).
+          preview-branch: gh-pages
