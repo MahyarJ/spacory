@@ -373,3 +373,16 @@ head code, so running the deploy with a write-scoped token on
 branches (the agent workflow) get a write token under plain `pull_request` and
 work; forked PRs get a read-only token and simply skip the deploy. That's the
 safe trade for a public repo.
+
+**Why the extra deployment plumbing.** Branch-push publishing (JamesIves, which
+`pr-preview-action` wraps) writes files but registers no GitHub *deployment*, so
+a PR would show "This branch has not been deployed" even with a working preview.
+`pr-preview.yml` therefore brackets the deploy with `bobheadxi/deployments`
+(`start` → `finish` with the action's `preview-url` output → `delete-env` on
+close) to record a per-PR `preview-pr-<N>` environment, giving the PR a real
+**View deployment** button and cleaning the environment up on close. Two
+settings follow `pr-preview-action`'s own guidance: the preview job's
+concurrency is `preview-${{ github.ref }}` with cancellation **off** (a
+cancelled run desyncs the deployed files from the sticky comment), and the main
+deploy sets `force: false` so a rebase — not a stale-clone force-push — lands it,
+which can't clobber a preview committed in the same window.

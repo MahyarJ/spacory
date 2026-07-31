@@ -51,3 +51,6 @@ jobs:
           clean: true
           clean-exclude: |
             preview/
+          # Rebase onto the branch instead of force-pushing, so a concurrent
+          # PR-preview commit is never clobbered by a stale-clone force-push.
+          force: false
