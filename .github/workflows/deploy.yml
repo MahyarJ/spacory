@@ -1,22 +1,27 @@
 name: Deploy to GitHub Pages
 
+# Publishes the production site to the root of the `gh-pages` branch, which is
+# the Pages source. PR previews live in `preview/` on the same branch, so a
+# main deploy must NOT wipe them — see `clean-exclude` below and
+# `pr-preview.yml`.
+
 on:
   workflow_run:
     workflows: [CI]
     branches: [main]
     types: [completed]
 
+# Push access to the gh-pages branch (via the default GITHUB_TOKEN).
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
+# Serialize main deploys; never cancel an in-flight publish mid-push.
 concurrency:
-  group: pages
+  group: gh-pages-main
   cancel-in-progress: false
 
 jobs:
-  build:
+  deploy:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -37,21 +42,15 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v6
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v5
+      - name: Publish to gh-pages root
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          branch: gh-pages
+          folder: dist
+          # Replace stale root assets, but keep the PR-preview subtree intact.
+          clean: true
+          clean-exclude: |
+            preview/
+          # Rebase onto the branch instead of force-pushing, so a concurrent
+          # PR-preview commit is never clobbered by a stale-clone force-push.
+          force: false
