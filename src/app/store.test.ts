@@ -296,6 +296,34 @@ describe("live drag item reconciliation", () => {
 
     expect(useApp.getState().liveDragItems).toBeNull();
   });
+
+  it("cancelLiveDrag puts the connection-point selection back with the rolled-back plan", () => {
+    // Regression: an abandoned junction drag (pointercancel, or a second finger
+    // turning it into a pan/pinch) rolled the plan back but left
+    // `selectedConnectionPoint` where the finger dragged it — so the handle drew
+    // in empty space and the next nudge re-derived an empty endpoint set from
+    // the stale coordinate, silently moving nothing.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("w1", 0, 0, 400, 0), wall("w2", 400, 0, 400, 300)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 400, y: 0 });
+    useApp.getState().beginLiveDrag();
+    useApp.getState().translateSelectedConnectionPointLive(50, 60);
+
+    useApp.getState().cancelLiveDrag();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({
+      x: 400,
+      y: 0,
+    });
+    // The selection is usable again: a nudge moves the whole junction.
+    useApp.getState().translateSelectedConnectionPoint(10, 0);
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 410, y: 0 });
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 410, y: 0 });
+  });
 });
 
 describe("connection-point drag snapping onto unrelated junctions", () => {
