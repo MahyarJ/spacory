@@ -1,8 +1,12 @@
 .toolbar {
   display: flex;
-  gap: 8px;
+  /* Wrap rather than overflow: at tablet widths the row is wider than the
+     viewport, and a non-wrapping row clips its rightmost controls (Undo /
+     Redo) off-screen with no way to reach them. */
+  flex-wrap: wrap;
+  gap: var(--sp-toolbar-gap);
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px var(--sp-toolbar-padding-x);
   background: var(--sp-panel);
   border-bottom: 1px solid var(--sp-grid);
 
@@ -39,8 +43,36 @@
     flex: 1;
   }
 
-  .label {
-    opacity: 0.8;
-    font-size: 13px;
+  /* Touch: a 13px label with 6px of padding is a ~28px tall target, too small
+     to hit reliably with a finger. Grow the *target*, not the button: an
+     invisible overlay extends the hit area to --sp-touch-target vertically
+     while the button keeps its desktop height, padding, radius and font, so a
+     touch device renders the same toolbar a mouse does. (Horizontally the floor
+     can be a plain min-width without changing anything: every toolbar button is
+     an icon plus a label and is already wider than the target, so it never
+     binds — and unlike the overlay, a width floor can't overlap the neighbour
+     beside it in the row.) */
+  @media (pointer: coarse) {
+    /* Wrapped rows sit --sp-toolbar-gap apart, which is less than the two
+       halves the overlays add, so without a taller row gap the two rows' hit
+       areas would overlap and the band between them would belong to whichever
+       button comes later in the DOM. This only applies once the row wraps; an
+       unwrapped toolbar is exactly as tall as on desktop. */
+    row-gap: 16px;
+
+    .button {
+      position: relative;
+      min-width: var(--sp-touch-target);
+    }
+
+    .button::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: var(--sp-touch-target);
+      transform: translateY(-50%);
+    }
   }
 }

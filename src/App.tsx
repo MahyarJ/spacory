@@ -1,3 +1,4 @@
+import { CanvasHint } from "@features/canvas/CanvasHint";
 import { FloorPlan } from "@features/canvas/FloorPlan";
 import { Toolbar } from "@features/toolbar/Toolbar";
 import { WallOptionsBar } from "@features/toolbar/wall/WallOptionsBar";
@@ -10,8 +11,10 @@ export default function App() {
       <Toolbar />
       <div className={styles.canvasWrap}>
         <FloorPlan />
-        {/* Floats over the canvas so showing/hiding it never reflows it. */}
+        {/* Both float over the canvas so showing/hiding them never reflows it:
+            the wall options at the top-left, the pan/zoom tip bottom-right. */}
         <WallOptionsBar />
+        <CanvasHint />
       </div>
     </div>
   );

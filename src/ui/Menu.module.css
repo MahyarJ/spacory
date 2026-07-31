@@ -54,3 +54,11 @@
   outline: 2px solid var(--sp-accent);
   outline-offset: -2px;
 }
+
+/* Touch: entries are the full width of the popup (>= its 140px min-width), so
+   only the height needs a floor to make each one a comfortable target. */
+@media (pointer: coarse) {
+  .item {
+    min-height: var(--sp-touch-target);
+  }
+}

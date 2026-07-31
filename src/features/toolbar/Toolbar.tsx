@@ -76,9 +76,6 @@ export function Toolbar() {
           <Redo2 size={ICON_SIZE} />
           Redo
         </button>
-        <span className={styles.label}>
-          Tip: Right-drag to pan, Wheel to zoom
-        </span>
       </div>
       <HintBar />
     </>

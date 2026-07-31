@@ -14,6 +14,37 @@
      explicitly so controls don't fall back to the UA's form-control font,
      which differs per browser/platform and can't be matched by hand. */
   --sp-control-font-size: 13px;
+
+  /* --- Responsive primitives -------------------------------------------
+     Breakpoints are named here, and the rules that vary by width are the
+     token flips in the `max-width` block below — CSS cannot interpolate a
+     custom property into a media condition, so keeping the width-dependent
+     rules in this one file is what stops the pixel literal from being
+     re-derived across CSS modules. A phone pass adds --sp-bp-phone and a
+     second block the same way.
+
+     Tablet: iPad portrait is 768 CSS px, the width the chrome has to fit.
+     This token is documentation, not a constraint: no rule can read it (a
+     custom property is invalid in a media condition), so the `max-width`
+     block below re-spells the literal and the two must be kept in sync. */
+  --sp-bp-tablet: 768px;
+  /* Comfortable minimum touch target. Consumed by the `pointer: coarse`
+     rules in the chrome's CSS modules (toolbar, menu, theme switch), which
+     are pointer- rather than width-dependent so they live beside the
+     controls they size. */
+  --sp-touch-target: 44px;
+  /* Toolbar spacing, tightened at tablet width so the row wraps less. */
+  --sp-toolbar-gap: 8px;
+  --sp-toolbar-padding-x: 12px;
+}
+
+/* Tablet and narrower. The literal must match --sp-bp-tablet above; it is
+   spelled out only here. */
+@media (max-width: 768px) {
+  :root {
+    --sp-toolbar-gap: 6px;
+    --sp-toolbar-padding-x: 8px;
+  }
 }
 
 * {
@@ -24,7 +55,15 @@
 html,
 body,
 #root {
-  height: 100%;
+  /* Dynamic viewport units, matching `.app`: a percentage here would resolve
+     against the initial containing block (the *large* viewport on iOS Safari),
+     so the chain would disagree with the app's `100dvh` by the browser-chrome
+     delta and leave either a bare strip below the app or a scrolling document.
+     `100vh` first as the fallback for an engine without `dvh`, matching
+     `.app`. */
+  height: 100vh;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: intentional fallback */
+  height: 100dvh;
   margin: 0;
   background: var(--sp-bg);
   color: var(--sp-text);
