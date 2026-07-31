@@ -3,9 +3,6 @@ name: PR preview
 # Deploys every open pull request to its own live URL under
 # `preview/pr-<N>/` on the `gh-pages` branch (the Pages source), posts a
 # sticky comment with the link, and removes the folder when the PR closes.
-# It also registers a GitHub deployment to a per-PR `preview-pr-<N>`
-# environment so the PR shows a "View deployment" button pointing at the
-# preview; the environment is deleted when the PR closes.
 #
 # Uses `pull_request` (not `pull_request_target`), so previews build for
 # same-repo branches — which covers the agent workflow. Forked PRs get a
@@ -17,11 +14,10 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
 
-# Push to gh-pages, comment the link, and record the deployment/environment.
+# Push to gh-pages and comment the preview link.
 permissions:
   contents: write
   pull-requests: write
-  deployments: write
 
 # Per-PR, and never cancel mid-run: pr-preview-action warns that a cancelled
 # run desyncs the deployed files from the sticky comment.
@@ -35,16 +31,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - name: Start deployment
-        if: github.event.action != 'closed'
-        uses: bobheadxi/deployments@v1
-        id: deployment
-        with:
-          step: start
-          token: ${{ github.token }}
-          env: preview-pr-${{ github.event.number }}
-          ref: ${{ github.head_ref }}
 
       - name: Set up Node.js
         if: github.event.action != 'closed'
@@ -62,29 +48,9 @@ jobs:
         run: npm run build
 
       - name: Deploy / update / remove preview
-        id: preview
         uses: rossjrw/pr-preview-action@v1
         with:
           source-dir: dist
           umbrella-dir: preview
           # gh-pages is shared with the production deploy (deploy.yml).
           preview-branch: gh-pages
-
-      - name: Finish deployment
-        if: github.event.action != 'closed'
-        uses: bobheadxi/deployments@v1
-        with:
-          step: finish
-          token: ${{ github.token }}
-          status: ${{ job.status }}
-          env: ${{ steps.deployment.outputs.env }}
-          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
-          env_url: ${{ steps.preview.outputs.preview-url }}
-
-      - name: Tear down deployment environment
-        if: github.event.action == 'closed'
-        uses: bobheadxi/deployments@v1
-        with:
-          step: delete-env
-          token: ${{ github.token }}
-          env: preview-pr-${{ github.event.number }}
