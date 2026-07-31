@@ -186,6 +186,16 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
     `@media (pointer: coarse)`, `dvh`/`dvw` for the shell, **breakpoints as shared
     tokens** in `theme.css` (the reusable "primitives" the human asked for), and
     **pinch-zoom must not be disabled** (no `user-scalable=no`).
+    **Clarify pass 2026-07-31 (PR #89) pinned the width-vs-pointer split, and it is
+    the rule the phone pass inherits:** *spacing/layout* rules (toolbar `gap`, side
+    padding, wrapping) are keyed on **viewport width**, so a mouse window narrowed
+    below the breakpoint gets the tablet spacing — intended, since the clipping
+    problem is a width problem; *sizing* rules (the 44 px touch-target floors) are
+    keyed on **`pointer: coarse`**, so a mouse user never sees them at any width.
+    "No desktop regression" therefore means *above* the 768 px breakpoint only.
+    Criterion 7 of #85 was amended to say so. Also decided: the relocated canvas tip
+    stays at 12 px on a `--sp-panel` background, matching `FloorPlan`'s existing
+    bottom-left `.badge`, so the two corner captions read as one family.
   Explicit follow-ups left out of both: **phone-width layout** (below ~600 px),
   **stylus / Apple Pencil specifics** (pressure, tilt, palm rejection — the human
   called these out as motivating, worth its own issue once touch drawing works),
