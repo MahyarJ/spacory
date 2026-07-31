@@ -196,6 +196,20 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
     Criterion 7 of #85 was amended to say so. Also decided: the relocated canvas tip
     stays at 12 px on a `--sp-panel` background, matching `FloorPlan`'s existing
     bottom-left `.badge`, so the two corner captions read as one family.
+    **Clarify pass 2026-07-31 (second, PR #89) settled what "44 px" means, and this
+    is also inherited by the phone pass:** the **tap target** must be 44 × 44 px,
+    **not the painted control**. A coarse-pointer control keeps its desktop height,
+    padding, radius and font and extends only its *hit area* (an out-of-flow
+    transparent overlay centred on the box) — the human objected that inflating the
+    painted boxes made the touch toolbar look unlike the desktop one ("the buttons
+    look fat… the theme switch is circular and big"), and the overlay satisfies both
+    at once, so it is the preferred technique, not a compromise. Constraints: the hit
+    area must stay inside the toolbar's bounds (never over drawable canvas) and
+    wrapped rows must not overlap; stacked full-width popup rows (`src/ui/Menu`) are
+    the exception and keep a real `min-height`. Criterion 2 of #85 was amended to
+    say so. Consequence worth carrying: the criterion's value is now **invisible in
+    review** and unassertable in jsdom — it is the **top** candidate for the first
+    Cypress/Playwright viewport test, ahead of the wrap geometry.
   Explicit follow-ups left out of both: **phone-width layout** (below ~600 px),
   **stylus / Apple Pencil specifics** (pressure, tilt, palm rejection — the human
   called these out as motivating, worth its own issue once touch drawing works),
