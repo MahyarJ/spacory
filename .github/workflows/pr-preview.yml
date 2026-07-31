@@ -1,7 +1,7 @@
 name: PR preview
 
 # Deploys every open pull request to its own live URL under
-# `pr-preview/pr-<N>/` on the `gh-pages` branch (the Pages source), posts a
+# `preview/pr-<N>/` on the `gh-pages` branch (the Pages source), posts a
 # sticky comment with the link, and removes the folder when the PR closes.
 #
 # Uses `pull_request` (not `pull_request_target`), so previews build for
@@ -50,6 +50,6 @@ jobs:
         uses: rossjrw/pr-preview-action@v1
         with:
           source-dir: dist
-          umbrella-dir: pr-preview
+          umbrella-dir: preview
           # gh-pages is shared with the production deploy (deploy.yml).
           preview-branch: gh-pages

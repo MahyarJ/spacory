@@ -354,15 +354,15 @@ don't exist yet. Encoded in a component that would be a comment; encoded in
 **Decision.** GitHub Pages serves the site from the **`gh-pages` branch**, not
 from the GitHub Actions source. A merge to `main` publishes the build to that
 branch's **root** (`deploy.yml`), and every open PR publishes to
-**`pr-preview/pr-<N>/`** on the same branch (`pr-preview.yml`, via
+**`preview/pr-<N>/`** on the same branch (`pr-preview.yml`, via
 `rossjrw/pr-preview-action`), which comments the live link and deletes the
 folder on close. To let a build run at either depth, Vite's `base` is relative
 (`./`) rather than `/spacory/`.
 
 **Why one branch.** Pages has a single source, so production and previews can
 only coexist as different *paths* under one deployment — root versus
-`pr-preview/pr-N/`. A main deploy therefore must not clean the preview subtree,
-so `deploy.yml` uses `clean-exclude: pr-preview/`. The relative base is what
+`preview/pr-N/`. A main deploy therefore must not clean the preview subtree,
+so `deploy.yml` uses `clean-exclude: preview/`. The relative base is what
 makes the identical `dist` resolve its assets correctly whether it lands at the
 root or three folders deep; nothing in the app reads `import.meta.env.BASE_URL`
 or hard-codes `/spacory/`, so the switch is transparent.

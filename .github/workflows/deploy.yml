@@ -1,7 +1,7 @@
 name: Deploy to GitHub Pages
 
 # Publishes the production site to the root of the `gh-pages` branch, which is
-# the Pages source. PR previews live in `pr-preview/` on the same branch, so a
+# the Pages source. PR previews live in `preview/` on the same branch, so a
 # main deploy must NOT wipe them — see `clean-exclude` below and
 # `pr-preview.yml`.
 
@@ -50,4 +50,4 @@ jobs:
           # Replace stale root assets, but keep the PR-preview subtree intact.
           clean: true
           clean-exclude: |
-            pr-preview/
+            preview/
