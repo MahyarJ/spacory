@@ -86,6 +86,17 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   under one **Export** dropdown built on a shared, keyboard/ARIA-correct `Menu`
   (`src/ui/Menu.tsx` + pure `src/ui/menuNavigation.ts`); Import stays a separate
   top-level button (#66, merged as PR #69).
+- **Tablet-ready chrome** — the toolbar wraps instead of clipping below the 768 px
+  breakpoint (`--sp-bp-tablet` in `src/theme.css`) and every chrome control gets a
+  44 px (`--sp-touch-target`) *hit area* on a coarse pointer via an invisible
+  `::after` overlay, so the painted buttons keep their desktop size; the canvas
+  pan/zoom tip is hidden on a coarse pointer by the pure `src/app/canvasHint.ts`
+  (#85, merged as PR #89). The floating options bar's own controls were **not**
+  covered — see the #93 bullet under Known gaps.
+- **Touch-drawable canvas** — `touch-action` scoped to the canvas so one finger
+  runs the active tool, two fingers pan and pinch-zoom whatever the tool (pure
+  multi-touch math in `src/app/viewport.ts`), and `pointercancel` aborts a gesture
+  without committing, restoring both plan and selection (#84, merged as PR #91).
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -226,10 +237,42 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
     say so. Consequence worth carrying: the criterion's value is now **invisible in
     review** and unassertable in jsdom — it is the **top** candidate for the first
     Cypress/Playwright viewport test, ahead of the wrap geometry.
+  **Both merged 2026-08-01** (#85 as PR #89, #84 as PR #91), so the tablet front is
+  shipped and the third issue below is what it exposed.
   Explicit follow-ups left out of both: **phone-width layout** (below ~600 px),
   **stylus / Apple Pencil specifics** (pressure, tilt, palm rejection — the human
   called these out as motivating, worth its own issue once touch drawing works),
   and finger-sizing the **on-canvas** interaction targets (belongs with #84).
+- **Editing verbs are keyboard-only, so a touch user can draw but not edit — in
+  flight (#93, triaged & enriched 2026-08-02 from a human-submitted idea).**
+  Verified in `src/features/canvas/FloorPlan.tsx`: `deleteSelected`,
+  `toggleSelectedDoorHingeEdge` and `toggleSelectedDoorSwingSide` are reachable
+  **only** from the `window` keydown listener (`Delete`/`Backspace`, `H`, `S`), so
+  after #84/#85 shipped, a tablet user can draw, place and select and then cannot
+  remove or adjust anything — while `HintBar` advertises the very shortcuts the
+  device can't press. Retitled "Add on-screen Remove, Hinge and Swing controls so a
+  selection can be edited without a keyboard." Product calls: the **floating
+  options bar** (`WallOptionsBar`) is the affordance, not a new canvas gesture, and
+  its visibility must widen from "exactly one wall/item" to **any non-empty
+  selection** (otherwise a marquee multi-selection stays undeletable — the most
+  common "I drew the wrong thing" case); the controls show for **every pointer
+  kind**, *not* gated on `(pointer: coarse)` — one code path, it makes three
+  undiscoverable shortcuts discoverable for mouse users too (tooltip names the
+  accelerator rather than replacing it), and a hybrid device that mis-reports its
+  pointer kind can't end up with no way to delete; **Hinge/Swing appear whenever
+  the selection contains at least one door**, mirroring what the store actions and
+  `HintBar`'s `hasSelectedDoor` already do rather than inventing single-door
+  semantics; the "which controls apply" decision goes in **`src/app/selection.ts`**
+  as a pure tested function (the `canvasHint.ts` / `menuNavigation.ts` pattern), and
+  a jsdom test must assert the buttons are *wired* (click Remove → wall gone from
+  the plan), not merely rendered. Two explicit out-of-scopes are themselves gaps
+  worth a later ticket: **(a) the third keyboard-only verb, `[`/`]` wall thickness**
+  — a button isn't enough, it needs a product call on whether the existing preset
+  pills should retarget the current selection instead of the next-wall default; and
+  **(b) the options bar's *existing* controls (thickness pills, length/width number
+  inputs) never got the 44 px coarse-pointer treatment** that `Toolbar.module.css` /
+  `Menu.module.css` / `ThemeSwitch.module.css` have — a leftover from #85, not
+  caused by #93.
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -424,19 +467,20 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-07-30, read during the #85 triage run — a cycle run
+Current open issues (as of 2026-08-02, read during the #93 triage run — a cycle run
 should re-reconcile): #10 (prune stale selection), #20 (fit shortcut/zoom to
 selection), #21 (error boundary), #52 (custom door swing glyph, follow-up to #51),
-#63 (switch display units cm/m/mm/in/ft), #76 (commit a typed wall length / opening
-width on click-away to the canvas), #77 (ignore canvas shortcuts while a toolbar
-control has focus), plus the new responsive front: **#84** (iPad tap-and-drag
-scrolls instead of drawing — still `agent:triage`, needs its own triage pass) and
-**#85** (tablet-width app shell + toolbar — triaged & enriched 2026-07-30). Both are now groomed and
-awaiting a human promotion to `agent:ready`; **#84 should go first** (on iPad you
-cannot draw at all today, whereas #85 is layout discomfort).
-Closed since the last cycle: **#33** (SVG export, merged as PR #82), **#61**
-(Cmd/Ctrl+drag detach, merged as PR #75), **#78** (README opening-width docs, merged
-as PR #81); #60 and #66 merged before that. Do **not** re-propose any of these.
+#63 (switch display units cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a
+toolbar control has focus), and **#93** (on-screen Remove/Hinge/Swing controls —
+triaged & enriched 2026-08-02, awaiting a human promotion to `agent:ready`).
+Closed since: **#84** (touch canvas, merged as PR #91), **#85** (tablet chrome,
+merged as PR #89), **#76** (commit typed length/width on click-away), **#33** (SVG
+export, PR #82), **#61** (Cmd/Ctrl+drag detach, PR #75), **#78** (README
+opening-width docs, PR #81); #60 and #66 merged before that. Do **not** re-propose
+any of these. Two follow-ups #93 deliberately left out are unticketed and are the
+most obvious next slices: on-screen **wall-thickness** editing for a selection (the
+`[`/`]` verb — needs a product call on the preset pills first) and the **44 px
+coarse-pointer treatment for the options bar's existing controls** (a #85 leftover).
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -492,6 +536,39 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-02 — Triage run on human-submitted idea #93 ("Bring the remove and change
+  functions to touch screen experiences"). Verified the report in code rather than
+  trusting it, and it is exact: `deleteSelected`, `toggleSelectedDoorHingeEdge` and
+  `toggleSelectedDoorSwingSide` are dispatched **only** from `FloorPlan.tsx`'s
+  `window` keydown listener, so with #84/#85 merged a tablet user can draw, place
+  and select — and then has no way to remove or adjust any of it. Accepted and
+  enriched into "Add on-screen Remove, Hinge and Swing controls so a selection can
+  be edited without a keyboard." Product calls pinned: the **floating options bar**
+  is the affordance (not a long-press menu or a swipe gesture — the bar already
+  exists, already floats without layout shift, and already appears on selection),
+  but its visibility must widen from "exactly one wall/item" to **any non-empty
+  selection**, because today a marquee multi-selection gets no bar at all and would
+  stay undeletable by touch — the criterion most likely to be missed, so it is its
+  own bullet. **Not gated on `(pointer: coarse)`**: the tempting move is to show the
+  buttons only on touch, and it's wrong three ways (a second code path to test, a
+  hybrid device that mis-reports its pointer kind left with no way to delete, and it
+  throws away the chance to make three genuinely undiscoverable shortcuts
+  discoverable — so the tooltips *name* the accelerator instead of replacing it).
+  **Hinge/Swing key off "selection contains ≥1 door"**, mirroring what the store
+  actions and `HintBar`'s `hasSelectedDoor` already do, rather than inventing
+  single-door semantics that would silently diverge from the keyboard. Required the
+  "which controls apply" decision to live in **`src/app/selection.ts`** as a pure
+  tested function (the `canvasHint.ts` / `menuNavigation.ts` pattern) *and* a jsdom
+  test that the buttons are **wired** — a rendered-but-dead button would otherwise
+  tick every box. Deliberately **kept the third keyboard-only verb out**: `[`/`]`
+  wall thickness can't be solved with a button alone (does the existing preset row
+  retarget the selection, or keep setting the next-wall default?), so it needs its
+  own product call; recorded as an untracked follow-up along with the options bar's
+  existing controls never having received #85's 44 px coarse-pointer treatment.
+  Also corrected stale state found while reading: #84, #85 and #76 have all merged
+  (PRs #91, #89), and "Current state" had never recorded the tablet chrome or the
+  touch canvas as shipped. Did not add `agent:ready` (a human promotes it).
 
 - 2026-07-31 — Clarify pass on **PR #91** (#84's touch-gesture implementation, already
   accepted on `13325d8`). Nothing product-blocking was left; three things settled.
