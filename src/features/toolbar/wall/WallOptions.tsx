@@ -5,7 +5,11 @@ import { ICON_SIZE } from "@features/toolbar/constants";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import clsx from "clsx";
-import { FlipHorizontal2, FlipVertical2, Trash2 } from "lucide-react";
+import {
+  SquareCenterlineDashedHorizontal,
+  SquareCenterlineDashedVertical,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { parseDraft } from "./draftField";
 import { useCommitOnClickAway } from "./useCommitOnClickAway";
@@ -116,18 +120,23 @@ function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
       icon: <Trash2 size={ICON_SIZE} />,
       onClick: deleteSelected,
     },
-    // The hinge moves along the wall, the swing flips across it — hence the
-    // horizontal/vertical mirror glyphs.
+    // The hinge moves along the wall, the swing flips across it — hence one
+    // glyph mirrored on two axes. Both families name the *split*, not the line
+    // they draw: `…Horizontal` splits the square left/right about a vertical
+    // dashed centerline (along the wall), `…Vertical` splits it top/bottom
+    // about a horizontal one (across the wall), exactly as `FlipHorizontal2` /
+    // `FlipVertical2` read before them. Keep them a pair — that axis contrast
+    // is the only thing telling two 18px icon-only buttons apart.
     hinge: {
       label: "Toggle hinge",
       title: "Toggle hinge (H)",
-      icon: <FlipHorizontal2 size={ICON_SIZE} />,
+      icon: <SquareCenterlineDashedHorizontal size={ICON_SIZE} />,
       onClick: toggleHinge,
     },
     swing: {
       label: "Toggle swing",
       title: "Toggle swing (S)",
-      icon: <FlipVertical2 size={ICON_SIZE} />,
+      icon: <SquareCenterlineDashedVertical size={ICON_SIZE} />,
       onClick: toggleSwing,
     },
   };

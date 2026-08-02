@@ -314,8 +314,13 @@ tap target is finger-sized while the painted control is pixel-identical to the
 desktop one. Horizontally a plain `min-width` does the job — every toolbar
 button is an icon plus a label and already exceeds the target, so it never
 binds, and a width floor (unlike an overlay) can't reach into the neighbour
-beside it. The one thing the overlays do cost is a taller `row-gap` once the row
-wraps, so two rows' targets don't overlap. `Menu`'s entries keep a real
+beside it. That last part is a fact about *those* buttons, not a general rule:
+an **icon-only** control is narrower than the target, so a `min-width` there
+would visibly stretch it, and the answer is the same overlay made square plus a
+gap wide enough that two neighbours' hit areas don't meet — which is what the
+selection action buttons in `WallOptions.module.css` do. The one thing the
+overlays do cost is a taller `row-gap` once the row wraps, so two rows' targets
+don't overlap. `Menu`'s entries keep a real
 `min-height` instead: they are stacked full-width rows, where overlapping hit
 areas would mean tapping one entry and triggering the next.
 
