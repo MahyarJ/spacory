@@ -673,6 +673,60 @@ describe("mid-span wall splitting on commit", () => {
     );
   });
 
+  /**
+   * A plan whose walls already touch mid-span without sharing a coordinate —
+   * the state `loadPlan` leaves (imported plans are deliberately not
+   * retro-split) and the state an undo restores — with the touch point
+   * selected. The next commit, whatever causes it, splits and welds.
+   */
+  function loadLatentTouchWithJunctionSelected() {
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([
+          wall("host", 0, 0, 200, 0),
+          wall("t", 100, 3, 100, 100),
+          wall("u", 100, 3, 180, 60),
+        ]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 3 });
+  }
+
+  it("follows the weld when a door toggle commits with a junction selected", () => {
+    // Regression: the door hinge/swing toggles have no early return — they are
+    // bound to bare `h`/`s` and commit even with nothing selected — so they
+    // could commit a split while a connection point was held and leave the
+    // selection at its pre-weld coordinate: an invisible handle that the next
+    // arrow key still moves, un-welding the junction just created.
+    loadLatentTouchWithJunctionSelected();
+
+    useApp.getState().toggleSelectedDoorSwingSide();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(4);
+
+    // …and the handle still works: the next nudge moves the whole junction.
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const at = { x: 100, y: 20 };
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "host")?.b).toEqual(at);
+    expect(walls.find((w) => w.id === "t")?.a).toEqual(at);
+    expect(walls.find((w) => w.id === "u")?.a).toEqual(at);
+    expect(walls.find((w) => !["host", "t", "u"].includes(w.id))?.a).toEqual(
+      at,
+    );
+  });
+
+  it("follows the weld on the hinge toggle too", () => {
+    // Same ungated path as the swing toggle above.
+    loadLatentTouchWithJunctionSelected();
+
+    useApp.getState().toggleSelectedDoorHingeEdge();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(4);
+  });
+
   it("does not re-split across successive commits", () => {
     useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
     useApp.getState().addWall(wall("t", 100, 3, 100, 80));
