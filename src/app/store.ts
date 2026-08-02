@@ -15,7 +15,11 @@ import {
   MIN_WALL_LENGTH,
   resizeWallToLength,
 } from "@geometry/wall";
-import { splitWallsAtTouchingEndpoints } from "@geometry/wallSplit";
+import {
+  type PointWeld,
+  resolveWeldedPoint,
+  splitWallsAtTouchingEndpoints,
+} from "@geometry/wallSplit";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
 import { uid } from "../util/uid";
@@ -173,7 +177,12 @@ function persist() {
   savePersistedHistory(history);
 }
 
-function commit(next: Plan) {
+/**
+ * Commit `next` as one history entry, and report any coordinates the wall split
+ * moved so a caller tracking one (the selected junction) can follow it — see
+ * `resolveWeldedPoint`.
+ */
+function commit(next: Plan): PointWeld[] {
   // Split any wall another wall's endpoint now ends on, so a mid-span T becomes
   // a real shared-coordinate junction (see wallSplit.ts). Done here, before the
   // item reconcile below, so every edit path — draw, move, endpoint drag,
@@ -194,6 +203,7 @@ function commit(next: Plan) {
   };
   history = commitHistory(history, reconciled);
   persist();
+  return split.welds;
 }
 
 // Throttle viewport autosave so continuous wheel/drag stays smooth while still
@@ -552,15 +562,18 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
+    const welds = commit(next);
     // The nudge may have landed the point on another junction's coordinate,
     // welding them (see commitPlan below) — re-derive membership from the
     // just-committed plan so a following nudge moves the whole welded
-    // junction instead of silently un-welding it.
-    const movedPoint = {
+    // junction instead of silently un-welding it. The commit may also have
+    // split a wall under the point and pulled it onto the host's centreline,
+    // so follow the weld first or the selection would point at a coordinate
+    // the plan no longer has.
+    const movedPoint = resolveWeldedPoint(welds, {
       x: selectedConnectionPoint.x + dx,
       y: selectedConnectionPoint.y + dy,
-    };
+    });
     set({
       plan: history.present,
       selectedConnectionPoint: movedPoint,
@@ -660,19 +673,26 @@ export const useApp = create<AppState>((set, get) => ({
       ...get().plan,
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
+    const welds = commit(next);
     // The gesture is over: the reconciled live items are now committed, so drop
     // the pre-drag snapshot before the next gesture captures a fresh one.
     // If a connection point is still selected (e.g. the drop welded it onto
     // another junction), re-derive its membership from the just-committed
     // plan — otherwise a subsequent nudge would keep moving only the
-    // grab-time set and silently un-weld the junction just created.
+    // grab-time set and silently un-weld the junction just created. Dropping it
+    // mid-span on another wall splits that wall and pulls the point onto its
+    // centreline, so follow the weld before re-deriving, or the handle would
+    // stay selected at a coordinate no wall ends at and move nothing.
+    const committedPoint = selectedConnectionPoint
+      ? resolveWeldedPoint(welds, selectedConnectionPoint)
+      : null;
     set({
       plan: history.present,
       liveDragItems: null,
       liveDragConnectionPoint: null,
-      selectedConnectionPointEndpoints: selectedConnectionPoint
-        ? findConnectedEndpoints(history.present.walls, selectedConnectionPoint)
+      selectedConnectionPoint: committedPoint,
+      selectedConnectionPointEndpoints: committedPoint
+        ? findConnectedEndpoints(history.present.walls, committedPoint)
         : [],
     });
   },

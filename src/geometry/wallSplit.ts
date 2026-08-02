@@ -1,5 +1,5 @@
 import type { Item, Point, Wall } from "@app/schema";
-import type { WallEndpointRef } from "./connectivity";
+import { pointsEqual, type WallEndpointRef } from "./connectivity";
 import { getWallLength, MIN_WALL_LENGTH, projectPointToWall } from "./wall";
 
 /**
@@ -30,9 +30,33 @@ interface Touch {
   toucher: WallEndpointRef;
 }
 
+/**
+ * A coordinate the split moved: `from` is where it sat before, `to` is the
+ * split point it was welded onto. Callers holding a plan coordinate (the store
+ * tracks the selected junction as one) can follow it across the commit.
+ */
+export interface PointWeld {
+  from: Point;
+  to: Point;
+}
+
 export interface WallSplitResult {
   walls: Wall[];
   items: Item[];
+  /**
+   * Every coordinate the split moved, composed across passes so `from` is
+   * always a coordinate as the caller knew it *before* the split. Empty when
+   * nothing was welded.
+   */
+  welds: PointWeld[];
+}
+
+/**
+ * Follow `point` through a split's welds: the coordinate it now sits at, or
+ * `point` itself when the split left it alone.
+ */
+export function resolveWeldedPoint(welds: PointWeld[], point: Point): Point {
+  return welds.find((w) => pointsEqual(w.from, point))?.to ?? point;
 }
 
 /**
@@ -60,13 +84,31 @@ export function splitWallsAtTouchingEndpoints(
   items: Item[],
   nextWallId: () => string,
 ): WallSplitResult {
-  let result: WallSplitResult = { walls, items };
+  let result: WallSplitResult = { walls, items, welds: [] };
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     const touches = detectTouches(result.walls);
     if (touches.length === 0) break;
-    result = applyTouches(result, touches, nextWallId);
+    const applied = applyTouches(result, touches, nextWallId);
+    result = { ...applied, welds: composeWelds(result.welds, applied.welds) };
   }
   return result;
+}
+
+/**
+ * Chain a pass's welds onto the ones already collected, so an endpoint welded
+ * twice (it sat inside two walls' bodies) still maps from its *original*
+ * coordinate to where it finally landed.
+ */
+function composeWelds(acc: PointWeld[], passWelds: PointWeld[]): PointWeld[] {
+  if (passWelds.length === 0) return acc;
+  const composed = acc.map((w) => {
+    const onward = passWelds.find((p) => pointsEqual(p.from, w.to));
+    return onward ? { from: w.from, to: onward.to } : w;
+  });
+  for (const p of passWelds) {
+    if (!composed.some((w) => pointsEqual(w.from, p.from))) composed.push(p);
+  }
+  return composed;
 }
 
 /**
@@ -150,11 +192,19 @@ function applyTouches(
   const nextWalls: Wall[] = [];
   /** Host id → the segments that replaced it, so its items can be rebased. */
   const segmentsByHost = new Map<string, Wall[]>();
+  const welds: PointWeld[] = [];
+  const noteWeld = (from: Point, to: Point) => {
+    if (pointsEqual(from, to)) return;
+    if (welds.some((w) => pointsEqual(w.from, from))) return;
+    welds.push({ from, to });
+  };
   for (const wall of walls) {
     // Weld first: a wall can be both a toucher and a host in the same pass, and
     // its segments must start/end at its welded endpoints.
     const weldedA = weldByEndpoint.get(`${wall.id}:a`);
     const weldedB = weldByEndpoint.get(`${wall.id}:b`);
+    if (weldedA) noteWeld(wall.a, weldedA);
+    if (weldedB) noteWeld(wall.b, weldedB);
     const w: Wall =
       weldedA || weldedB
         ? { ...wall, a: weldedA ?? wall.a, b: weldedB ?? wall.b }
@@ -195,7 +245,7 @@ function applyTouches(
     if (rebased) nextItems.push(rebased);
   }
 
-  return { walls: nextWalls, items: nextItems };
+  return { walls: nextWalls, items: nextItems, welds };
 }
 
 /**

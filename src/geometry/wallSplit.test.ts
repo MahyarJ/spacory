@@ -2,7 +2,7 @@ import type { Item, Wall, WindowItem } from "@app/schema";
 import { describe, expect, it } from "vitest";
 import { findConnectedEndpoints } from "./connectivity";
 import { getWallLength } from "./wall";
-import { splitWallsAtTouchingEndpoints } from "./wallSplit";
+import { resolveWeldedPoint, splitWallsAtTouchingEndpoints } from "./wallSplit";
 
 const wall = (
   id: string,
@@ -155,6 +155,57 @@ describe("splitWallsAtTouchingEndpoints — segments", () => {
     expect(findConnectedEndpoints(walls, { x: 0, y: 0 })).toHaveLength(3);
     expect(findConnectedEndpoints(walls, { x: 50, y: 0 })).toHaveLength(3);
     expect(splitWallsAtTouchingEndpoints(walls, [], ids()).walls).toBe(walls);
+  });
+});
+
+describe("splitWallsAtTouchingEndpoints — welds", () => {
+  it("reports nothing when no endpoint moved", () => {
+    // The endpoint was already exactly on the centreline: the host splits, but
+    // no coordinate changed, so a caller tracking one has nothing to follow.
+    const { welds } = split([
+      wall("host", 0, 0, 100, 0),
+      wall("t", 50, 0, 50, 60),
+    ]);
+
+    expect(welds).toEqual([]);
+  });
+
+  it("reports where a welded endpoint moved to", () => {
+    const { welds } = split([
+      wall("host", 0, 0, 100, 0),
+      wall("t", 50, 3, 50, 60),
+    ]);
+
+    expect(welds).toEqual([{ from: { x: 50, y: 3 }, to: { x: 50, y: 0 } }]);
+    expect(resolveWeldedPoint(welds, { x: 50, y: 3 })).toEqual({
+      x: 50,
+      y: 0,
+    });
+  });
+
+  it("leaves an untouched coordinate alone", () => {
+    expect(
+      resolveWeldedPoint([{ from: { x: 50, y: 3 }, to: { x: 50, y: 0 } }], {
+        x: 10,
+        y: 10,
+      }),
+    ).toEqual({ x: 10, y: 10 });
+  });
+
+  it("composes a weld across passes to the endpoint's final coordinate", () => {
+    // (2,3) sits inside both hosts' bodies, so it is welded twice: onto the
+    // horizontal host's centreline in the first pass, then onto the vertical
+    // one's in the second. The mapping must start from where it began.
+    const { welds, walls } = split([
+      wall("h", -50, 0, 50, 0),
+      wall("v", 0, -50, 0, 50),
+      wall("t", 2, 3, 60, 60),
+    ]);
+
+    const landed = walls.find((w) => w.id === "t")?.a;
+    expect(landed).toEqual({ x: 0, y: 0 });
+    expect(welds).toContainEqual({ from: { x: 2, y: 3 }, to: { x: 0, y: 0 } });
+    expect(resolveWeldedPoint(welds, { x: 2, y: 3 })).toEqual({ x: 0, y: 0 });
   });
 });
 

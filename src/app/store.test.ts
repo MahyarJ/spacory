@@ -598,6 +598,51 @@ describe("mid-span wall splitting on commit", () => {
     );
   });
 
+  it("keeps the dragged junction selected on the split point after the drop", () => {
+    // Regression: the split welds the dropped endpoint onto the host's
+    // centreline, so the coordinate the selection was tracking no longer
+    // exists. Left unfollowed, the handle stays selected at (100, 3) with an
+    // empty endpoint set — visibly selected but dead, moving nothing.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("host", 0, 0, 200, 0), wall("t", 100, 60, 100, 140)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 60 });
+    useApp.getState().beginLiveDrag();
+    useApp.getState().translateSelectedConnectionPointLive(0, -57);
+    useApp.getState().commitPlan();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(3);
+
+    // …and the handle still works: the next nudge moves the whole junction.
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "host")?.b).toEqual({ x: 100, y: 20 });
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 100, y: 20 });
+    expect(walls.find((w) => w.id !== "host" && w.id !== "t")?.a).toEqual({
+      x: 100,
+      y: 20,
+    });
+  });
+
+  it("keeps the junction selected on the split point after a keyboard nudge", () => {
+    // Same desync via the arrow-key path, which re-derives the selection from
+    // the nudged coordinate rather than the committed one.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("host", 0, 0, 200, 0), wall("t", 100, 60, 100, 140)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 60 });
+
+    useApp.getState().translateSelectedConnectionPoint(0, -57);
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(3);
+  });
+
   it("does not re-split across successive commits", () => {
     useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
     useApp.getState().addWall(wall("t", 100, 3, 100, 80));
