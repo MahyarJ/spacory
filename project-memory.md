@@ -272,7 +272,7 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   **(b) the options bar's *existing* controls (thickness pills, length/width number
   inputs) never got the 44 px coarse-pointer treatment** that `Toolbar.module.css` /
   `Menu.module.css` / `ThemeSwitch.module.css` have — a leftover from #85, not
-  caused by #93.
+  caused by #93. **(b) is now ticketed as #94** (created this cycle run).
 - **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
   ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
 - **Viewport persistence — done (#2, merged).**
@@ -436,9 +436,12 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 
 Open questions for the human (confirm before generating issues that depend on
 these): target users' top unmet need, whether to prioritize export vs. rooms vs.
-measurements, any accessibility/i18n requirements, and — new this run — **should
-a whole-wall move cascade through a connected chain as one rigid body, or stay
-"hinge" behavior as it is today** (see "Cascading connected-wall follow" above)?
+measurements, any accessibility/i18n requirements, **should a whole-wall move
+cascade through a connected chain as one rigid body, or stay "hinge" behavior as it
+is today** (see "Cascading connected-wall follow" above), and — new this run —
+**should on-screen `[`/`]` wall-thickness editing retarget the current selection,
+or keep setting the next-wall default** (the third keyboard-only verb #93 left out;
+see the #93 bullet under "Known gaps")?
 
 ## Architecture decisions
 
@@ -467,20 +470,21 @@ a whole-wall move cascade through a connected chain as one rigid body, or stay
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-08-02, read during the #93 triage run — a cycle run
-should re-reconcile): #10 (prune stale selection), #20 (fit shortcut/zoom to
-selection), #21 (error boundary), #52 (custom door swing glyph, follow-up to #51),
-#63 (switch display units cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a
-toolbar control has focus), and **#93** (on-screen Remove/Hinge/Swing controls —
-triaged & enriched 2026-08-02, awaiting a human promotion to `agent:ready`).
-Closed since: **#84** (touch canvas, merged as PR #91), **#85** (tablet chrome,
-merged as PR #89), **#76** (commit typed length/width on click-away), **#33** (SVG
-export, PR #82), **#61** (Cmd/Ctrl+drag detach, PR #75), **#78** (README
-opening-width docs, PR #81); #60 and #66 merged before that. Do **not** re-propose
-any of these. Two follow-ups #93 deliberately left out are unticketed and are the
-most obvious next slices: on-screen **wall-thickness** editing for a selection (the
-`[`/`]` verb — needs a product call on the preset pills first) and the **44 px
-coarse-pointer treatment for the options bar's existing controls** (a #85 leftover).
+Current open issues (as of 2026-08-02, read during this cycle run): #10 (prune
+stale selection), #20 (fit shortcut/zoom to selection), #21 (error boundary), #52
+(custom door swing glyph, follow-up to #51), #63 (switch display units
+cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a toolbar control has focus),
+#93 (on-screen Remove/Hinge/Swing controls — triaged & enriched 2026-08-02,
+awaiting a human promotion to `agent:ready`), and **#94** (44px touch targets for
+the options bar's existing controls — created this run). Closed since: **#84**
+(touch canvas, merged as PR #91), **#85** (tablet chrome, merged as PR #89), **#76**
+(commit typed length/width on click-away), **#33** (SVG export, PR #82), **#61**
+(Cmd/Ctrl+drag detach, PR #75), **#78** (README opening-width docs, PR #81); #60 and
+#66 merged before that. Do **not** re-propose any of these. One follow-up #93
+deliberately left out is still unticketed: on-screen **wall-thickness** editing for
+a selection (the `[`/`]` verb — needs a product call on the preset pills first,
+since it's genuinely ambiguous whether the existing preset row should retarget the
+current selection or keep setting the next-wall default).
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -536,6 +540,25 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-02 — Fourteenth Product Agent run (cycle), same day as the #93 triage.
+  Reconciled with GitHub: no change since that triage pass — the same seven issues
+  are open (#10, #20, #21, #52, #63, #77, #93) and there are no open PRs (PR #92, a
+  merged infra change adding per-PR preview builds on GitHub Pages, has no
+  corresponding product issue and needed none — it's automation, not a floor-plan
+  feature). Ran the README backstop check: Features, shortcuts, "Not yet", scripts,
+  and stack all still match shipped reality — no drift, no docs issue needed.
+  Created **one** issue: **#94** — give the floating options bar's existing controls
+  (thickness pills, length/width field) the same 44px coarse-pointer touch-target
+  treatment already established in `Toolbar.module.css` / `Menu.module.css` /
+  `ThemeSwitch.module.css`. This was the one of #93's two unticketed follow-ups that
+  needed no human product call (unlike the `[`/`]` wall-thickness verb, which
+  genuinely does and stays parked as an open question). Scoped it to the two
+  existing controls only; #93's new buttons and any future on-canvas thickness
+  control are explicit out-of-scope, to be covered by their own issues once they
+  exist. Did not add `agent:ready` (a human promotes it). Open questions for the
+  human unchanged: rooms scope, cascading-wall-follow (rigid-chain vs. hinge), and
+  now also the `[`/`]` retarget-vs-next-wall-default call.
 
 - 2026-08-02 — Triage run on human-submitted idea #93 ("Bring the remove and change
   functions to touch screen experiences"). Verified the report in code rather than
