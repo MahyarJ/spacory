@@ -206,6 +206,27 @@ function commit(next: Plan): PointWeld[] {
   return split.welds;
 }
 
+/**
+ * Re-point a held connection-point selection at wherever `commit()`'s split
+ * welded it, and re-derive its membership from the just-committed plan.
+ *
+ * Every path that commits while a connection point may still be selected has to
+ * do this: the split can pull the point onto a host wall's centreline, and a
+ * selection left behind at the pre-weld coordinate is *invisible but still
+ * live* — `ConnectionPointsLayer` only highlights a handle a wall endpoint
+ * actually sits at, while an arrow key still routes to the nudge — so the next
+ * keypress moves walls the user can't see selected.
+ */
+function followWeldedSelection(point: Point | null, welds: PointWeld[]) {
+  const moved = point ? resolveWeldedPoint(welds, point) : null;
+  return {
+    selectedConnectionPoint: moved,
+    selectedConnectionPointEndpoints: moved
+      ? findConnectedEndpoints(history.present.walls, moved)
+      : [],
+  };
+}
+
 // Throttle viewport autosave so continuous wheel/drag stays smooth while still
 // persisting the resting position. Separate from the history autosave above —
 // the viewport is not part of the Plan or the undo history.
@@ -262,8 +283,15 @@ export const useApp = create<AppState>((set, get) => ({
       walls: [...get().plan.walls, w],
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    const welds = commit(next);
+    // A drawn wall passing within `thickness / 2` of a selected junction welds
+    // that junction onto the new wall's centreline, so the selection has to
+    // follow it (see followWeldedSelection). Neither switching to the wall tool
+    // nor drawing clears a connection-point selection, so this is reachable.
+    set({
+      plan: history.present,
+      ...followWeldedSelection(get().selectedConnectionPoint, welds),
+    });
   },
   addItem: (i) => {
     const next: Plan = {
@@ -271,8 +299,11 @@ export const useApp = create<AppState>((set, get) => ({
       items: [...get().plan.items, i],
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    const welds = commit(next);
+    set({
+      plan: history.present,
+      ...followWeldedSelection(get().selectedConnectionPoint, welds),
+    });
   },
   setView: (fn) =>
     set(({ view }) => {
@@ -564,22 +595,18 @@ export const useApp = create<AppState>((set, get) => ({
     };
     const welds = commit(next);
     // The nudge may have landed the point on another junction's coordinate,
-    // welding them (see commitPlan below) — re-derive membership from the
-    // just-committed plan so a following nudge moves the whole welded
-    // junction instead of silently un-welding it. The commit may also have
-    // split a wall under the point and pulled it onto the host's centreline,
-    // so follow the weld first or the selection would point at a coordinate
-    // the plan no longer has.
-    const movedPoint = resolveWeldedPoint(welds, {
-      x: selectedConnectionPoint.x + dx,
-      y: selectedConnectionPoint.y + dy,
-    });
+    // welding them — re-derive membership from the just-committed plan so a
+    // following nudge moves the whole welded junction instead of silently
+    // un-welding it, and follow any split weld first (see
+    // followWeldedSelection).
     set({
       plan: history.present,
-      selectedConnectionPoint: movedPoint,
-      selectedConnectionPointEndpoints: findConnectedEndpoints(
-        history.present.walls,
-        movedPoint,
+      ...followWeldedSelection(
+        {
+          x: selectedConnectionPoint.x + dx,
+          y: selectedConnectionPoint.y + dy,
+        },
+        welds,
       ),
     });
   },
@@ -679,21 +706,13 @@ export const useApp = create<AppState>((set, get) => ({
     // If a connection point is still selected (e.g. the drop welded it onto
     // another junction), re-derive its membership from the just-committed
     // plan — otherwise a subsequent nudge would keep moving only the
-    // grab-time set and silently un-weld the junction just created. Dropping it
-    // mid-span on another wall splits that wall and pulls the point onto its
-    // centreline, so follow the weld before re-deriving, or the handle would
-    // stay selected at a coordinate no wall ends at and move nothing.
-    const committedPoint = selectedConnectionPoint
-      ? resolveWeldedPoint(welds, selectedConnectionPoint)
-      : null;
+    // grab-time set and silently un-weld the junction just created (see
+    // followWeldedSelection).
     set({
       plan: history.present,
       liveDragItems: null,
       liveDragConnectionPoint: null,
-      selectedConnectionPoint: committedPoint,
-      selectedConnectionPointEndpoints: committedPoint
-        ? findConnectedEndpoints(history.present.walls, committedPoint)
-        : [],
+      ...followWeldedSelection(selectedConnectionPoint, welds),
     });
   },
 }));

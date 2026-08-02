@@ -643,6 +643,36 @@ describe("mid-span wall splitting on commit", () => {
     expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(3);
   });
 
+  it("follows the weld when a drawn wall welds the selected junction onto it", () => {
+    // Regression: `addWall` discarded commit()'s welds, so drawing a wall past a
+    // selected junction left the selection at its pre-weld coordinate — an
+    // invisible handle (no endpoint sits there any more) that arrow keys still
+    // move, un-welding the junction the draw had just created.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("w1", 0, 0, 100, 0), wall("w2", 100, 0, 100, 100)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+
+    useApp.getState().addWall(wall("drawn", 0, 3, 300, 3));
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 3 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(4);
+
+    // …and the handle still works: the next nudge moves the whole junction
+    // rather than pulling two of its walls back off the split point.
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const at = { x: 100, y: 23 };
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual(at);
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual(at);
+    expect(walls.find((w) => w.id === "drawn")?.b).toEqual(at);
+    expect(walls.find((w) => !["w1", "w2", "drawn"].includes(w.id))?.a).toEqual(
+      at,
+    );
+  });
+
   it("does not re-split across successive commits", () => {
     useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
     useApp.getState().addWall(wall("t", 100, 3, 100, 80));
