@@ -15,8 +15,10 @@ import {
   MIN_WALL_LENGTH,
   resizeWallToLength,
 } from "@geometry/wall";
+import { splitWallsAtTouchingEndpoints } from "@geometry/wallSplit";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
+import { uid } from "../util/uid";
 import {
   commit as commitHistory,
   createHistory,
@@ -172,12 +174,23 @@ function persist() {
 }
 
 function commit(next: Plan) {
+  // Split any wall another wall's endpoint now ends on, so a mid-span T becomes
+  // a real shared-coordinate junction (see wallSplit.ts). Done here, before the
+  // item reconcile below, so every edit path — draw, move, endpoint drag,
+  // type-to-resize — is covered from one place and the split rides inside the
+  // same history entry as the edit that caused it (a single undo restores both).
+  // Live drag previews deliberately bypass commit(), so nothing splits
+  // mid-gesture; the split lands when the gesture is released.
+  const split = splitWallsAtTouchingEndpoints(next.walls, next.items, () =>
+    uid("wall"),
+  );
   // Reconcile door/window openings against their wall's current length here so
   // every wall-resize path (type-to-length, connection-point drag, auto-follow)
   // is covered without touching each call site individually.
   const reconciled: Plan = {
     ...next,
-    items: reconcileItemsToWalls(next.walls, next.items),
+    walls: split.walls,
+    items: reconcileItemsToWalls(split.walls, split.items),
   };
   history = commitHistory(history, reconciled);
   persist();

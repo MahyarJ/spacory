@@ -5,6 +5,49 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## A mid-span T-junction is made by splitting the host, not by a new relation
+
+**Decision.** When a wall's endpoint lands inside another wall's drawn body
+(perpendicular distance ≤ `host.thickness / 2`), `commit()` splits the host at
+the projected point and welds the touching endpoint exactly onto it
+(`src/geometry/wallSplit.ts`). The host keeps its id for the first segment; each
+further segment gets a fresh one, and every segment inherits the host's
+thickness.
+
+**Why split rather than model the relation.** Connectivity is *coordinate
+equality between endpoints* (`connectivity.ts`) and nothing else — mitering,
+auto-follow, junction drag and endpoint detach all derive from it. Splitting
+produces the shared coordinate those features already react to, so a mid-span T
+becomes an ordinary three-endpoint junction with no new code and no new concept
+in the schema. A persistent "these walls are joined" relation would contradict
+the settled model and need every downstream feature taught about it.
+
+**Why `thickness / 2` is the tolerance.** It is the rule a user can see: if the
+endpoint is inside the wall you drew, it looks like it touches, so it connects.
+A fixed cm tolerance would either miss thick walls or fire on thin ones that
+visibly don't meet.
+
+**Why a near-corner touch does nothing.** A projection within `MIN_WALL_LENGTH`
+of either of the host's own endpoints is an ordinary corner, and splitting there
+would carve a sliver wall. Two touches closer than `MIN_WALL_LENGTH` to each
+other weld into a single junction for the same reason. Welding genuine near-miss
+*corners* together is a separate feature and deliberately not done here.
+
+**Why in `commit()`.** It is the single chokepoint every plan edit passes
+through, so draw, move, endpoint drag and type-to-resize are covered at one call
+site, and the split rides inside the same history entry as the edit that caused
+it — one undo restores the pre-split walls *and* items. Live drag previews
+bypass `commit()` by design, so nothing splits mid-gesture. `loadDocument` also
+bypasses it, so an imported plan isn't retro-split until the first edit.
+
+**Openings follow the reposition-first rule.** Each of the host's openings
+re-attaches to whichever segment holds it with `offset` rebased to that
+segment's `a`; one straddling the split point moves into the segment holding its
+larger part, keeping its width, and is removed only if it cannot fit there at
+all — the same last-resort rule `reconcileItemsToWalls` already applies.
+
+---
+
 ## The dispatcher classifies an agent verdict from its `**Verdict:**` line only
 
 **Decision.** `verdict_of` and `triage_verdict_of` in `.agents/dispatch.sh` no
@@ -82,9 +125,11 @@ for 3+-way junctions uses the *same* miter points and shares each edge with a
 wall, so it tiles seamlessly rather than overlaying. See `geometry/junction.ts`.
 
 **Scope.** Only shared **endpoints** form junctions. A wall ending mid-span of
-another isn't auto-split (would require wall splitting). Very acute angles are
-now capped by a miter limit (bevel fallback) — see "Miter limit is a multiple
-of half-thickness, not a fixed cm value" above.
+another is now made into one by splitting the host — see "A mid-span T-junction
+is made by splitting the host, not by a new relation" above; a true X crossing
+(neither wall *ends* on the other) still isn't. Very acute angles are now capped
+by a miter limit (bevel fallback) — see "Miter limit is a multiple of
+half-thickness, not a fixed cm value" above.
 
 ## Undo history is diff-based and persisted
 

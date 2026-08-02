@@ -1,4 +1,5 @@
 import type { DoorItem, Plan, Wall } from "@app/schema";
+import { findConnectedEndpoints } from "@geometry/connectivity";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "./store";
 
@@ -496,5 +497,114 @@ describe("connection-point drag snapping onto unrelated junctions", () => {
     const walls = useApp.getState().plan.walls;
     expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 100, y: 100 });
     expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 100, y: 100 });
+  });
+});
+
+describe("mid-span wall splitting on commit", () => {
+  it("splits the host and welds the endpoint when a wall is drawn onto its span", () => {
+    // The headline case: an existing wall along y=0, then a new wall drawn down
+    // from a point 3cm off its centreline (inside its 10cm-thick body).
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+
+    useApp.getState().addWall(wall("t", 100, 3, 100, 80));
+
+    const walls = useApp.getState().plan.walls;
+    // The host is split in two at the touch point, keeping its id for the first.
+    expect(walls).toHaveLength(3);
+    expect(walls.find((w) => w.id === "host")).toEqual(
+      wall("host", 0, 0, 100, 0),
+    );
+    // The drawn wall's endpoint is welded exactly onto the projection, so all
+    // three ends now share one coordinate — an ordinary junction.
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 100, y: 0 });
+    expect(findConnectedEndpoints(walls, { x: 100, y: 0 })).toHaveLength(3);
+  });
+
+  it("moves all three walls together when the new junction is dragged", () => {
+    // Proves the split produces a junction the *existing* features act on: no
+    // new code path drags a T-junction, it works off the shared coordinate.
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "host")?.b).toEqual({ x: 100, y: 20 });
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 100, y: 20 });
+    const second = walls.find((w) => w.id !== "host" && w.id !== "t");
+    expect(second?.a).toEqual({ x: 100, y: 20 });
+    expect(second?.b).toEqual({ x: 200, y: 0 });
+  });
+
+  it("restores the unsplit host in a single undo", () => {
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+    expect(useApp.getState().plan.walls).toHaveLength(3);
+
+    useApp.getState().undo();
+
+    expect(useApp.getState().plan.walls).toEqual([wall("host", 0, 0, 200, 0)]);
+  });
+
+  it("re-attaches the host's opening to the segment that holds it", () => {
+    const door: DoorItem = {
+      id: "d1",
+      type: "door",
+      thickness: 10,
+      wallAttach: { wallId: "host", offset: 140, length: 20 },
+      props: { hingeEdge: "start", swingSide: "outside" },
+    };
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)], [door]));
+
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+
+    const [item] = useApp.getState().plan.items;
+    const second = useApp
+      .getState()
+      .plan.walls.find((w) => w.id !== "host" && w.id !== "t");
+    expect(item.wallAttach.wallId).toBe(second?.id);
+    expect(item.wallAttach.offset).toBe(40);
+    expect(item.wallAttach.length).toBe(20);
+  });
+
+  it("does not split mid-gesture — only when the drag is committed", () => {
+    // A live drag preview bypasses commit(), so dragging a wall's end onto
+    // another wall's span leaves the host whole until the gesture is released.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("host", 0, 0, 200, 0), wall("t", 100, 60, 100, 140)]),
+      );
+    useApp.getState().beginLiveDrag();
+
+    useApp
+      .getState()
+      .moveWallEndpointLive({ wallId: "t", end: "a" }, { x: 100, y: 0 });
+    expect(useApp.getState().plan.walls).toHaveLength(2);
+
+    useApp.getState().commitPlan();
+    expect(useApp.getState().plan.walls).toHaveLength(3);
+  });
+
+  it("keeps the split host selected, as its first segment", () => {
+    loadWithSelection([wall("host", 0, 0, 200, 0)], ["host"]);
+
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+
+    expect(useApp.getState().selectedWalls.has("host")).toBe(true);
+    expect(useApp.getState().plan.walls.find((w) => w.id === "host")).toEqual(
+      wall("host", 0, 0, 100, 0),
+    );
+  });
+
+  it("does not re-split across successive commits", () => {
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+    useApp.getState().addWall(wall("t", 100, 3, 100, 80));
+    const afterSplit = useApp.getState().plan.walls;
+
+    useApp.getState().addWall(wall("far", 500, 500, 600, 500));
+
+    expect(useApp.getState().plan.walls.slice(0, 3)).toEqual(afterSplit);
   });
 });
