@@ -38,7 +38,10 @@ connected room structures.
   widths (the toolbar wraps instead of clipping its controls) and every control
   is a comfortable touch target on a touch screen. On the canvas, one finger runs
   the active tool (draw, place, select, drag) and two fingers pan and pinch-zoom
-  whatever the tool
+  whatever the tool. Selecting something also puts an on-screen **Remove**
+  button in the floating options bar, joined by **Hinge** and **Swing** when the
+  selection includes a door, so editing what you've drawn never needs a
+  keyboard — and that bar is where further selection actions will land
 - ⚡ Built with **Vite + React + TypeScript**
 
 Not yet: splitting a wall where another ends mid-span, rooms / enclosed areas,
