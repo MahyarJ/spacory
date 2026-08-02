@@ -93,6 +93,12 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   pan/zoom tip is hidden on a coarse pointer by the pure `src/app/canvasHint.ts`
   (#85, merged as PR #89). The floating options bar's own controls were **not**
   covered — see the #93 bullet under Known gaps.
+- **On-screen Remove / Hinge / Swing controls** — the floating options bar now shows
+  editing buttons for **any non-empty selection** (not just a single wall/item), on
+  every pointer kind, with Hinge/Swing appearing whenever the selection contains at
+  least one door; the "which controls apply" decision is a pure tested function in
+  `src/app/selection.ts`. Makes the three keyboard-only verbs reachable without a
+  keyboard (#93, merged as PR #95).
 - **Touch-drawable canvas** — `touch-action` scoped to the canvas so one finger
   runs the active tool, two fingers pan and pinch-zoom whatever the tool (pure
   multi-touch math in `src/app/viewport.ts`), and `pointercancel` aborts a gesture
@@ -273,8 +279,37 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   inputs) never got the 44 px coarse-pointer treatment** that `Toolbar.module.css` /
   `Menu.module.css` / `ThemeSwitch.module.css` have — a leftover from #85, not
   caused by #93. **(b) is now ticketed as #94** (created this cycle run).
-- **No mid-span wall splitting** — only shared *endpoints* form junctions. A wall
-  ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions").
+- **No mid-span wall splitting — in flight (#96, triaged & enriched 2026-08-03 from
+  a human-submitted idea).** Only shared *endpoints* form junctions, so a wall
+  ending mid-span of another is not auto-split (DECISIONS.md "Wall junctions"
+  Scope paragraph; README "Not yet"). Verified in code: `connectivity.ts` defines
+  connectivity as endpoint coordinate equality (`pointsEqual`), so a mid-span T is
+  invisible to the mitered junction geometry, to auto-follow (#19) and to the
+  junction drag (#22/#27) — the walls look joined and come apart on the first edit.
+  Retitled "Split a wall where another wall ends on it, so mid-span T-junctions are
+  really connected." Product calls pinned: **split the host wall rather than
+  introducing a persistent "these walls are joined" relation** — splitting yields
+  the shared coordinate the whole app already reacts to, so the T-junction fill,
+  the follow-on-move and the junction handle all work with no new model concept,
+  whereas a stored relation would contradict the settled coordinate-equality model;
+  **"on the wall" means inside the host's drawn body** (perpendicular distance
+  ≤ `thickness / 2`) with the touching endpoint snapped exactly onto the projection
+  (the human's "mid-snap"), and the split point must stay `MIN_WALL_LENGTH` clear
+  of the host's own endpoints so a near-miss *corner* is left alone instead of
+  producing a sliver; **openings on the host must survive**, rebased onto whichever
+  segment holds them, with a straddler moved into the larger side and removed only
+  as a last resort — the same reposition-first rule `reconcileItemsToWalls` already
+  applies (#38's settled precedent). Hooked at the **`commit()` chokepoint** beside
+  that reconcile, so draw / move / endpoint drag / type-to-resize are covered by one
+  call site and the split rides in a single undo step; live drags bypass `commit()`,
+  so nothing splits mid-gesture. Idempotence is its own criterion (after the split
+  the endpoint sits on a segment *endpoint*, so it can't re-split). Explicit
+  out-of-scopes, each a plausible follow-up: **X crossings** where neither wall ends
+  on the other, **welding near-miss corners**, **un-splitting** when the touching
+  wall is later deleted (the host stays two segments), **retro-splitting imported
+  plans** (`loadDocument` builds history via `createHistory`, not `commit()`), and a
+  **snap preview/indicator while drawing**. Note this is the prerequisite for rooms /
+  enclosed areas. Did not add `agent:ready` (a human promotes it).
 - **Viewport persistence — done (#2, merged).**
 - **Fit to content button — done (#9, merged).**
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
@@ -470,13 +505,14 @@ see the #93 bullet under "Known gaps")?
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-08-02, read during this cycle run): #10 (prune
+Current open issues (as of 2026-08-03, read during the #96 triage run): #10 (prune
 stale selection), #20 (fit shortcut/zoom to selection), #21 (error boundary), #52
 (custom door swing glyph, follow-up to #51), #63 (switch display units
 cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a toolbar control has focus),
-#93 (on-screen Remove/Hinge/Swing controls — triaged & enriched 2026-08-02,
-awaiting a human promotion to `agent:ready`), and **#94** (44px touch targets for
-the options bar's existing controls — created this run). Closed since: **#84**
+#94 (44px touch targets for the options bar's existing controls), and **#96**
+(split a wall where another ends on it — triaged & enriched 2026-08-03, awaiting a
+human promotion to `agent:ready`). **#93** (on-screen Remove/Hinge/Swing controls)
+merged 2026-08-02 as PR #95. Closed since: **#84**
 (touch canvas, merged as PR #91), **#85** (tablet chrome, merged as PR #89), **#76**
 (commit typed length/width on click-away), **#33** (SVG export, PR #82), **#61**
 (Cmd/Ctrl+drag detach, PR #75), **#78** (README opening-width docs, PR #81); #60 and
@@ -491,13 +527,18 @@ rough priority order) are:
 
 1. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs
    human product input before scoping (see open questions); defer until answered.
+   Note the dependency discovered during #96's triage: **mid-span wall splitting
+   (#96) is a prerequisite** — without it a plan's walls don't form a connected
+   graph, so no enclosure can be derived. Sequence #96 first.
 2. **Cascading connected-wall follow** — genuinely needs a human UX call before
    it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
    gaps" and the open question above. Do not write this issue until answered.
 
-The backlog is now nine issues deep and every *known* gap that doesn't need a human
+The backlog is eight issues deep and every *known* gap that doesn't need a human
 call is ticketed. The next cycle should reconcile GitHub state, run the README
-backstop check again (it caught real drift this run), and resist inventing work:
+backstop check again (it caught real drift two runs ago, and #93/PR #95 shipped a
+user-visible feature whose README delta should be spot-checked), and resist
+inventing work:
 rooms and cascading-follow both still await a human answer, and there is no other
 concrete queued slice.
 
@@ -540,6 +581,50 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-03 — Triage run on human-submitted idea #96 ("Connect the walls on
+  mid-snap"). The submission cited this file's own record of the gap, and it checks
+  out in code: `connectivity.ts` defines connectivity as **endpoint coordinate
+  equality** (`pointsEqual`, eps `1e-6`), so a wall ending mid-span of another is
+  invisible to the mitered junction geometry, to auto-follow (#19) and to the
+  junction drag (#22/#27) — the walls look joined and come apart on the first edit.
+  Confirmed this is a **documented scope gap, not a settled "no"**: DECISIONS.md's
+  "Wall junctions" Scope paragraph names splitting as the missing capability, and the
+  README lists it under "Not yet" — so accepting it doesn't revisit a settled
+  decision. Accepted and enriched into "Split a wall where another wall ends on it,
+  so mid-span T-junctions are really connected."
+  **The mechanism call is the one that mattered: split the host wall, don't add a
+  persistent "these walls are joined" relation.** The tempting alternative is a
+  stored T-relation in the schema, and it's wrong — it would contradict the settled
+  coordinate-equality model and force every consumer (junction mitering, follow,
+  detach, connection-point drag) to learn a second notion of connectedness. Splitting
+  produces the shared coordinate they *already* react to, so the T-junction fill, the
+  follow-on-move and the junction handle come for free with no new model concept.
+  Second call: **"on the wall" means inside the host's drawn body** (perpendicular
+  distance ≤ `thickness / 2`) with the touching endpoint snapped exactly onto the
+  projection — that is the human's "mid-snap", and it's the rule that makes the
+  feature match what the user sees ("if it looks like it touches, it connects")
+  rather than demanding exact coincidence, which grid snapping only ever delivers for
+  axis-aligned walls. Guarded with `MIN_WALL_LENGTH` clearance from the host's own
+  endpoints so a near-miss *corner* is left alone instead of producing a sliver wall.
+  Made **openings surviving the split** its own criterion rather than leaving it to
+  chance — it's the consequence most likely to be missed, and it has a settled
+  precedent to follow (#38's reposition-first, remove-as-a-last-resort rule in
+  `reconcileItemsToWalls`), including a rule for the genuinely ambiguous straddling
+  opening (move into the larger side; remove only if it can't fit). Hooked at the
+  **`commit()` chokepoint** beside that reconcile — one call site covers draw, move,
+  endpoint drag and type-to-resize, gives a single undo step for free, and (because
+  live drags deliberately bypass `commit()`) means nothing splits mid-gesture.
+  Required **idempotence** as a criterion so a wall can't re-split on successive
+  commits. Explicit out-of-scopes, each a plausible follow-up: X crossings, welding
+  near-miss corners, **un-splitting** when the touching wall is later deleted (the
+  host stays two segments — classic CAD behaviour and acceptable), retro-splitting
+  imported plans (`loadDocument` uses `createHistory`, not `commit()`), and a snap
+  preview while drawing. Also recorded a **sequencing dependency**: #96 is a
+  prerequisite for rooms / enclosed areas, since without it the walls don't form a
+  connected graph. Corrected stale state found while reading: **#93 merged as PR
+  #95** and was missing from "Current state". Did not add `agent:ready` (a human
+  promotes it).
 
 - 2026-08-02 — Fourteenth Product Agent run (cycle), same day as the #93 triage.
   Reconciled with GitHub: no change since that triage pass — the same seven issues
