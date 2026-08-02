@@ -63,3 +63,61 @@
   font-size: 12px;
   opacity: 0.8;
 }
+
+/* On-screen Remove / Hinge / Swing. Shown for every pointer kind: these verbs
+   are otherwise keyboard-only and undiscoverable, and gating on
+   `pointer: coarse` would leave a hybrid device that mis-reports itself with no
+   way to delete at all. */
+.actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 7px around an 18px icon is a 32px square (`box-sizing: border-box` is
+   global), which is what keeps the coarse-pointer overlay below inside the
+   bar — see the note there before changing either number. */
+.actionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border: none;
+  border-radius: 6px;
+  background: var(--sp-grid);
+  color: var(--sp-text);
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  outline: 1px solid var(--sp-accent);
+}
+
+.actionButton:focus-visible {
+  outline: 2px solid var(--sp-accent);
+}
+
+/* Touch: grow the *hit area*, not the button — the same invisible overlay the
+   toolbar and theme switch use, so a touch device renders the same bar a mouse
+   does. The overlay is a 44px square centred on the 32px button, i.e. it
+   reaches 6px past each edge; the bar's own 6px/10px padding and the 10px gap
+   to the length field both clear that, and the 12px gap below keeps two
+   neighbouring hit areas from meeting. */
+@media (pointer: coarse) {
+  .actions {
+    gap: 12px;
+  }
+
+  .actionButton {
+    position: relative;
+  }
+
+  .actionButton::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--sp-touch-target);
+    height: var(--sp-touch-target);
+    transform: translate(-50%, -50%);
+  }
+}
