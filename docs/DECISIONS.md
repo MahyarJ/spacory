@@ -56,6 +56,11 @@ overlapping duplicate segments, or ones under `MIN_WALL_LENGTH`. Such a touch is
 deferred instead: the detect→apply loop re-runs against the settled geometry,
 where the ordinary guards apply and the touch either splits cleanly or turns out
 to be a corner. Deferring costs a pass; slicing stale geometry corrupts the plan.
+A *cycle* of deferrals — walls each ending mid-span of the next, all moving in
+the same pass — settles to no split at all, leaving those walls looking joined
+but not. That is the pre-feature status quo rather than a regression, it needs an
+exotic pinwheel arrangement, and drawing commits each wall separately, so it only
+arises from a loaded plan.
 
 **Openings follow the reposition-first rule.** Each of the host's openings
 re-attaches to whichever segment holds it with `offset` rebased to that
