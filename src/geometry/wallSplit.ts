@@ -60,12 +60,10 @@ export function resolveWeldedPoint(welds: PointWeld[], point: Point): Point {
 }
 
 /**
- * Cap on detect→apply rounds. One round normally settles the whole plan (a
- * split only ever creates endpoints at coordinates that are already shared, so
- * it can't produce new mid-span touches); the loop exists for the rare endpoint
- * that lands inside *two* walls' bodies at once, which can only be welded onto
- * one of them per round, and for the touches a pass defers because their host
- * moves (see `applyTouches`).
+ * Cap on detect→apply rounds. One round normally settles the whole plan; the
+ * loop exists for the rare endpoint that lands inside *two* walls' bodies at
+ * once, which can only be welded onto one of them per round, and for the
+ * touches a pass defers because their host moves (see `applyTouches`).
  */
 const MAX_PASSES = 8;
 
@@ -90,18 +88,62 @@ export function splitWallsAtTouchingEndpoints(
   nextWallId: () => string,
 ): WallSplitResult {
   let result: WallSplitResult = { walls, items, welds: [] };
-  for (let pass = 0; pass < MAX_PASSES; pass++) {
-    const touches = detectTouches(result.walls);
-    if (touches.length === 0) break;
+  let touches = detectTouches(walls);
+  for (let pass = 0; pass < MAX_PASSES && touches.length > 0; pass++) {
     const applied = applyTouches(result, touches, nextWallId);
     // A pass that deferred everything (see `applyTouches`) would only repeat
     // itself, since the next detect runs on identical geometry.
-    const changed =
-      applied.welds.length > 0 || applied.walls.length > result.walls.length;
-    if (!changed) break;
+    if (
+      applied.welds.length === 0 &&
+      applied.walls.length === result.walls.length
+    ) {
+      break;
+    }
     result = { ...applied, welds: composeWelds(result.welds, applied.welds) };
+    touches = detectTouches(result.walls);
   }
-  return result;
+  // All or nothing: keep the run's result only if the plan settled and the
+  // split left behind neither a sub-minimum wall nor a coincident pair. A weld
+  // moves an endpoint, so on thick walls — the band is `host.thickness / 2`,
+  // 20cm at the widest preset — a pass can drag a whole junction into another
+  // wall's body and leave more touches than it resolved. Those grind the
+  // neighbourhood into slivers, and being unsettled they grind *again* on the
+  // next commit, so the plan keeps growing.
+  //
+  // Judging the outcome here, rather than adding a per-touch guard for each
+  // arrangement that can reach a bad one, makes the properties #96 states
+  // unconditionally structural: no split produces a sub-`MIN_WALL_LENGTH`
+  // wall, no split produces two walls on one span, and a plan the split has
+  // been through never changes on a later commit (a settled result re-detects
+  // no touches; a discarded one is returned untouched, so the next commit
+  // reaches the same verdict). A discarded run leaves those walls merely
+  // looking joined without being so — what they did before this module
+  // existed — the same fallback the overlap guards in `detectTouches` take.
+  // `result.walls === walls` on the common commit, where nothing touched at
+  // all; there is nothing to judge and no reason to pay for the scan.
+  if (result.walls === walls) return result;
+  const settled = touches.length === 0 && !isWorse(walls, result.walls);
+  return settled ? result : { walls, items, welds: [] };
+}
+
+/**
+ * Did the split leave a sub-`MIN_WALL_LENGTH` wall, or two walls spanning the
+ * same pair of coordinates, that the plan didn't already have?
+ */
+function isWorse(before: Wall[], after: Wall[]): boolean {
+  const shortCount = (ws: Wall[]) =>
+    ws.filter((w) => getWallLength(w) < MIN_WALL_LENGTH).length;
+  if (shortCount(after) > shortCount(before)) return true;
+  const duplicateCount = (ws: Wall[]) =>
+    ws.filter((w, i) =>
+      ws.some(
+        (o, j) =>
+          j < i &&
+          ((pointsEqual(w.a, o.a) && pointsEqual(w.b, o.b)) ||
+            (pointsEqual(w.a, o.b) && pointsEqual(w.b, o.a))),
+      ),
+    ).length;
+  return duplicateCount(after) > duplicateCount(before);
 }
 
 /**

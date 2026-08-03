@@ -161,6 +161,33 @@ describe("splitWallsAtTouchingEndpoints — detection", () => {
     expect(walls).toHaveLength(3);
   });
 
+  it("leaves a thick-wall tangle alone rather than grinding it into slivers", () => {
+    // "c" ends inside "a"'s 40cm body, so it wants to weld — but at that
+    // thickness the detection band is 20cm, wide enough that the a/b junction
+    // falls inside *c*'s body and gets welded too, dragging walls the user did
+    // join in order to join them to one they didn't. Each pass created more
+    // touches than it resolved; the run used to be applied anyway, leaving 27
+    // walls. A run that can't settle is discarded whole.
+    const walls = [
+      wall("a1", 140, 120, 200, 120, 40),
+      wall("a2", 200, 120, 260, 120, 40),
+      wall("b", 200, 120, 160, 260, 40),
+      wall("c", 220, 40, 180, 100, 40),
+    ];
+    expect(split(walls).walls).toBe(walls);
+  });
+
+  it("does not shorten a wall below the minimum to reach two hosts", () => {
+    // "t" spans two centrelines 0.5cm apart, so welding both ends leaves it
+    // 0.5cm long. The invariant is unconditional, so the split stands down.
+    const walls = [
+      wall("h1", 2, -50, 2, 50),
+      wall("h2", 2.5, -50, 2.5, 50),
+      wall("t", 0, 0, 4, 0),
+    ];
+    expect(split(walls).walls).toBe(walls);
+  });
+
   it("still splits both hosts when each end lands on a different one", () => {
     // The rule is "both ends on the *same* host"; a wall spanning between two
     // walls is an ordinary pair of T-junctions.

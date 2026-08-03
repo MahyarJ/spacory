@@ -1,5 +1,6 @@
 import type { DoorItem, Plan, Wall } from "@app/schema";
 import { findConnectedEndpoints } from "@geometry/connectivity";
+import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "./store";
 
@@ -777,5 +778,37 @@ describe("mid-span wall splitting on commit", () => {
     useApp.getState().addWall(wall("far", 500, 500, 600, 500));
 
     expect(useApp.getState().plan.walls.slice(0, 3)).toEqual(afterSplit);
+  });
+
+  it("settles a thick-wall plan instead of grinding it on every commit", () => {
+    // Regression: at the 40cm preset the detection band is 20cm, wide enough to
+    // swallow a coordinate that is already a junction. Welding it dragged the
+    // walls meeting there onto the new host's centreline, which created fresh
+    // touches, and the pass was applied anyway — three grid-snapped draws
+    // committed as 27 walls, and every later commit roughly doubled that.
+    useApp.getState().loadPlan(planWith([]));
+    useApp.getState().addWall(wall("a", 140, 120, 260, 120, 40));
+    useApp.getState().addWall(wall("b", 200, 120, 160, 260, 40));
+    expect(useApp.getState().plan.walls).toHaveLength(3); // the genuine T
+
+    useApp.getState().addWall(wall("c", 220, 40, 180, 100, 40));
+
+    // "c" can't join without dragging the a/b junction off itself, so it is
+    // left looking joined without being so — the same fallback the overlap
+    // guards take. What it must not do is mangle the walls around it: "a" was
+    // drawn horizontal and stays horizontal, split only at the real junction.
+    const walls = useApp.getState().plan.walls;
+    expect(walls).toHaveLength(4);
+    expect(walls.find((w) => w.id === "a")).toEqual(
+      wall("a", 140, 120, 200, 120, 40),
+    );
+    expect(walls.find((w) => w.id === "c")).toEqual(
+      wall("c", 220, 40, 180, 100, 40),
+    );
+    expect(walls.every((w) => getWallLength(w) >= MIN_WALL_LENGTH)).toBe(true);
+
+    // …and it has settled: further commits leave the plan where it is.
+    useApp.getState().addWall(wall("far", 900, 900, 1000, 900, 40));
+    expect(useApp.getState().plan.walls.slice(0, 4)).toEqual(walls);
   });
 });

@@ -81,6 +81,26 @@ but not. That is the pre-feature status quo rather than a regression, it needs a
 exotic pinwheel arrangement, and drawing commits each wall separately, so it only
 arises from a loaded plan.
 
+**A run that doesn't settle is discarded whole.** The individual guards above are
+per-touch, and on thick walls that isn't enough: the band is `thickness / 2`, so
+at the 40cm preset it is 20cm — wide enough to swallow a coordinate that is
+*already* a junction. Welding it drags the walls meeting there onto the new
+host's centreline, which creates fresh touches, and applying such a pass anyway
+grinds the neighbourhood into slivers and leaves the plan unsettled, so the next
+commit grinds it again: three grid-snapped 40cm draws once committed as 27 walls
+and roughly doubled on every commit after. Rather than adding a per-touch guard
+for each arrangement that can reach a bad outcome, the whole detect→apply run is
+judged at the end and kept only if the plan settled — no touches left, no
+sub-`MIN_WALL_LENGTH` wall and no coincident pair that the input didn't already
+have. That makes the invariants structural: a split never produces a sliver or a
+duplicate span, and a plan the split has been through never changes on a later
+commit (a kept result re-detects nothing; a discarded one is returned untouched,
+so the next commit reaches the same verdict). A discarded run leaves those walls
+looking joined without being so — the same fallback the overlap guards take. It
+also subsumes the degenerate case of a wall welding onto two hosts whose
+centrelines are within `MIN_WALL_LENGTH` of each other, which no per-touch guard
+caught because each end is judged against its own nearest host.
+
 **Openings follow the reposition-first rule.** Each of the host's openings
 re-attaches to whichever segment holds it with `offset` rebased to that
 segment's `a`; one straddling the split point moves into the segment holding its
