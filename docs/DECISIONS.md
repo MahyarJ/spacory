@@ -37,7 +37,7 @@ other weld into a single junction for the same reason. Welding genuine near-miss
 through, so draw, move, endpoint drag and type-to-resize are covered at one call
 site, and the split rides inside the same history entry as the edit that caused
 it — one undo restores the pre-split walls *and* items. Live drag previews
-bypass `commit()` by design, so nothing splits mid-gesture. `loadDocument` also
+bypass `commit()` by design, so nothing splits mid-gesture. `loadPlan` also
 bypasses it, so an imported plan isn't retro-split until the first edit.
 
 **Openings follow the reposition-first rule.** Each of the host's openings
