@@ -329,7 +329,14 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   *touching* wall below the minimum is skipped); the near-corner criterion now says
   the protected band is only `MIN_WALL_LENGTH` = 1 cm; and "the new junction is an
   ordinary junction" now carries the held-handle requirement above instead of
-  claiming the junction needs "no new code."
+  claiming the junction needs "no new code." A **second clarify pass** added a fourth
+  criterion, **"An overlap is not a T"**: no split may leave **two coincident walls on
+  one span**, so a wall with both ends on one host, and two walls each ending inside the
+  other's body, both have all their touches skipped and are left as drawn. The durable
+  principle: *un-joined is recoverable, duplicated is not* — a phantom twin draws double
+  and deleting the visible wall leaves an unreachable copy — and a wall inside another
+  wall's body is the out-of-scope **overlap** family, not a mid-span T. No survivor is
+  picked by thickness, length or draw order (invisible to the user, still near-duplicate).
 - **Un-splitting and stub tidying after a mid-span split — open gap, no issue yet
   (surfaced during PR #97's acceptance, 2026-08-03; next cycle should ticket it).**
   Two related loose ends the split (#96) deliberately left: (a) **delete the T-wall
@@ -618,6 +625,31 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-03 — Second clarify pass on **PR #97**, answering the one product call the
+  Engineer Agent explicitly escalated rather than guessed at: two walls that each end
+  inside the *other*'s body settle into **two coincident walls on one span**, and which
+  side should keep the span is a product decision. **Settled: neither — skip every
+  touch between the pair and leave both walls exactly as drawn.** The reasoning is the
+  general rule now worth reusing: **a wall lying inside another wall's body is an
+  overlap, not a T** (the crossing family #96 puts out of scope), and of the two
+  possible failure modes, *un-joined* is recoverable while *duplicated* is not — a
+  phantom twin draws double, shows two length labels, and deleting the wall the user
+  can see leaves an unreachable copy. Explicitly **rejected picking a survivor by
+  thickness, length or draw order**: invisible to the user and still leaves a
+  near-duplicate. Also ruled it **in scope for PR #97** — splitting is what creates the
+  duplicate, so merging as-is would ship a one-draw path to a corrupt plan (5.3% of the
+  Engineer's random-plan sweep), the same class both earlier duplicate-span findings
+  were blocked for — with the rule kept **narrow** (two ends on two *different* hosts
+  is a genuine pair of Ts and must still split). **Amended #96** with a new acceptance
+  criterion, **"An overlap is not a T"**, covering both shapes — the both-ends-on-one-
+  host guard already shipped in `1eab210` (previously recorded only in the PR body) and
+  this mutual case — plus a cross-reference on the crossing-walls out-of-scope bullet.
+  Deferred as not mine: the **PR description** rewrite (Engineer Agent's artifact, still
+  gates the merge as the squash message) and the **deferral-cycle limit** (a pinwheel of
+  mutual deferrals resolving to no split — correctly recorded in `DECISIONS.md` rather
+  than coded, since the outcome is the looking-joined-but-not status quo). The
+  un-splitting / stub-tidying follow-up stays as its "Known gaps" bullet for next cycle.
 
 - 2026-08-03 — Clarify pass on **PR #97** (#96's mid-span split, already accepted on
   `82d8348` with the verdict *accepted pending non-code fixes*). Nothing
