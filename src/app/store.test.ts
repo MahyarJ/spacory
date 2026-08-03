@@ -611,6 +611,28 @@ describe("mid-span wall splitting on commit", () => {
     expect(findConnectedEndpoints(walls, { x: 0, y: 180 })).toHaveLength(3);
   });
 
+  it("does not take apart a corner the user drew when a later wall welds", () => {
+    // Draw a wall, a second from its corner, a third from that second's far
+    // end. The third's start sits inside the first's 40cm body, so it welds
+    // onto its centreline — and the corner the user drew it *from* used to be
+    // left behind, because only the end detected as touching moved. Joining one
+    // wall silently disconnected another, which is the drift #96 exists to stop.
+    useApp.getState().loadPlan(planWith([]));
+    useApp.getState().addWall(wall("w0", 280, 40, 280, 300, 40));
+    useApp.getState().addWall(wall("w1", 280, 40, 300, 280, 20));
+    useApp.getState().addWall(wall("w2", 300, 280, 60, 120, 7));
+
+    const walls = useApp.getState().plan.walls;
+    const w1 = walls.find((w) => w.id === "w1");
+    const w2 = walls.find((w) => w.id === "w2");
+    // Wherever the split leaves them, the two ends drawn on one coordinate are
+    // still on one coordinate — the junction has as many members as before.
+    expect(w1?.b).toEqual(w2?.a);
+    expect(findConnectedEndpoints(walls, w2?.a ?? { x: 0, y: 0 }).length).toBe(
+      2,
+    );
+  });
+
   it("does not split mid-gesture — only when the drag is committed", () => {
     // A live drag preview bypasses commit(), so dragging a wall's end onto
     // another wall's span leaves the host whole until the gesture is released.

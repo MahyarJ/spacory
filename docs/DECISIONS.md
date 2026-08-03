@@ -27,6 +27,19 @@ endpoint is inside the wall you drew, it looks like it touches, so it connects.
 A fixed cm tolerance would either miss thick walls or fire on thin ones that
 visibly don't meet.
 
+**A weld moves the coordinate, not one endpoint.** Several wall ends can sit on
+one coordinate — that is what a junction is — so moving only the end that was
+detected as touching leaves its neighbours behind, and a corner the user drew
+comes apart as a side effect of joining something else: the exact drift this
+feature exists to stop, and nothing later recovers it. A weld therefore drags
+*every* end at the coordinate onto the split point, the way `translateEndpointsAt`
+already does for a junction drag. Bringing the stragglers along can leave a
+collinear or duplicate result, which the run-level verdict below discards — so
+the worst outcome is walls left as drawn, never walls silently disconnected. A
+coordinate can only move to one place, so where two ends sharing one were
+detected against different hosts the first decides; the other's split point is
+dropped and re-detected on the next pass.
+
 **Why a near-corner touch does nothing.** A projection within `MIN_WALL_LENGTH`
 of either of the host's own endpoints is an ordinary corner, and splitting there
 would carve a sliver wall. Two touches closer than `MIN_WALL_LENGTH` to each

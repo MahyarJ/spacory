@@ -188,6 +188,43 @@ describe("splitWallsAtTouchingEndpoints — detection", () => {
     expect(split(walls).walls).toBe(walls);
   });
 
+  it("drags every wall end sharing the welded coordinate onto the split point", () => {
+    // "in" lies along "host"'s 40cm body, so it is left alone (both ends inside
+    // one host). "t" starts on the same coordinate as "in" and does weld onto
+    // the host. A weld moves the *coordinate*, not just the end that was
+    // detected: welding only "t" used to leave "in" behind at (15,150), quietly
+    // undoing the corner the two walls were drawn sharing.
+    const { walls } = split([
+      wall("host", 0, 0, 0, 300, 40),
+      wall("in", 15, 150, 15, 60),
+      wall("t", 15, 150, 150, 150),
+    ]);
+
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 0, y: 150 });
+    expect(walls.find((w) => w.id === "in")?.a).toEqual({ x: 0, y: 150 });
+    // Host split in two, plus both walls: a four-member junction, and the pair
+    // the user drew together is still together.
+    expect(findConnectedEndpoints(walls, { x: 0, y: 150 })).toHaveLength(4);
+  });
+
+  it("keeps a drawn corner intact when a later wall welds onto a third", () => {
+    // The reported shape: "w1" is drawn from "w0"'s corner and "w2" from "w1"'s
+    // far end. "w2"'s start sits 20cm off "w0"'s centreline — inside its 40cm
+    // body — so it wants to weld onto (280,280), and "w1" ends on that same
+    // coordinate. Welding "w2" alone left "w1" behind with a free end: joining
+    // one wall took another apart. Dragging "w1" along instead would leave it
+    // spanning the same pair of points as "w0"'s lower segment, so the run is
+    // declined whole and both walls stay as drawn.
+    const walls = [
+      wall("w0", 280, 40, 280, 300, 40),
+      wall("w1", 280, 40, 300, 280, 20),
+      wall("w2", 300, 280, 60, 120, 7),
+    ];
+
+    expect(split(walls).walls).toBe(walls);
+    expect(findConnectedEndpoints(walls, { x: 300, y: 280 })).toHaveLength(2);
+  });
+
   it("still splits both hosts when each end lands on a different one", () => {
     // The rule is "both ends on the *same* host"; a wall spanning between two
     // walls is an ordinary pair of T-junctions.

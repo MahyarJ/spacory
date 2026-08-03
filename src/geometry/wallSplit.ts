@@ -27,6 +27,8 @@ interface Touch {
   distance: number;
   /** The endpoint's projection onto the host — where both will be welded. */
   point: Point;
+  /** The coordinate the touching endpoint sits on, before the weld. */
+  from: Point;
   toucher: WallEndpointRef;
 }
 
@@ -66,8 +68,6 @@ export function resolveWeldedPoint(welds: PointWeld[], point: Point): Point {
  * touches a pass defers because their host moves (see `applyTouches`).
  */
 const MAX_PASSES = 8;
-
-const endpointKey = (ref: WallEndpointRef) => `${ref.wallId}:${ref.end}`;
 
 /** Do these two walls already meet at a shared endpoint coordinate? */
 const shareAJunction = (w: Wall, other: Wall) =>
@@ -200,6 +200,7 @@ function detectTouches(walls: Wall[]): Touch[] {
             offset,
             distance,
             point: proj,
+            from: w[end],
             toucher: { wallId: w.id, end },
           };
         }
@@ -244,8 +245,17 @@ function applyTouches(
 
   /** Accepted split points per host, ordered along `a` → `b`. */
   const splitsByHost = new Map<string, Point[]>();
-  /** Where each touching endpoint is welded to. */
-  const weldByEndpoint = new Map<string, Point>();
+  /**
+   * Where each welded *coordinate* moves to, and the host whose centreline it
+   * moves onto. Keyed by coordinate rather than by endpoint because several
+   * wall ends can sit on one coordinate — that is exactly what a junction is.
+   * Moving only the end that was detected as touching would leave its
+   * neighbours behind and silently take apart a junction the user drew, so a
+   * weld drags every end at the coordinate along, the way `translateEndpointsAt`
+   * does for a junction drag.
+   */
+  const coordWelds: { from: Point; to: Point; hostId: string }[] = [];
+  const weldFor = (p: Point) => coordWelds.find((w) => pointsEqual(w.from, p));
 
   for (const [hostId, list] of byHost) {
     const accepted: { offset: number; point: Point }[] = [];
@@ -253,12 +263,19 @@ function applyTouches(
       const last = accepted[accepted.length - 1];
       // Two endpoints landing all but on top of each other would carve a sliver
       // segment between them, so the second joins the first's junction instead.
-      if (last && t.offset - last.offset < MIN_WALL_LENGTH) {
-        weldByEndpoint.set(endpointKey(t.toucher), last.point);
-        continue;
+      const merged =
+        last !== undefined && t.offset - last.offset < MIN_WALL_LENGTH;
+      if (!merged) accepted.push({ offset: t.offset, point: t.point });
+      // A coordinate can only move to one place, so where two ends sharing one
+      // were detected against different hosts, the first decides; the other's
+      // split point is dropped below and re-detected next pass.
+      if (!weldFor(t.from)) {
+        coordWelds.push({
+          from: t.from,
+          to: merged ? last.point : t.point,
+          hostId,
+        });
       }
-      accepted.push({ offset: t.offset, point: t.point });
-      weldByEndpoint.set(endpointKey(t.toucher), t.point);
     }
     splitsByHost.set(
       hostId,
@@ -273,33 +290,40 @@ function applyTouches(
   // about to move): the next pass re-detects it against settled geometry.
   for (const wall of walls) {
     const moves = ENDS.some((end) => {
-      const to = weldByEndpoint.get(`${wall.id}:${end}`);
-      return to !== undefined && !pointsEqual(wall[end], to);
+      const weld = weldFor(wall[end]);
+      return weld !== undefined && !pointsEqual(wall[end], weld.to);
     });
     if (!moves || !splitsByHost.delete(wall.id)) continue;
-    for (const t of byHost.get(wall.id) ?? []) {
-      weldByEndpoint.delete(endpointKey(t.toucher));
+    for (let i = coordWelds.length - 1; i >= 0; i--) {
+      if (coordWelds[i].hostId === wall.id) coordWelds.splice(i, 1);
     }
+  }
+
+  // Only slice a host where an endpoint actually lands: the deferral above and
+  // the one-target-per-coordinate rule can both retract a weld, and cutting the
+  // host anyway would leave two collinear segments nothing joins.
+  for (const [hostId, points] of splitsByHost) {
+    const kept = points.filter((p) =>
+      coordWelds.some((w) => pointsEqual(w.to, p)),
+    );
+    if (kept.length === points.length) continue;
+    if (kept.length === 0) splitsByHost.delete(hostId);
+    else splitsByHost.set(hostId, kept);
   }
 
   const nextWalls: Wall[] = [];
   /** Host id → the segments that replaced it, so its items can be rebased. */
   const segmentsByHost = new Map<string, Wall[]>();
-  const welds: PointWeld[] = [];
-  const noteWeld = (from: Point, to: Point) => {
-    if (pointsEqual(from, to)) return;
-    if (welds.some((w) => pointsEqual(w.from, from))) return;
-    welds.push({ from, to });
-  };
+  const welds: PointWeld[] = coordWelds
+    .filter((w) => !pointsEqual(w.from, w.to))
+    .map(({ from, to }) => ({ from, to }));
   for (const wall of walls) {
     // Weld first: a wall can be both a toucher and a host in the same pass, and
     // its segments must start/end at its welded endpoints. Only a weld that
     // leaves the wall put survives the deferral above, so the slice below
     // always runs on settled geometry.
-    const weldedA = weldByEndpoint.get(`${wall.id}:a`);
-    const weldedB = weldByEndpoint.get(`${wall.id}:b`);
-    if (weldedA) noteWeld(wall.a, weldedA);
-    if (weldedB) noteWeld(wall.b, weldedB);
+    const weldedA = weldFor(wall.a)?.to;
+    const weldedB = weldFor(wall.b)?.to;
     const w: Wall =
       weldedA || weldedB
         ? { ...wall, a: weldedA ?? wall.a, b: weldedB ?? wall.b }
