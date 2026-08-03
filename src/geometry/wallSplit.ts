@@ -129,6 +129,7 @@ function composeWelds(acc: PointWeld[], passWelds: PointWeld[]): PointWeld[] {
 function detectTouches(walls: Wall[]): Touch[] {
   const touches: Touch[] = [];
   for (const w of walls) {
+    const ends: Touch[] = [];
     for (const end of ENDS) {
       let best: Touch | null = null;
       for (const host of walls) {
@@ -153,8 +154,15 @@ function detectTouches(walls: Wall[]): Touch[] {
           };
         }
       }
-      if (best) touches.push(best);
+      if (best) ends.push(best);
     }
+    // Both ends inside the *same* host isn't a T — the wall lies along that
+    // host's body, which is the crossing/overlap family this module leaves
+    // alone. Welding both would collapse it onto the centreline: to zero length
+    // when it crosses the host, or onto a duplicate of the host's own span when
+    // it runs alongside. Skip the wall entirely, host left un-split.
+    if (ends.length === 2 && ends[0].hostId === ends[1].hostId) continue;
+    touches.push(...ends);
   }
   return touches;
 }

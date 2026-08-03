@@ -26,8 +26,9 @@ function wall(
   ay: number,
   bx: number,
   by: number,
+  thickness = 10,
 ): Wall {
-  return { id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness: 10 };
+  return { id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness };
 }
 
 function planWith(walls: Wall[], items: Plan["items"] = []): Plan {
@@ -566,6 +567,20 @@ describe("mid-span wall splitting on commit", () => {
     expect(item.wallAttach.wallId).toBe(second?.id);
     expect(item.wallAttach.offset).toBe(40);
     expect(item.wallAttach.length).toBe(20);
+  });
+
+  it("keeps a wall drawn across a thick host, rather than collapsing it", () => {
+    // Regression: both ends of the stub sit inside the 40cm-thick host's body
+    // and project to the same point, so welding both committed a zero-length
+    // wall — the wall the user had just drawn simply vanished.
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 300, 0, 40)]));
+
+    useApp.getState().addWall(wall("stub", 150, -15, 150, 15));
+
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 300, 0, 40),
+      wall("stub", 150, -15, 150, 15),
+    ]);
   });
 
   it("does not split mid-gesture — only when the drag is committed", () => {

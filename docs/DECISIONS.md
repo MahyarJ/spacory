@@ -33,6 +33,15 @@ would carve a sliver wall. Two touches closer than `MIN_WALL_LENGTH` to each
 other weld into a single junction for the same reason. Welding genuine near-miss
 *corners* together is a separate feature and deliberately not done here.
 
+**A wall with both ends inside one host is an overlap, not a T.** If both of a
+wall's endpoints land inside the *same* host's body, welding them would collapse
+that wall onto the host's centreline — to zero length where it crosses the host,
+or onto a duplicate of the host's own span where it runs alongside. Neither is a
+junction: the wall lies *within* another wall, which is the crossing/overlap
+family this module leaves alone. Both touches are skipped and the host stays
+whole. A wall whose two ends land on two *different* hosts is an ordinary pair of
+T-junctions and still splits both.
+
 **Why in `commit()`.** It is the single chokepoint every plan edit passes
 through, so draw, move, endpoint drag and type-to-resize are covered at one call
 site, and the split rides inside the same history entry as the edit that caused

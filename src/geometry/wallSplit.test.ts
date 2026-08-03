@@ -83,6 +83,41 @@ describe("splitWallsAtTouchingEndpoints — detection", () => {
     const walls = [wall("w1", 0, 0, 100, 0), wall("w2", 100, 0, 100, 100)];
     expect(split(walls).walls).toBe(walls);
   });
+
+  it("leaves a wall crossing a thick host alone rather than collapsing it", () => {
+    // A 30cm stub drawn across a 40cm-thick wall: both its ends sit inside the
+    // host's body and project to the same point, so welding both would leave a
+    // zero-length wall. It's an overlap, not a T.
+    const walls = [
+      wall("host", 0, 0, 300, 0, 40),
+      wall("stub", 150, -15, 150, 15),
+    ];
+    expect(split(walls).walls).toBe(walls);
+  });
+
+  it("leaves a wall lying along a host's body alone", () => {
+    // Drawn 4cm off the centreline of a 10cm-thick wall: welding both ends
+    // would make the host's middle segment a duplicate of this very wall.
+    const walls = [
+      wall("host", 0, 0, 300, 0),
+      wall("alongside", 50, 4, 200, 4),
+    ];
+    expect(split(walls).walls).toBe(walls);
+  });
+
+  it("still splits both hosts when each end lands on a different one", () => {
+    // The rule is "both ends on the *same* host"; a wall spanning between two
+    // walls is an ordinary pair of T-junctions.
+    const { walls } = split([
+      wall("h1", 0, 0, 100, 0),
+      wall("h2", 0, 80, 100, 80),
+      wall("t", 50, 3, 50, 77),
+    ]);
+
+    expect(walls.find((w) => w.id === "t")).toEqual(wall("t", 50, 0, 50, 80));
+    expect(findConnectedEndpoints(walls, { x: 50, y: 0 })).toHaveLength(3);
+    expect(findConnectedEndpoints(walls, { x: 50, y: 80 })).toHaveLength(3);
+  });
 });
 
 describe("splitWallsAtTouchingEndpoints — segments", () => {
