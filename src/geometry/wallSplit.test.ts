@@ -141,6 +141,28 @@ describe("splitWallsAtTouchingEndpoints — detection", () => {
     expect(split(walls).walls).toBe(walls);
   });
 
+  it("still splits a third wall a mutually-overlapping wall ends on", () => {
+    // The rule drops only the touches *between* the mutual pair. "y" overlaps
+    // "x", but its far end lands mid-span of "h", which is an ordinary T: a
+    // wider predicate (any touch involving a wall in a mutual pair) would
+    // silently stop this junction forming.
+    const { walls } = split([
+      wall("x", 0, 0, 100, 0),
+      wall("y", 20, 3, 120, 3),
+      wall("h", 120, -50, 120, 50),
+    ]);
+
+    expect(walls.filter((w) => w.id === "x" || w.id === "y")).toEqual([
+      wall("x", 0, 0, 100, 0),
+      wall("y", 20, 3, 120, 3),
+    ]);
+    expect(walls.filter((w) => w.id !== "x" && w.id !== "y")).toEqual([
+      wall("h", 120, -50, 120, 3),
+      wall("seg1", 120, 3, 120, 50),
+    ]);
+    expect(findConnectedEndpoints(walls, { x: 120, y: 3 })).toHaveLength(3);
+  });
+
   it("never produces two walls spanning the same pair of junctions", () => {
     // The reported plan: "w3" ends inside "w2"'s 40cm body, which splits it —
     // and that weld used to leave the pair touching a second time, welding
