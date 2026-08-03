@@ -310,6 +310,39 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   plans** (`loadDocument` builds history via `createHistory`, not `commit()`), and a
   **snap preview/indicator while drawing**. Note this is the prerequisite for rooms /
   enclosed areas. Did not add `agent:ready` (a human promotes it).
+  **Delivered by PR #97** (accepted 2026-08-03 on `82d8348`, verdict *accepted pending
+  non-code fixes* — the only thing left is the PR description, the Engineer Agent's
+  artifact). The implementation lesson worth carrying, and the reason it took three
+  review rounds: **the connection-point selection is tracked by coordinate, so any
+  feature that moves an endpoint inside `commit()` silently invalidates a held
+  junction handle** — the handle stays at its pre-split coordinate, invisible (the
+  layer only highlights a coordinate an endpoint actually sits at) but still live
+  (arrow keys route on `selectedConnectionPoint != null`), so the next keypress
+  un-welds the junction just created. Patched per-call-site twice and still leaked
+  (`addWall`, then the door toggles, which have no early return and fire on bare
+  `h`/`s`); the settled shape is **structural — `commit(next, heldPoint)` returns the
+  plan *and* the followed selection**, so all 11 call sites get it by construction.
+  Clarify pass 2026-08-03 amended three of #96's criteria to match what shipped:
+  the multi-touch criterion now names the two cases where the global
+  "no sub-`MIN_WALL_LENGTH` wall" invariant beats a literal split (two touches closer
+  than `MIN_WALL_LENGTH` weld into one junction; a touch that would shorten the
+  *touching* wall below the minimum is skipped); the near-corner criterion now says
+  the protected band is only `MIN_WALL_LENGTH` = 1 cm; and "the new junction is an
+  ordinary junction" now carries the held-handle requirement above instead of
+  claiming the junction needs "no new code."
+- **Un-splitting and stub tidying after a mid-span split — open gap, no issue yet
+  (surfaced during PR #97's acceptance, 2026-08-03; next cycle should ticket it).**
+  Two related loose ends the split (#96) deliberately left: (a) **delete the T-wall
+  and the host stays as two collinear segments**, so the user sees two length labels
+  where they had one and the plan carries a seam that no longer means anything —
+  merging collinear segments that share a now-2-wall junction is the fix; and (b) an
+  endpoint that overshoots a corner by more than `MIN_WALL_LENGTH` (1 cm) **does**
+  split and leaves a short stub segment, because that is all the "near a corner, do
+  nothing" guard protects. Both are cleanup of the same shape (short/meaningless
+  segments left behind), so scope them as **one** thin issue rather than two. Note the
+  product call already on record: widening the *weld* band so near-miss corners snap
+  together is a **different** feature ("welding near-miss corners", still out of
+  scope) — this gap is only about not leaving debris behind.
 - **Viewport persistence — done (#2, merged).**
 - **Fit to content button — done (#9, merged).**
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
@@ -510,8 +543,9 @@ stale selection), #20 (fit shortcut/zoom to selection), #21 (error boundary), #5
 (custom door swing glyph, follow-up to #51), #63 (switch display units
 cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a toolbar control has focus),
 #94 (44px touch targets for the options bar's existing controls), and **#96**
-(split a wall where another ends on it — triaged & enriched 2026-08-03, awaiting a
-human promotion to `agent:ready`). **#93** (on-screen Remove/Hinge/Swing controls)
+(split a wall where another ends on it — **implemented by PR #97**, product-accepted
+on `82d8348` pending the PR description being brought up to what shipped; awaiting
+that fix and a merge). **#93** (on-screen Remove/Hinge/Swing controls)
 merged 2026-08-02 as PR #95. Closed since: **#84**
 (touch canvas, merged as PR #91), **#85** (tablet chrome, merged as PR #89), **#76**
 (commit typed length/width on click-away), **#33** (SVG export, PR #82), **#61**
@@ -520,7 +554,10 @@ merged 2026-08-02 as PR #95. Closed since: **#84**
 deliberately left out is still unticketed: on-screen **wall-thickness** editing for
 a selection (the `[`/`]` verb — needs a product call on the preset pills first,
 since it's genuinely ambiguous whether the existing preset row should retarget the
-current selection or keep setting the next-wall default).
+current selection or keep setting the next-wall default). A **second** unticketed
+follow-up is now queued and needs no human call: **un-splitting / stub tidying after
+a mid-span split** (see its bullet under "Known gaps") — the next cycle should write
+it as one thin issue.
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -581,6 +618,36 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-03 — Clarify pass on **PR #97** (#96's mid-span split, already accepted on
+  `82d8348` with the verdict *accepted pending non-code fixes*). Nothing
+  product-blocking was left; three things settled. **(1) Repaired #96's spec, this
+  time during clarify rather than waving the deviations through.** Three criteria had
+  drifted from what shipped and would have become the permanent, wrong record: the
+  multi-touch criterion said a host with N touches splits into N segments, but the
+  global "no sub-`MIN_WALL_LENGTH` wall may ever be produced" rule beats that in two
+  cases the code correctly handles (touches closer than `MIN_WALL_LENGTH` weld into
+  one junction; a touch that would shorten the *touching* wall below the minimum is
+  skipped); the near-corner criterion's "leave near-miss corners alone" reads far
+  broader than the 1 cm band it actually protects; and "the new junction is an
+  ordinary junction … should need no new code" was simply false — **the held junction
+  handle must follow the weld**, which is what three rounds of blocking review were
+  about. Amended all three, dated, with the originals' reasoning preserved. **The
+  transferable lesson: connection-point selection is tracked by *coordinate*, so any
+  future feature that moves an endpoint inside `commit()` invalidates a held handle**
+  — invisible (the layer highlights only coordinates an endpoint sits at) yet live
+  (arrow keys route on `selectedConnectionPoint != null`), so the next keypress undoes
+  the thing just created. Per-site patches leaked twice; the fix that held was
+  structural (`commit(next, heldPoint)` returns plan + followed selection). Any issue
+  that moves endpoints should carry this as a criterion up front. **(2) Deferred the
+  PR-body rewrite to the Engineer Agent by name** — it is materially behind the branch
+  (describes 1 of 4 commits, stale counts) and it becomes the squash-merge message, so
+  it still gates the merge; it is just their artifact, not mine. **(3) Declined to
+  widen the near-corner band and declined to file the follow-up from this mode:**
+  recorded the **un-splitting / stub-tidying** gap as its own "Known gaps" bullet, to
+  be ticketed as **one** thin issue next cycle (merging collinear segments when the
+  T-wall is deleted, plus the stub an overshooting endpoint leaves). Widening the weld
+  band remains the separate, still-out-of-scope "welding near-miss corners" feature.
 
 - 2026-08-03 — Triage run on human-submitted idea #96 ("Connect the walls on
   mid-snap"). The submission cited this file's own record of the gap, and it checks
