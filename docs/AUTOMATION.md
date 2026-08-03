@@ -153,6 +153,10 @@ reclaimed.
 
 ## Running it
 
+**Prerequisite:** the run-scripts need **bash ≥ 4.4** (`brew install bash` — macOS's
+stock `/bin/bash` is 3.2, where an empty-args `cycle` run trips an `ORIG_ARGS[@]:
+unbound variable` crash under `set -u`). `#!/usr/bin/env bash` picks up the newer one.
+
 ### Option A — launchd (recommended for "on my Mac")
 
 launchd, **not cron**, is the supported macOS timer. The jobs run as you, reusing

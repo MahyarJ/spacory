@@ -111,12 +111,8 @@ if [ -z "${SPACORY_AGENT_ISOLATED:-}" ]; then
   echo "→ isolating engineer run in worktree ${WORKTREE##*/} (detached at origin/main)" >&2
   # Re-invoke the worktree's OWN copy so REPO_ROOT resolves to it; the guard stops
   # that copy from isolating again (or the dispatcher from double-wrapping).
-  # `${arr[@]+"${arr[@]}"}` guards the empty-array case: under `set -u` on macOS's
-  # stock bash 3.2, expanding an empty `"${ORIG_ARGS[@]}"` is a fatal "unbound
-  # variable" (fixed in bash 4.4). Engineer runs always pass args today, but keep
-  # this robust and identical to run-product.sh, which does hit the empty case.
   set +e
-  SPACORY_AGENT_ISOLATED=1 "$WORKTREE/.agents/run-engineer.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+  SPACORY_AGENT_ISOLATED=1 "$WORKTREE/.agents/run-engineer.sh" "${ORIG_ARGS[@]}"
   rc=$?
   set -e
   exit "$rc"
