@@ -156,6 +156,56 @@ describe("splitWallsAtTouchingEndpoints — segments", () => {
     expect(findConnectedEndpoints(walls, { x: 50, y: 0 })).toHaveLength(3);
     expect(splitWallsAtTouchingEndpoints(walls, [], ids()).walls).toBe(walls);
   });
+
+  it("does not slice a host at offsets measured before its own weld moved it", () => {
+    // "x" is both a toucher (its `a` welds 20cm along itself, into the thick
+    // "w") and a host (for "t", 5cm from that same end). Splitting it at the
+    // pre-weld offset would carve a segment running back over the welded one.
+    const { walls } = split([
+      wall("w", 20, -50, 20, 50, 40),
+      wall("x", 0, 0, 100, 0),
+      wall("t", 5, 0, 5, -60),
+    ]);
+
+    expect(walls).toEqual([
+      wall("w", 20, -50, 20, 0, 40),
+      wall("seg1", 20, 0, 20, 50, 40),
+      // Welded, and left whole: after the weld "t" is 15cm off its span.
+      wall("x", 20, 0, 100, 0),
+      wall("t", 5, 0, 5, -60),
+    ]);
+  });
+
+  it("never leaves a sub-MIN_WALL_LENGTH segment when the host was welded", () => {
+    const { walls } = split([
+      wall("w", 1.8, -50, 1.8, 50),
+      wall("x", 0, 0, 100, 0),
+      wall("t", 2.5, 0, 2.5, -60),
+    ]);
+
+    // Splitting "x" at (2.5,0) after welding its `a` to (1.8,0) would leave a
+    // 0.7cm wall; the touch is dropped once the weld puts it inside the corner.
+    for (const w of walls) expect(getWallLength(w)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("splits a deferred host on the next pass, against its welded geometry", () => {
+    const { walls } = split([
+      wall("w", 20, -50, 20, 50, 40),
+      wall("x", 0, 0, 100, 0),
+      wall("t", 50, 0, 50, -60),
+    ]);
+
+    // "x" welds to (20,0) in the first pass and splits at (50,0) in the second,
+    // so the touch survives the deferral as a real three-wall junction.
+    expect(walls).toEqual([
+      wall("w", 20, -50, 20, 0, 40),
+      wall("seg1", 20, 0, 20, 50, 40),
+      wall("x", 20, 0, 50, 0),
+      wall("seg2", 50, 0, 100, 0),
+      wall("t", 50, 0, 50, -60),
+    ]);
+    expect(findConnectedEndpoints(walls, { x: 50, y: 0 })).toHaveLength(3);
+  });
 });
 
 describe("splitWallsAtTouchingEndpoints — welds", () => {

@@ -40,6 +40,14 @@ it — one undo restores the pre-split walls *and* items. Live drag previews
 bypass `commit()` by design, so nothing splits mid-gesture. `loadPlan` also
 bypasses it, so an imported plan isn't retro-split until the first edit.
 
+**A host that moves in a pass is split in the next one.** Split offsets are
+measured against the host's geometry *before* anything is welded, so a wall that
+is both a toucher and a host would be sliced at stale offsets — producing
+overlapping duplicate segments, or ones under `MIN_WALL_LENGTH`. Such a touch is
+deferred instead: the detect→apply loop re-runs against the settled geometry,
+where the ordinary guards apply and the touch either splits cleanly or turns out
+to be a corner. Deferring costs a pass; slicing stale geometry corrupts the plan.
+
 **Openings follow the reposition-first rule.** Each of the host's openings
 re-attaches to whichever segment holds it with `offset` rebased to that
 segment's `a`; one straddling the split point moves into the segment holding its

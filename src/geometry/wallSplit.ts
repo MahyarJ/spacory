@@ -64,7 +64,8 @@ export function resolveWeldedPoint(welds: PointWeld[], point: Point): Point {
  * split only ever creates endpoints at coordinates that are already shared, so
  * it can't produce new mid-span touches); the loop exists for the rare endpoint
  * that lands inside *two* walls' bodies at once, which can only be welded onto
- * one of them per round.
+ * one of them per round, and for the touches a pass defers because their host
+ * moves (see `applyTouches`).
  */
 const MAX_PASSES = 8;
 
@@ -89,6 +90,11 @@ export function splitWallsAtTouchingEndpoints(
     const touches = detectTouches(result.walls);
     if (touches.length === 0) break;
     const applied = applyTouches(result, touches, nextWallId);
+    // A pass that deferred everything (see `applyTouches`) would only repeat
+    // itself, since the next detect runs on identical geometry.
+    const changed =
+      applied.welds.length > 0 || applied.walls.length > result.walls.length;
+    if (!changed) break;
     result = { ...applied, welds: composeWelds(result.welds, applied.welds) };
   }
   return result;
@@ -189,6 +195,22 @@ function applyTouches(
     );
   }
 
+  // A host's split points were measured against its *pre-weld* geometry, so a
+  // host that itself moves this pass would be sliced at stale offsets —
+  // leaving overlapping duplicate segments, or ones under `MIN_WALL_LENGTH`.
+  // Defer the whole touch (its weld too, since that weld targets a centreline
+  // about to move): the next pass re-detects it against settled geometry.
+  for (const wall of walls) {
+    const moves = ENDS.some((end) => {
+      const to = weldByEndpoint.get(`${wall.id}:${end}`);
+      return to !== undefined && !pointsEqual(wall[end], to);
+    });
+    if (!moves || !splitsByHost.delete(wall.id)) continue;
+    for (const t of byHost.get(wall.id) ?? []) {
+      weldByEndpoint.delete(endpointKey(t.toucher));
+    }
+  }
+
   const nextWalls: Wall[] = [];
   /** Host id → the segments that replaced it, so its items can be rebased. */
   const segmentsByHost = new Map<string, Wall[]>();
@@ -200,7 +222,9 @@ function applyTouches(
   };
   for (const wall of walls) {
     // Weld first: a wall can be both a toucher and a host in the same pass, and
-    // its segments must start/end at its welded endpoints.
+    // its segments must start/end at its welded endpoints. Only a weld that
+    // leaves the wall put survives the deferral above, so the slice below
+    // always runs on settled geometry.
     const weldedA = weldByEndpoint.get(`${wall.id}:a`);
     const weldedB = weldByEndpoint.get(`${wall.id}:b`);
     if (weldedA) noteWeld(wall.a, weldedA);
