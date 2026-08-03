@@ -583,6 +583,33 @@ describe("mid-span wall splitting on commit", () => {
     ]);
   });
 
+  it("never leaves two coincident walls after a single draw", () => {
+    // Regression: the drawn end welds onto "v1" and splits it — a real T. But
+    // that weld left the drawn wall slanted, so "v1"'s upper segment's own `b`
+    // then sat inside the drawn wall's body and welded too, leaving the same
+    // ~20cm span as two walls: two length labels, and deleting the one you can
+    // see leaves its twin behind. Walls already sharing a junction are joined,
+    // so a further touch between them is an overlap, not a new T.
+    useApp.getState().loadPlan(planWith([wall("v1", 0, 0, 0, 200, 40)]));
+
+    useApp.getState().addWall(wall("drawn", 8, 300, 8, 180));
+
+    const walls = useApp.getState().plan.walls;
+    const spans = walls.map((w) =>
+      [w.a.x, w.a.y, w.b.x, w.b.y]
+        .map((n) => n.toFixed(3))
+        .sort()
+        .join(),
+    );
+    expect(new Set(spans).size).toBe(spans.length);
+    // The genuine T survives: "v1" split at (0,180) with its top 20cm intact.
+    expect(walls).toHaveLength(3);
+    expect(walls.find((w) => w.id === "v1")).toEqual(
+      wall("v1", 0, 0, 0, 180, 40),
+    );
+    expect(findConnectedEndpoints(walls, { x: 0, y: 180 })).toHaveLength(3);
+  });
+
   it("does not split mid-gesture — only when the drag is committed", () => {
     // A live drag preview bypasses commit(), so dragging a wall's end onto
     // another wall's span leaves the host whole until the gesture is released.

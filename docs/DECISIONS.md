@@ -42,6 +42,25 @@ family this module leaves alone. Both touches are skipped and the host stays
 whole. A wall whose two ends land on two *different* hosts is an ordinary pair of
 T-junctions and still splits both.
 
+**Two walls that already meet don't touch each other again.** Once a pair shares
+an endpoint coordinate they are joined, so a further touch between that same pair
+is the two lying over each other rather than a new T. Welding it produces a
+*second* wall spanning the junctions they already share: the user sees one wall
+but has two, with two length labels, and deleting the one they can see leaves its
+twin. This is reachable from an ordinary draw, because a genuine T can create the
+pair — welding a slanted endpoint onto a host leaves the host's own far endpoint
+sitting inside the drawn wall's body. Touches between already-joined walls are
+therefore skipped, which keeps the T that joined them.
+
+**A mutual touch is one overlap, not two Ts.** When each of two walls ends inside
+the *other*'s body, welding either one drags the centreline the other was
+measured against, so the pair settles as two coincident walls — and which wall
+gets mangled is array order. Neither side has a claim to the span: this is the
+same overlap family as both-ends-in-one-host, so both touches are dropped and
+both walls stay whole. They then look joined without being so, which is the
+pre-feature status quo rather than a plan the user cannot repair. Doing something
+better with genuine overlaps is a separate feature.
+
 **Why in `commit()`.** It is the single chokepoint every plan edit passes
 through, so draw, move, endpoint drag and type-to-resize are covered at one call
 site, and the split rides inside the same history entry as the edit that caused

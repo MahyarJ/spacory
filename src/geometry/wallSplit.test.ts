@@ -105,6 +105,62 @@ describe("splitWallsAtTouchingEndpoints — detection", () => {
     expect(split(walls).walls).toBe(walls);
   });
 
+  it("leaves a wall that runs from a shared corner back onto the host alone", () => {
+    // "spur" starts at the host's own `a` and ends 3cm off its centreline
+    // further along. Welding that end would leave "spur" spanning (0,0)→(150,0)
+    // — a duplicate of the host segment between the very same junctions.
+    const walls = [wall("host", 0, 0, 300, 0), wall("spur", 0, 0, 150, 3)];
+    expect(split(walls).walls).toBe(walls);
+  });
+
+  it("still splits a third wall a toucher shares no junction with", () => {
+    // The rule is about the pair that already meets: "t" shares a corner with
+    // "corner" but ends mid-span of "host", which is an ordinary T.
+    const { walls } = split([
+      wall("host", 0, 0, 100, 0),
+      wall("corner", 0, 80, 50, 80),
+      wall("t", 50, 80, 50, 3),
+    ]);
+
+    expect(walls.find((w) => w.id === "t")).toEqual(wall("t", 50, 80, 50, 0));
+    expect(findConnectedEndpoints(walls, { x: 50, y: 0 })).toHaveLength(3);
+  });
+
+  it("leaves both walls whole when each one ends inside the other's body", () => {
+    // Two walls 3cm apart, each overlapping the other's last 80cm: "y"'s `a`
+    // sits in "x"'s body and "x"'s `b` sits in "y"'s. A mutual touch is one
+    // overlap seen from both sides, not a pair of Ts — welding either drags the
+    // centreline the other was measured against.
+    const walls = [wall("x", 0, 0, 100, 0), wall("y", 20, 3, 120, 3)];
+    expect(split(walls).walls).toBe(walls);
+  });
+
+  it("leaves both whole regardless of which of the pair comes first", () => {
+    // Which wall of a mutual touch got mangled used to be array order.
+    const walls = [wall("y", 20, 3, 120, 3), wall("x", 0, 0, 100, 0)];
+    expect(split(walls).walls).toBe(walls);
+  });
+
+  it("never produces two walls spanning the same pair of junctions", () => {
+    // The reported plan: "w3" ends inside "w2"'s 40cm body, which splits it —
+    // and that weld used to leave the pair touching a second time, welding
+    // again into two coincident walls between the same junctions.
+    const { walls } = split([
+      wall("w2", 142.4, 59.9, 127.1, 191.6, 40),
+      wall("w3", 121.1, 285.9, 119.3, 164.5),
+    ]);
+
+    const spans = walls.map((w) =>
+      [w.a.x, w.a.y, w.b.x, w.b.y]
+        .map((n) => n.toFixed(3))
+        .sort()
+        .join(),
+    );
+    expect(new Set(spans).size).toBe(spans.length);
+    // What's left is the one genuine T the first touch made.
+    expect(walls).toHaveLength(3);
+  });
+
   it("still splits both hosts when each end lands on a different one", () => {
     // The rule is "both ends on the *same* host"; a wall spanning between two
     // walls is an ordinary pair of T-junctions.

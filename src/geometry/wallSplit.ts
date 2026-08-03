@@ -71,6 +71,10 @@ const MAX_PASSES = 8;
 
 const endpointKey = (ref: WallEndpointRef) => `${ref.wallId}:${ref.end}`;
 
+/** Do these two walls already meet at a shared endpoint coordinate? */
+const shareAJunction = (w: Wall, other: Wall) =>
+  ENDS.some((end) => ENDS.some((o) => pointsEqual(w[end], other[o])));
+
 /**
  * Split every wall that another wall's endpoint ends on, welding the touching
  * endpoint exactly onto the split point, and re-attach the host's openings to
@@ -134,6 +138,10 @@ function detectTouches(walls: Wall[]): Touch[] {
       let best: Touch | null = null;
       for (const host of walls) {
         if (host.id === w.id) continue;
+        // Already joined at a corner: a further touch between the same pair is
+        // the two lying over each other, not a new T. Welding it would leave a
+        // second wall spanning the junctions they already share.
+        if (shareAJunction(w, host)) continue;
         const { distance, offset, proj } = projectPointToWall(w[end], host);
         if (distance > host.thickness / 2) continue;
         const hostLength = getWallLength(host);
@@ -164,7 +172,20 @@ function detectTouches(walls: Wall[]): Touch[] {
     if (ends.length === 2 && ends[0].hostId === ends[1].hostId) continue;
     touches.push(...ends);
   }
-  return touches;
+  // A *mutual* touch — each of two walls ending inside the other's body — is
+  // the same overlap family seen from both sides, not a pair of Ts. Applying it
+  // welds one wall onto the other's centreline, which moves the host the second
+  // touch was measured against; the pair settles as two coincident walls
+  // between the same junctions, one of which the user cannot see or delete.
+  // Neither side has a claim to the span, so drop both touches and leave both
+  // walls whole — they look joined without being so, which is what they did
+  // before this module existed.
+  return touches.filter(
+    (t) =>
+      !touches.some(
+        (o) => o.hostId === t.toucher.wallId && o.toucher.wallId === t.hostId,
+      ),
+  );
 }
 
 function applyTouches(
