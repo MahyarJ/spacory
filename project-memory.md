@@ -307,7 +307,7 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   out-of-scopes, each a plausible follow-up: **X crossings** where neither wall ends
   on the other, **welding near-miss corners**, **un-splitting** when the touching
   wall is later deleted (the host stays two segments), **retro-splitting imported
-  plans** (`loadDocument` builds history via `createHistory`, not `commit()`), and a
+  plans** (`loadPlan` builds history via `createHistory`, not `commit()`), and a
   **snap preview/indicator while drawing**. Note this is the prerequisite for rooms /
   enclosed areas. Did not add `agent:ready` (a human promotes it).
   **Delivered by PR #97** (accepted 2026-08-03 on `82d8348`, verdict *accepted pending
@@ -686,7 +686,7 @@ Newest first (reverse-chronological). Add each new entry at the **top** of this 
   commits. Explicit out-of-scopes, each a plausible follow-up: X crossings, welding
   near-miss corners, **un-splitting** when the touching wall is later deleted (the
   host stays two segments — classic CAD behaviour and acceptable), retro-splitting
-  imported plans (`loadDocument` uses `createHistory`, not `commit()`), and a snap
+  imported plans (`loadPlan` uses `createHistory`, not `commit()`), and a snap
   preview while drawing. Also recorded a **sequencing dependency**: #96 is a
   prerequisite for rooms / enclosed areas, since without it the walls don't form a
   connected graph. Corrected stale state found while reading: **#93 merged as PR
