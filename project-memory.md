@@ -144,7 +144,18 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   `exportSvg.ts` draws arc + open-leaf line + hinge dot out to `tipOpen`, which sits
   `length` away *perpendicular* to the wall, while `getPlanBounds` pads openings by
   `item.thickness / 2`; the window's rect and midline look already covered, so #99 asks
-  for a test pinning that rather than a change.
+  for a test pinning that rather than a change. **Tips-only shortcut rejected (clarify
+  on PR #101, 2026-08-04, at the human's prompting):** bounding the arc by its two leaf
+  tips alone is correct *only* on an axis-aligned wall — on a 45° wall the quarter
+  circle bulges ~5.9 cm past the chord between the tips (tips at `y ≈ 28.28`, arc down
+  to `y ≈ 22.43`), and `maxX = 74.14` is set by the arc and by neither tip, so a
+  tips-only box re-introduces exactly this clipping on angled walls. Both cases are
+  pinned in `itemGeometry.test.ts` / `bounds.test.ts`. The implementation does *not*
+  sample the arc: it contributes ≤5 points per door (hinge, two tips, and the ≤2 of the
+  four `hinge ± radius` axis extremes inside the swept quadrant) chosen by four dot
+  products, and `getPlanBounds` runs only on Fit and export, not per frame — so the
+  cost concern behind the shortcut doesn't hold. If a real cost ever shows up, make the
+  same exact box cheaper; don't go back to a box that clips.
 - **Export formats grouped under one Export menu — done (#66, merged as PR #69).**
   `ProjectActions.tsx` renders Import (JSON) as its own button plus a `Menu`
   (`src/ui/Menu.tsx`) labelled **Export** whose `items` are `json` and `png`.
@@ -704,6 +715,24 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-08-04 — Clarify pass on **PR #101** (#99's door-arc bounds), on a **human
+  question** after the PR had already been accepted and approved: could the box be built
+  from the leaf **tips only**, skipping "all the points on the arc," which might get
+  expensive with many doors? Answered **no — keep the current behaviour, no spec change**.
+  The scenario the human asked for is any **non-axis-aligned wall**: on a 45° wall the
+  quarter circle bulges ~5.9 cm past the chord between its tips, and one box side is set
+  by the arc's own `hinge ± radius` extreme and by neither tip — both already pinned in
+  the PR's tests. Tips-only is right *only* when the wall runs along x or y, which is why
+  the axis-aligned tests pass either way and hid the original bug. Also corrected the
+  premise behind the cost worry: nothing samples the arc — it's ≤5 points per door (hinge,
+  two tips, ≤2 in-quadrant axis extremes) chosen by four dot products, and `getPlanBounds`
+  runs only on **Fit** and **export** (`store.ts:317`, `exportSvg.ts:43`), not per frame.
+  Profiling deferred to the Engineer Agent with the standing rule: if a real cost appears,
+  make the same *exact* box cheaper rather than reverting to a box that clips. The
+  reusable judgement: **when a proposed simplification is correct only in the special case
+  the existing tests happen to cover, it isn't a simplification — it's the bug wearing the
+  passing suite as a disguise.** Recorded the rejection in the #99 Known-gaps entry so the
+  shortcut doesn't get re-proposed.
 - 2026-08-04 — Fourth clarify pass on **PR #97**, this one on a **human question** rather
   than an agent's: after the split, detaching the junction (dragging the T-wall's endpoint
   off the host) leaves the host still split, so a junction persists with nothing left to
