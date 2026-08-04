@@ -1,4 +1,6 @@
 import type { DoorItem, Plan, Wall } from "@app/schema";
+import { findConnectedEndpoints } from "@geometry/connectivity";
+import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "./store";
 
@@ -25,8 +27,9 @@ function wall(
   ay: number,
   bx: number,
   by: number,
+  thickness = 10,
 ): Wall {
-  return { id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness: 10 };
+  return { id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness };
 }
 
 function planWith(walls: Wall[], items: Plan["items"] = []): Plan {
@@ -496,5 +499,338 @@ describe("connection-point drag snapping onto unrelated junctions", () => {
     const walls = useApp.getState().plan.walls;
     expect(walls.find((w) => w.id === "w1")?.b).toEqual({ x: 100, y: 100 });
     expect(walls.find((w) => w.id === "w2")?.a).toEqual({ x: 100, y: 100 });
+  });
+});
+
+describe("mid-span wall splitting on commit", () => {
+  it("splits the host and welds the endpoint when a wall is drawn onto its span", () => {
+    // The headline case: an existing wall along y=0, then a new wall drawn down
+    // from a point 3cm off its centreline (inside its 10cm-thick body).
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+
+    useApp.getState().addWall(wall("t", 100, 3, 100, 80));
+
+    const walls = useApp.getState().plan.walls;
+    // The host is split in two at the touch point, keeping its id for the first.
+    expect(walls).toHaveLength(3);
+    expect(walls.find((w) => w.id === "host")).toEqual(
+      wall("host", 0, 0, 100, 0),
+    );
+    // The drawn wall's endpoint is welded exactly onto the projection, so all
+    // three ends now share one coordinate — an ordinary junction.
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 100, y: 0 });
+    expect(findConnectedEndpoints(walls, { x: 100, y: 0 })).toHaveLength(3);
+  });
+
+  it("moves all three walls together when the new junction is dragged", () => {
+    // Proves the split produces a junction the *existing* features act on: no
+    // new code path drags a T-junction, it works off the shared coordinate.
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "host")?.b).toEqual({ x: 100, y: 20 });
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 100, y: 20 });
+    const second = walls.find((w) => w.id !== "host" && w.id !== "t");
+    expect(second?.a).toEqual({ x: 100, y: 20 });
+    expect(second?.b).toEqual({ x: 200, y: 0 });
+  });
+
+  it("restores the unsplit host in a single undo", () => {
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+    expect(useApp.getState().plan.walls).toHaveLength(3);
+
+    useApp.getState().undo();
+
+    expect(useApp.getState().plan.walls).toEqual([wall("host", 0, 0, 200, 0)]);
+  });
+
+  it("re-attaches the host's opening to the segment that holds it", () => {
+    const door: DoorItem = {
+      id: "d1",
+      type: "door",
+      thickness: 10,
+      wallAttach: { wallId: "host", offset: 140, length: 20 },
+      props: { hingeEdge: "start", swingSide: "outside" },
+    };
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)], [door]));
+
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+
+    const [item] = useApp.getState().plan.items;
+    const second = useApp
+      .getState()
+      .plan.walls.find((w) => w.id !== "host" && w.id !== "t");
+    expect(item.wallAttach.wallId).toBe(second?.id);
+    expect(item.wallAttach.offset).toBe(40);
+    expect(item.wallAttach.length).toBe(20);
+  });
+
+  it("keeps a wall drawn across a thick host, rather than collapsing it", () => {
+    // Regression: both ends of the stub sit inside the 40cm-thick host's body
+    // and project to the same point, so welding both committed a zero-length
+    // wall — the wall the user had just drawn simply vanished.
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 300, 0, 40)]));
+
+    useApp.getState().addWall(wall("stub", 150, -15, 150, 15));
+
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 300, 0, 40),
+      wall("stub", 150, -15, 150, 15),
+    ]);
+  });
+
+  it("never leaves two coincident walls after a single draw", () => {
+    // Regression: the drawn end welds onto "v1" and splits it — a real T. But
+    // that weld left the drawn wall slanted, so "v1"'s upper segment's own `b`
+    // then sat inside the drawn wall's body and welded too, leaving the same
+    // ~20cm span as two walls: two length labels, and deleting the one you can
+    // see leaves its twin behind. Walls already sharing a junction are joined,
+    // so a further touch between them is an overlap, not a new T.
+    useApp.getState().loadPlan(planWith([wall("v1", 0, 0, 0, 200, 40)]));
+
+    useApp.getState().addWall(wall("drawn", 8, 300, 8, 180));
+
+    const walls = useApp.getState().plan.walls;
+    const spans = walls.map((w) =>
+      [w.a.x, w.a.y, w.b.x, w.b.y]
+        .map((n) => n.toFixed(3))
+        .sort()
+        .join(),
+    );
+    expect(new Set(spans).size).toBe(spans.length);
+    // The genuine T survives: "v1" split at (0,180) with its top 20cm intact.
+    expect(walls).toHaveLength(3);
+    expect(walls.find((w) => w.id === "v1")).toEqual(
+      wall("v1", 0, 0, 0, 180, 40),
+    );
+    expect(findConnectedEndpoints(walls, { x: 0, y: 180 })).toHaveLength(3);
+  });
+
+  it("does not take apart a corner the user drew when a later wall welds", () => {
+    // Draw a wall, a second from its corner, a third from that second's far
+    // end. The third's start sits inside the first's 40cm body, so it welds
+    // onto its centreline — and the corner the user drew it *from* used to be
+    // left behind, because only the end detected as touching moved. Joining one
+    // wall silently disconnected another, which is the drift #96 exists to stop.
+    useApp.getState().loadPlan(planWith([]));
+    useApp.getState().addWall(wall("w0", 280, 40, 280, 300, 40));
+    useApp.getState().addWall(wall("w1", 280, 40, 300, 280, 20));
+    useApp.getState().addWall(wall("w2", 300, 280, 60, 120, 7));
+
+    const walls = useApp.getState().plan.walls;
+    const w1 = walls.find((w) => w.id === "w1");
+    const w2 = walls.find((w) => w.id === "w2");
+    // Wherever the split leaves them, the two ends drawn on one coordinate are
+    // still on one coordinate — the junction has as many members as before.
+    expect(w1?.b).toEqual(w2?.a);
+    expect(findConnectedEndpoints(walls, w2?.a ?? { x: 0, y: 0 }).length).toBe(
+      2,
+    );
+  });
+
+  it("does not split mid-gesture — only when the drag is committed", () => {
+    // A live drag preview bypasses commit(), so dragging a wall's end onto
+    // another wall's span leaves the host whole until the gesture is released.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("host", 0, 0, 200, 0), wall("t", 100, 60, 100, 140)]),
+      );
+    useApp.getState().beginLiveDrag();
+
+    useApp
+      .getState()
+      .moveWallEndpointLive({ wallId: "t", end: "a" }, { x: 100, y: 0 });
+    expect(useApp.getState().plan.walls).toHaveLength(2);
+
+    useApp.getState().commitPlan();
+    expect(useApp.getState().plan.walls).toHaveLength(3);
+  });
+
+  it("keeps the split host selected, as its first segment", () => {
+    loadWithSelection([wall("host", 0, 0, 200, 0)], ["host"]);
+
+    useApp.getState().addWall(wall("t", 100, 0, 100, 80));
+
+    expect(useApp.getState().selectedWalls.has("host")).toBe(true);
+    expect(useApp.getState().plan.walls.find((w) => w.id === "host")).toEqual(
+      wall("host", 0, 0, 100, 0),
+    );
+  });
+
+  it("keeps the dragged junction selected on the split point after the drop", () => {
+    // Regression: the split welds the dropped endpoint onto the host's
+    // centreline, so the coordinate the selection was tracking no longer
+    // exists. Left unfollowed, the handle stays selected at (100, 3) with an
+    // empty endpoint set — visibly selected but dead, moving nothing.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("host", 0, 0, 200, 0), wall("t", 100, 60, 100, 140)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 60 });
+    useApp.getState().beginLiveDrag();
+    useApp.getState().translateSelectedConnectionPointLive(0, -57);
+    useApp.getState().commitPlan();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(3);
+
+    // …and the handle still works: the next nudge moves the whole junction.
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "host")?.b).toEqual({ x: 100, y: 20 });
+    expect(walls.find((w) => w.id === "t")?.a).toEqual({ x: 100, y: 20 });
+    expect(walls.find((w) => w.id !== "host" && w.id !== "t")?.a).toEqual({
+      x: 100,
+      y: 20,
+    });
+  });
+
+  it("keeps the junction selected on the split point after a keyboard nudge", () => {
+    // Same desync via the arrow-key path, which re-derives the selection from
+    // the nudged coordinate rather than the committed one.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("host", 0, 0, 200, 0), wall("t", 100, 60, 100, 140)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 60 });
+
+    useApp.getState().translateSelectedConnectionPoint(0, -57);
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(3);
+  });
+
+  it("follows the weld when a drawn wall welds the selected junction onto it", () => {
+    // Regression: `addWall` discarded commit()'s welds, so drawing a wall past a
+    // selected junction left the selection at its pre-weld coordinate — an
+    // invisible handle (no endpoint sits there any more) that arrow keys still
+    // move, un-welding the junction the draw had just created.
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([wall("w1", 0, 0, 100, 0), wall("w2", 100, 0, 100, 100)]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+
+    useApp.getState().addWall(wall("drawn", 0, 3, 300, 3));
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 3 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(4);
+
+    // …and the handle still works: the next nudge moves the whole junction
+    // rather than pulling two of its walls back off the split point.
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const at = { x: 100, y: 23 };
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "w1")?.b).toEqual(at);
+    expect(walls.find((w) => w.id === "w2")?.a).toEqual(at);
+    expect(walls.find((w) => w.id === "drawn")?.b).toEqual(at);
+    expect(walls.find((w) => !["w1", "w2", "drawn"].includes(w.id))?.a).toEqual(
+      at,
+    );
+  });
+
+  /**
+   * A plan whose walls already touch mid-span without sharing a coordinate —
+   * the state `loadPlan` leaves (imported plans are deliberately not
+   * retro-split) and the state an undo restores — with the touch point
+   * selected. The next commit, whatever causes it, splits and welds.
+   */
+  function loadLatentTouchWithJunctionSelected() {
+    useApp
+      .getState()
+      .loadPlan(
+        planWith([
+          wall("host", 0, 0, 200, 0),
+          wall("t", 100, 3, 100, 100),
+          wall("u", 100, 3, 180, 60),
+        ]),
+      );
+    useApp.getState().selectConnectionPoint({ x: 100, y: 3 });
+  }
+
+  it("follows the weld when a door toggle commits with a junction selected", () => {
+    // Regression: the door hinge/swing toggles have no early return — they are
+    // bound to bare `h`/`s` and commit even with nothing selected — so they
+    // could commit a split while a connection point was held and leave the
+    // selection at its pre-weld coordinate: an invisible handle that the next
+    // arrow key still moves, un-welding the junction just created.
+    loadLatentTouchWithJunctionSelected();
+
+    useApp.getState().toggleSelectedDoorSwingSide();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(4);
+
+    // …and the handle still works: the next nudge moves the whole junction.
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const at = { x: 100, y: 20 };
+    const walls = useApp.getState().plan.walls;
+    expect(walls.find((w) => w.id === "host")?.b).toEqual(at);
+    expect(walls.find((w) => w.id === "t")?.a).toEqual(at);
+    expect(walls.find((w) => w.id === "u")?.a).toEqual(at);
+    expect(walls.find((w) => !["host", "t", "u"].includes(w.id))?.a).toEqual(
+      at,
+    );
+  });
+
+  it("follows the weld on the hinge toggle too", () => {
+    // Same ungated path as the swing toggle above.
+    loadLatentTouchWithJunctionSelected();
+
+    useApp.getState().toggleSelectedDoorHingeEdge();
+
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x: 100, y: 0 });
+    expect(useApp.getState().selectedConnectionPointEndpoints).toHaveLength(4);
+  });
+
+  it("does not re-split across successive commits", () => {
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 200, 0)]));
+    useApp.getState().addWall(wall("t", 100, 3, 100, 80));
+    const afterSplit = useApp.getState().plan.walls;
+
+    useApp.getState().addWall(wall("far", 500, 500, 600, 500));
+
+    expect(useApp.getState().plan.walls.slice(0, 3)).toEqual(afterSplit);
+  });
+
+  it("settles a thick-wall plan instead of grinding it on every commit", () => {
+    // Regression: at the 40cm preset the detection band is 20cm, wide enough to
+    // swallow a coordinate that is already a junction. Welding it dragged the
+    // walls meeting there onto the new host's centreline, which created fresh
+    // touches, and the pass was applied anyway — three grid-snapped draws
+    // committed as 27 walls, and every later commit roughly doubled that.
+    useApp.getState().loadPlan(planWith([]));
+    useApp.getState().addWall(wall("a", 140, 120, 260, 120, 40));
+    useApp.getState().addWall(wall("b", 200, 120, 160, 260, 40));
+    expect(useApp.getState().plan.walls).toHaveLength(3); // the genuine T
+
+    useApp.getState().addWall(wall("c", 220, 40, 180, 100, 40));
+
+    // "c" can't join without dragging the a/b junction off itself, so it is
+    // left looking joined without being so — the same fallback the overlap
+    // guards take. What it must not do is mangle the walls around it: "a" was
+    // drawn horizontal and stays horizontal, split only at the real junction.
+    const walls = useApp.getState().plan.walls;
+    expect(walls).toHaveLength(4);
+    expect(walls.find((w) => w.id === "a")).toEqual(
+      wall("a", 140, 120, 200, 120, 40),
+    );
+    expect(walls.find((w) => w.id === "c")).toEqual(
+      wall("c", 220, 40, 180, 100, 40),
+    );
+    expect(walls.every((w) => getWallLength(w) >= MIN_WALL_LENGTH)).toBe(true);
+
+    // …and it has settled: further commits leave the plan where it is.
+    useApp.getState().addWall(wall("far", 900, 900, 1000, 900, 40));
+    expect(useApp.getState().plan.walls.slice(0, 4)).toEqual(walls);
   });
 });

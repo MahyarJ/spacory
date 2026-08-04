@@ -86,8 +86,9 @@ export interface WallGeometry {
  * shared (a free end, or a straight continuation where edges are parallel)
  * falls back to a square perpendicular cap.
  *
- * Only shared *endpoints* form junctions (matching the previous behaviour); a
- * wall ending mid-span of another is not auto-split.
+ * Only shared *endpoints* form junctions. A wall ending mid-span of another is
+ * turned into one upstream, by splitting the host at that point (see
+ * `wallSplit.ts`), so nothing here needs to know about it.
  */
 export function computeWallGeometry(walls: Wall[]): WallGeometry {
   // 1) Group every wall end by the node it sits on.

@@ -15,8 +15,13 @@ import {
   MIN_WALL_LENGTH,
   resizeWallToLength,
 } from "@geometry/wall";
+import {
+  resolveWeldedPoint,
+  splitWallsAtTouchingEndpoints,
+} from "@geometry/wallSplit";
 import { create } from "zustand";
 import { throttle } from "../util/throttle";
+import { uid } from "../util/uid";
 import {
   commit as commitHistory,
   createHistory,
@@ -171,16 +176,58 @@ function persist() {
   savePersistedHistory(history);
 }
 
-function commit(next: Plan) {
+/**
+ * Commit `next` as one history entry and return the state patch every action
+ * that edits the plan applies: the committed plan, plus the held connection
+ * point re-pointed at wherever the split welded it and its membership
+ * re-derived from the committed walls.
+ *
+ * `heldPoint` is the coordinate the caller is tracking — normally
+ * `selectedConnectionPoint`, except the nudge path, which passes its
+ * post-nudge coordinate. Commit and selection are one step on purpose: the
+ * split can pull a selected junction onto a host wall's centreline, and a
+ * selection left behind at the pre-weld coordinate is *invisible but still
+ * live* — `ConnectionPointsLayer` only highlights a handle a wall endpoint
+ * actually sits at, while an arrow key still routes to the nudge — so the next
+ * keypress moves walls the user can't see selected. Committing through a
+ * separate step let three actions forget in turn; with one function a new
+ * action can't.
+ */
+function commit(
+  next: Plan,
+  heldPoint: Point | null,
+): Pick<
+  AppState,
+  "plan" | "selectedConnectionPoint" | "selectedConnectionPointEndpoints"
+> {
+  // Split any wall another wall's endpoint now ends on, so a mid-span T becomes
+  // a real shared-coordinate junction (see wallSplit.ts). Done here, before the
+  // item reconcile below, so every edit path — draw, move, endpoint drag,
+  // type-to-resize — is covered from one place and the split rides inside the
+  // same history entry as the edit that caused it (a single undo restores both).
+  // Live drag previews deliberately bypass commit(), so nothing splits
+  // mid-gesture; the split lands when the gesture is released.
+  const split = splitWallsAtTouchingEndpoints(next.walls, next.items, () =>
+    uid("wall"),
+  );
   // Reconcile door/window openings against their wall's current length here so
   // every wall-resize path (type-to-length, connection-point drag, auto-follow)
   // is covered without touching each call site individually.
   const reconciled: Plan = {
     ...next,
-    items: reconcileItemsToWalls(next.walls, next.items),
+    walls: split.walls,
+    items: reconcileItemsToWalls(split.walls, split.items),
   };
   history = commitHistory(history, reconciled);
   persist();
+  const moved = heldPoint ? resolveWeldedPoint(split.welds, heldPoint) : null;
+  return {
+    plan: history.present,
+    selectedConnectionPoint: moved,
+    selectedConnectionPointEndpoints: moved
+      ? findConnectedEndpoints(history.present.walls, moved)
+      : [],
+  };
 }
 
 // Throttle viewport autosave so continuous wheel/drag stays smooth while still
@@ -239,8 +286,11 @@ export const useApp = create<AppState>((set, get) => ({
       walls: [...get().plan.walls, w],
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    // A drawn wall passing within `thickness / 2` of a selected junction welds
+    // that junction onto the new wall's centreline, so the selection has to
+    // follow it. Neither switching to the wall tool nor drawing clears a
+    // connection-point selection, so this is reachable.
+    set(commit(next, get().selectedConnectionPoint));
   },
   addItem: (i) => {
     const next: Plan = {
@@ -248,8 +298,7 @@ export const useApp = create<AppState>((set, get) => ({
       items: [...get().plan.items, i],
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   setView: (fn) =>
     set(({ view }) => {
@@ -319,9 +368,8 @@ export const useApp = create<AppState>((set, get) => ({
       items: plan.items.filter((i) => !selectedItems.has(i.id)),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
     set({
-      plan: history.present,
+      ...commit(next, get().selectedConnectionPoint),
       selectedWalls: new Set(),
       selectedItems: new Set(),
     });
@@ -341,8 +389,7 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   setSelectedWallLength: (length) => {
     const { selectedWalls, plan } = get();
@@ -363,8 +410,7 @@ export const useApp = create<AppState>((set, get) => ({
       walls: translateEndpointsAt(resizedWalls, wall.b, dx, dy),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   setSelectedOpeningWidth: (width) => {
     const { selectedItems, plan } = get();
@@ -394,8 +440,7 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   toggleSelectedDoorHingeEdge: () => {
     const { plan, selectedItems } = get();
@@ -416,8 +461,7 @@ export const useApp = create<AppState>((set, get) => ({
       }),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   toggleSelectedDoorSwingSide: () => {
     const { plan, selectedItems } = get();
@@ -438,8 +482,7 @@ export const useApp = create<AppState>((set, get) => ({
       }),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   themeMode: initialTheme,
   setThemeMode: (m) => {
@@ -502,8 +545,7 @@ export const useApp = create<AppState>((set, get) => ({
       walls: translateSelectedWallsFollowing(plan.walls, selectedWalls, dx, dy),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
-    set({ plan: history.present });
+    set(commit(next, get().selectedConnectionPoint));
   },
   translateSelectedWallsLive: (dx, dy) => {
     const { plan, selectedWalls, liveDragItems } = get();
@@ -539,23 +581,17 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
     // The nudge may have landed the point on another junction's coordinate,
-    // welding them (see commitPlan below) — re-derive membership from the
-    // just-committed plan so a following nudge moves the whole welded
-    // junction instead of silently un-welding it.
-    const movedPoint = {
-      x: selectedConnectionPoint.x + dx,
-      y: selectedConnectionPoint.y + dy,
-    };
-    set({
-      plan: history.present,
-      selectedConnectionPoint: movedPoint,
-      selectedConnectionPointEndpoints: findConnectedEndpoints(
-        history.present.walls,
-        movedPoint,
-      ),
-    });
+    // welding them — commit() re-derives membership from the just-committed
+    // plan, so a following nudge moves the whole welded junction instead of
+    // silently un-welding it. It tracks the nudged coordinate, not the
+    // pre-nudge one.
+    set(
+      commit(next, {
+        x: selectedConnectionPoint.x + dx,
+        y: selectedConnectionPoint.y + dy,
+      }),
+    );
   },
   translateSelectedConnectionPointLive: (dx, dy) => {
     const {
@@ -647,20 +683,16 @@ export const useApp = create<AppState>((set, get) => ({
       ...get().plan,
       meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
     };
-    commit(next);
     // The gesture is over: the reconciled live items are now committed, so drop
     // the pre-drag snapshot before the next gesture captures a fresh one.
     // If a connection point is still selected (e.g. the drop welded it onto
-    // another junction), re-derive its membership from the just-committed
-    // plan — otherwise a subsequent nudge would keep moving only the
-    // grab-time set and silently un-weld the junction just created.
+    // another junction), commit() re-derives its membership from the
+    // just-committed plan — otherwise a subsequent nudge would keep moving only
+    // the grab-time set and silently un-weld the junction just created.
     set({
-      plan: history.present,
+      ...commit(next, selectedConnectionPoint),
       liveDragItems: null,
       liveDragConnectionPoint: null,
-      selectedConnectionPointEndpoints: selectedConnectionPoint
-        ? findConnectedEndpoints(history.present.walls, selectedConnectionPoint)
-        : [],
     });
   },
 }));

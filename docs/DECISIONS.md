@@ -5,6 +5,123 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## A mid-span T-junction is made by splitting the host, not by a new relation
+
+**Decision.** When a wall's endpoint lands inside another wall's drawn body
+(perpendicular distance ≤ `host.thickness / 2`), `commit()` splits the host at
+the projected point and welds the touching endpoint exactly onto it
+(`src/geometry/wallSplit.ts`). The host keeps its id for the first segment; each
+further segment gets a fresh one, and every segment inherits the host's
+thickness.
+
+**Why split rather than model the relation.** Connectivity is *coordinate
+equality between endpoints* (`connectivity.ts`) and nothing else — mitering,
+auto-follow, junction drag and endpoint detach all derive from it. Splitting
+produces the shared coordinate those features already react to, so a mid-span T
+becomes an ordinary three-endpoint junction with no new code and no new concept
+in the schema. A persistent "these walls are joined" relation would contradict
+the settled model and need every downstream feature taught about it.
+
+**Why `thickness / 2` is the tolerance.** It is the rule a user can see: if the
+endpoint is inside the wall you drew, it looks like it touches, so it connects.
+A fixed cm tolerance would either miss thick walls or fire on thin ones that
+visibly don't meet.
+
+**A weld moves the coordinate, not one endpoint.** Several wall ends can sit on
+one coordinate — that is what a junction is — so moving only the end that was
+detected as touching leaves its neighbours behind, and a corner the user drew
+comes apart as a side effect of joining something else: the exact drift this
+feature exists to stop, and nothing later recovers it. A weld therefore drags
+*every* end at the coordinate onto the split point, the way `translateEndpointsAt`
+already does for a junction drag. Bringing the stragglers along can leave a
+collinear or duplicate result, which the run-level verdict below discards — so
+the worst outcome is walls left as drawn, never walls silently disconnected. A
+coordinate can only move to one place, so where two ends sharing one were
+detected against different hosts the first decides; the other's split point is
+dropped and re-detected on the next pass.
+
+**Why a near-corner touch does nothing.** A projection within `MIN_WALL_LENGTH`
+of either of the host's own endpoints is an ordinary corner, and splitting there
+would carve a sliver wall. Two touches closer than `MIN_WALL_LENGTH` to each
+other weld into a single junction for the same reason. Welding genuine near-miss
+*corners* together is a separate feature and deliberately not done here.
+
+**A wall with both ends inside one host is an overlap, not a T.** If both of a
+wall's endpoints land inside the *same* host's body, welding them would collapse
+that wall onto the host's centreline — to zero length where it crosses the host,
+or onto a duplicate of the host's own span where it runs alongside. Neither is a
+junction: the wall lies *within* another wall, which is the crossing/overlap
+family this module leaves alone. Both touches are skipped and the host stays
+whole. A wall whose two ends land on two *different* hosts is an ordinary pair of
+T-junctions and still splits both.
+
+**Two walls that already meet don't touch each other again.** Once a pair shares
+an endpoint coordinate they are joined, so a further touch between that same pair
+is the two lying over each other rather than a new T. Welding it produces a
+*second* wall spanning the junctions they already share: the user sees one wall
+but has two, with two length labels, and deleting the one they can see leaves its
+twin. This is reachable from an ordinary draw, because a genuine T can create the
+pair — welding a slanted endpoint onto a host leaves the host's own far endpoint
+sitting inside the drawn wall's body. Touches between already-joined walls are
+therefore skipped, which keeps the T that joined them.
+
+**A mutual touch is one overlap, not two Ts.** When each of two walls ends inside
+the *other*'s body, welding either one drags the centreline the other was
+measured against, so the pair settles as two coincident walls — and which wall
+gets mangled is array order. Neither side has a claim to the span: this is the
+same overlap family as both-ends-in-one-host, so both touches are dropped and
+both walls stay whole. They then look joined without being so, which is the
+pre-feature status quo rather than a plan the user cannot repair. Doing something
+better with genuine overlaps is a separate feature.
+
+**Why in `commit()`.** It is the single chokepoint every plan edit passes
+through, so draw, move, endpoint drag and type-to-resize are covered at one call
+site, and the split rides inside the same history entry as the edit that caused
+it — one undo restores the pre-split walls *and* items. Live drag previews
+bypass `commit()` by design, so nothing splits mid-gesture. `loadPlan` also
+bypasses it, so an imported plan isn't retro-split until the first edit.
+
+**A host that moves in a pass is split in the next one.** Split offsets are
+measured against the host's geometry *before* anything is welded, so a wall that
+is both a toucher and a host would be sliced at stale offsets — producing
+overlapping duplicate segments, or ones under `MIN_WALL_LENGTH`. Such a touch is
+deferred instead: the detect→apply loop re-runs against the settled geometry,
+where the ordinary guards apply and the touch either splits cleanly or turns out
+to be a corner. Deferring costs a pass; slicing stale geometry corrupts the plan.
+A *cycle* of deferrals — walls each ending mid-span of the next, all moving in
+the same pass — settles to no split at all, leaving those walls looking joined
+but not. That is the pre-feature status quo rather than a regression, it needs an
+exotic pinwheel arrangement, and drawing commits each wall separately, so it only
+arises from a loaded plan.
+
+**A run that doesn't settle is discarded whole.** The individual guards above are
+per-touch, and on thick walls that isn't enough: the band is `thickness / 2`, so
+at the 40cm preset it is 20cm — wide enough to swallow a coordinate that is
+*already* a junction. Welding it drags the walls meeting there onto the new
+host's centreline, which creates fresh touches, and applying such a pass anyway
+grinds the neighbourhood into slivers and leaves the plan unsettled, so the next
+commit grinds it again: three grid-snapped 40cm draws once committed as 27 walls
+and roughly doubled on every commit after. Rather than adding a per-touch guard
+for each arrangement that can reach a bad outcome, the whole detect→apply run is
+judged at the end and kept only if the plan settled — no touches left, no
+sub-`MIN_WALL_LENGTH` wall and no coincident pair that the input didn't already
+have. That makes the invariants structural: a split never produces a sliver or a
+duplicate span, and a plan the split has been through never changes on a later
+commit (a kept result re-detects nothing; a discarded one is returned untouched,
+so the next commit reaches the same verdict). A discarded run leaves those walls
+looking joined without being so — the same fallback the overlap guards take. It
+also subsumes the degenerate case of a wall welding onto two hosts whose
+centrelines are within `MIN_WALL_LENGTH` of each other, which no per-touch guard
+caught because each end is judged against its own nearest host.
+
+**Openings follow the reposition-first rule.** Each of the host's openings
+re-attaches to whichever segment holds it with `offset` rebased to that
+segment's `a`; one straddling the split point moves into the segment holding its
+larger part, keeping its width, and is removed only if it cannot fit there at
+all — the same last-resort rule `reconcileItemsToWalls` already applies.
+
+---
+
 ## The dispatcher classifies an agent verdict from its `**Verdict:**` line only
 
 **Decision.** `verdict_of` and `triage_verdict_of` in `.agents/dispatch.sh` no
@@ -82,9 +199,11 @@ for 3+-way junctions uses the *same* miter points and shares each edge with a
 wall, so it tiles seamlessly rather than overlaying. See `geometry/junction.ts`.
 
 **Scope.** Only shared **endpoints** form junctions. A wall ending mid-span of
-another isn't auto-split (would require wall splitting). Very acute angles are
-now capped by a miter limit (bevel fallback) — see "Miter limit is a multiple
-of half-thickness, not a fixed cm value" above.
+another is now made into one by splitting the host — see "A mid-span T-junction
+is made by splitting the host, not by a new relation" above; a true X crossing
+(neither wall *ends* on the other) still isn't. Very acute angles are now capped
+by a miter limit (bevel fallback) — see "Miter limit is a multiple of
+half-thickness, not a fixed cm value" above.
 
 ## Undo history is diff-based and persisted
 

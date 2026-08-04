@@ -15,7 +15,9 @@ connected room structures.
   selectable thickness presets
 - 🔵 **Smart junctions** — where walls meet, their geometry is mitered so corners
   and T/X junctions join seamlessly (no overlap patches, no gaps); very acute
-  angles fall back to a clean bevel
+  angles fall back to a clean bevel. A wall ending part-way along another splits
+  it in two, so mid-span T-junctions really connect and move like any other
+  junction
 - 🚪 **Openings** — place doors and windows along a wall by click-click or by
   dragging; toggle a door's hinge edge and swing side. Openings follow their
   wall as it moves and resizes
@@ -44,8 +46,8 @@ connected room structures.
   keyboard — and that bar is where further selection actions will land
 - ⚡ Built with **Vite + React + TypeScript**
 
-Not yet: splitting a wall where another ends mid-span, rooms / enclosed areas,
-stylus/Apple Pencil specifics, and a phone-width layout. See
+Not yet: rooms / enclosed areas, stylus/Apple Pencil specifics, and a
+phone-width layout. See
 [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope notes.
 
 ---

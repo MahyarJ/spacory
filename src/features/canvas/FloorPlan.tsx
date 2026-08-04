@@ -29,6 +29,7 @@ import {
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import { uid } from "../../util/uid";
 import { ConnectionPointsLayer } from "./ConnectionPointsLayer";
 import { DimensionsLayer } from "./DimensionsLayer";
 import styles from "./FloorPlan.module.css";
@@ -38,10 +39,6 @@ import { MarqueeLayer } from "./MarqueeLayer";
 import { SelectionLayer } from "./SelectionLayer";
 import { WallEndpointsLayer } from "./WallEndpointsLayer";
 import { WallsLayer } from "./WallsLayer";
-
-function uid(prefix = "id") {
-  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
-}
 
 type Opening = {
   type: "window" | "door";
