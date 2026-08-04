@@ -1,4 +1,5 @@
-import type { Plan } from "@app/schema";
+import { isDoor, type Plan } from "@app/schema";
+import { getDoorGeometry, getDoorSweepPoints } from "./itemGeometry";
 import { getPointOnWall } from "./wall";
 
 /** Axis-aligned world-space bounding box, in cm. */
@@ -17,9 +18,13 @@ export interface Bounds {
  * on every side — a conservative box that fully contains the rendered wall.
  * Items (doors/windows) hold no absolute coordinates: they are resolved through
  * their wall attachment and padded by half their visual thickness the same way;
- * an item whose wall is missing is skipped. Returns null for an empty plan (no
- * walls and no resolvable items) so callers can fall back to a default view
- * instead of trying to frame nothing.
+ * an item whose wall is missing is skipped. A door draws well past its opening,
+ * though — its swing arc sweeps perpendicular to the wall with a radius equal to
+ * the opening's own length — so a door also contributes the exact extent of that
+ * arc and its leaf lines (`getDoorSweepPoints`), which are already-drawn points
+ * and so need no further padding. Returns null for an empty plan (no walls and
+ * no resolvable items) so callers can fall back to a default view instead of
+ * trying to frame nothing.
  */
 export function getPlanBounds(plan: Plan): Bounds | null {
   let minX = Number.POSITIVE_INFINITY;
@@ -55,6 +60,11 @@ export function getPlanBounds(plan: Plan): Bounds | null {
     );
     include(start.x, start.y, pad);
     include(end.x, end.y, pad);
+    if (isDoor(item)) {
+      for (const p of getDoorSweepPoints(getDoorGeometry(item, wall))) {
+        include(p.x, p.y, 0);
+      }
+    }
   }
 
   if (!has) return null;

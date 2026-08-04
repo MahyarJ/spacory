@@ -1,4 +1,4 @@
-import type { DoorItem, Item, Wall, WindowItem } from "@app/schema";
+import type { DoorItem, Item, Point, Wall, WindowItem } from "@app/schema";
 import {
   getPointOnWall,
   getWallAngle,
@@ -100,6 +100,51 @@ export function getDoorGeometry(item: DoorItem, wall: Wall): DoorGeometry {
   const sweepFlag: 0 | 1 = hingeEdge * side > 0 ? 0 : 1;
 
   return { rect, hinge, tipClosed, tipOpen, sweepFlag, radius: length };
+}
+
+/** The four axis-aligned directions whose circle extremes bound an arc. */
+const AXIS_DIRECTIONS: Point[] = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+];
+
+/**
+ * The points whose axis-aligned bounding box exactly contains everything a door
+ * sweeps outside its opening rect: the 90° swing arc, the open leaf line
+ * (hinge → open tip) and the closed leaf (hinge → closed tip).
+ *
+ * The arc is a quarter circle centered on the hinge with `radius` equal to the
+ * opening's length, spanning the quadrant between the closed and open tips. Its
+ * exact box is therefore the two tips plus any of the circle's four
+ * axis-aligned extreme points (hinge ± radius in x / y) that fall *inside* that
+ * quadrant — tested by projecting the candidate direction onto the quadrant's
+ * two edge unit vectors and requiring both to be non-negative. Padding the
+ * hinge by the radius on all four sides would be far looser: it grows the box
+ * on the three sides the leaf never reaches.
+ */
+export function getDoorSweepPoints(geometry: DoorGeometry): Point[] {
+  const { hinge, tipClosed, tipOpen, radius } = geometry;
+  // Unit vectors along the quadrant's two edges (perpendicular by construction).
+  const u = {
+    x: (tipClosed.x - hinge.x) / radius,
+    y: (tipClosed.y - hinge.y) / radius,
+  };
+  const v = {
+    x: (tipOpen.x - hinge.x) / radius,
+    y: (tipOpen.y - hinge.y) / radius,
+  };
+
+  const points: Point[] = [hinge, tipClosed, tipOpen];
+  for (const e of AXIS_DIRECTIONS) {
+    // A degenerate (zero-length) opening makes u/v NaN; both tests fail, so
+    // only the hinge and the coincident tips are contributed. No NaN escapes.
+    if (e.x * u.x + e.y * u.y >= 0 && e.x * v.x + e.y * v.y >= 0) {
+      points.push({ x: hinge.x + e.x * radius, y: hinge.y + e.y * radius });
+    }
+  }
+  return points;
 }
 
 /** SVG path `d` for a door's 90° swing arc, from the closed tip to the open tip. */

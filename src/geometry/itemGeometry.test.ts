@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getDoorArcPath,
   getDoorGeometry,
+  getDoorSweepPoints,
   getWindowGeometry,
   reconcileItemsToWalls,
 } from "./itemGeometry";
@@ -99,6 +100,46 @@ describe("getDoorGeometry", () => {
     expect(getDoorArcPath(geometry)).toBe(
       `M 40 0 A 20 20 0 0 ${geometry.sweepFlag} 60 -20`,
     );
+  });
+});
+
+describe("getDoorSweepPoints", () => {
+  const boxOf = (points: { x: number; y: number }[]) => ({
+    minX: Math.min(...points.map((p) => p.x)),
+    minY: Math.min(...points.map((p) => p.y)),
+    maxX: Math.max(...points.map((p) => p.x)),
+    maxY: Math.max(...points.map((p) => p.y)),
+  });
+
+  it("grows only on the side the leaf actually sweeps", () => {
+    // Opening x=40..60 on a horizontal wall, hinge at (60,0), swinging to -y.
+    const geometry = getDoorGeometry(
+      doorItem("end", "outside"),
+      wall(0, 0, 100, 0),
+    );
+    // Not the hinge padded by the radius on all four sides: +y and +x stay put.
+    expect(boxOf(getDoorSweepPoints(geometry))).toEqual({
+      minX: 40,
+      minY: -20,
+      maxX: 60,
+      maxY: 0,
+    });
+  });
+
+  it("includes the arc's own extreme point, not just its two tips", () => {
+    // On a 45° wall the arc bulges past both tips: the quarter circle's
+    // bottom-most point (hinge - radius in y) lies inside the swept quadrant.
+    const geometry = getDoorGeometry(
+      doorItem("end", "outside"),
+      wall(0, 0, 100, 100),
+    );
+    const box = boxOf(getDoorSweepPoints(geometry));
+    expect(geometry.tipClosed.y).toBeCloseTo(28.2842712);
+    expect(geometry.tipOpen.y).toBeCloseTo(28.2842712);
+    expect(box.minY).toBeCloseTo(22.4264069); // hinge.y - radius, below both tips
+    expect(box.minX).toBeCloseTo(28.2842712);
+    expect(box.maxX).toBeCloseTo(56.5685425);
+    expect(box.maxY).toBeCloseTo(42.4264069); // the hinge
   });
 });
 

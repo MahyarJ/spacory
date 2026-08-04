@@ -172,6 +172,31 @@ SVG's own `stroke-miterlimit`, which is likewise a ratio to `stroke-width`.
 acute ones. This resolves the gap noted below under "Wall junctions are
 mitered, not covered."
 
+## Plan bounds measure a door's arc by its quadrant's extreme points
+
+**Decision.** `getPlanBounds` (`src/geometry/bounds.ts`) adds, for every door,
+the points from `getDoorSweepPoints` (`src/geometry/itemGeometry.ts`): the hinge,
+both leaf tips, **and** any of the swing circle's four axis-aligned extreme
+points (`hinge ± radius` in x / y) that fall inside the swept quadrant. A
+candidate direction is inside when its dot product with **both** quadrant edge
+unit vectors (hinge→closed tip and hinge→open tip) is non-negative. Those points
+are already-drawn positions, so they are included with **zero** padding.
+
+**Why not just the two tips.** The arc bulges past the chord between its tips.
+On an axis-aligned wall a tip happens to be the extreme, which hides the bug; on
+a 45° wall the arc's own `hinge ± radius` point sets the box side and no tip
+does. **Why not pad the hinge by the radius.** That's a square around the hinge:
+correct but loose on the three sides the leaf never sweeps, which would make the
+export and **Fit** leave dead space on every plan with a door. The quadrant test
+is exact and costs four dot products.
+
+**Why in the bounds, not `EXPORT_MARGIN`.** The overflow is the opening's own
+length, so no fixed margin can cover a wide-enough door, and raising it would pad
+every plan. Fixing the bounds also fixes `computeFitView` (`src/app/viewport.ts`)
+cropping a door, since Fit frames off the same box. Windows need nothing: their
+rect and midline stay within half the item's thickness of the wall centerline,
+which the existing per-endpoint padding already covers (pinned by a test).
+
 ## Viewport autosave: throttle, not debounce
 
 **Decision.** The viewport (pan/zoom) is persisted to its own `localStorage`
