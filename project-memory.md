@@ -122,8 +122,8 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   Export menu**, appended after "JSON" and "PNG" — *not* a fourth flat toolbar
   button, which would undo #66. Menu structure/styling and the existing entries
   stay out of scope; the icon glyph is the engineer's choice.
-- **Exports clip door swing arcs near the plan's edge — open gap, no issue yet
-  (found 2026-07-30 on PR #82).** `getPlanBounds` (`src/geometry/bounds.ts`) pads each
+- **Exports clip door swing arcs near the plan's edge — in flight (#99, scoped
+  2026-08-04; found 2026-07-30 on PR #82).** `getPlanBounds` (`src/geometry/bounds.ts`) pads each
   item only by `item.thickness / 2` around its wall centerline, but a door's swing arc
   has `radius = opening length` (`getDoorGeometry`, `src/geometry/itemGeometry.ts`) and
   sweeps *perpendicular* to the wall. So an ~80 cm door on a perimeter wall opening
@@ -135,8 +135,16 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   in the **bounds**, not by inflating `EXPORT_MARGIN` — a fixed margin can't scale with
   wider openings and would pad every plan, whereas including the arc's actual extent in
   `getPlanBounds` is exact, testable pure logic, and fixes both formats at once. Also
-  audit the window midline/leaf line for the same overflow. Next cycle should scope this
-  as its own thin issue.
+  audit the window midline/leaf line for the same overflow. **Ticketed 2026-08-04 as
+  #99** with one product call added while scoping: the box must also stay **tight** —
+  padding the hinge by the arc radius on all four sides would satisfy "nothing is
+  clipped" while inflating every doored plan's Fit framing with dead space, so the
+  criteria pin exact numbers on the un-swept sides (the arc is a quarter circle centred
+  on the hinge, so only one quadrant needs the radius). Verified in code while scoping:
+  `exportSvg.ts` draws arc + open-leaf line + hinge dot out to `tipOpen`, which sits
+  `length` away *perpendicular* to the wall, while `getPlanBounds` pads openings by
+  `item.thickness / 2`; the window's rect and midline look already covered, so #99 asks
+  for a test pinning that rather than a change.
 - **Export formats grouped under one Export menu — done (#66, merged as PR #69).**
   `ProjectActions.tsx` renders Import (JSON) as its own button plus a `Menu`
   (`src/ui/Menu.tsx`) labelled **Export** whose `items` are `json` and `png`.
@@ -337,19 +345,34 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   and deleting the visible wall leaves an unreachable copy — and a wall inside another
   wall's body is the out-of-scope **overlap** family, not a mid-span T. No survivor is
   picked by thickness, length or draw order (invisible to the user, still near-duplicate).
-- **Un-splitting and stub tidying after a mid-span split — open gap, no issue yet
-  (surfaced during PR #97's acceptance, 2026-08-03; next cycle should ticket it).**
-  Two related loose ends the split (#96) deliberately left: (a) **delete the T-wall
-  and the host stays as two collinear segments**, so the user sees two length labels
-  where they had one and the plan carries a seam that no longer means anything —
-  merging collinear segments that share a now-2-wall junction is the fix; and (b) an
-  endpoint that overshoots a corner by more than `MIN_WALL_LENGTH` (1 cm) **does**
-  split and leaves a short stub segment, because that is all the "near a corner, do
-  nothing" guard protects. Both are cleanup of the same shape (short/meaningless
-  segments left behind), so scope them as **one** thin issue rather than two. Note the
-  product call already on record: widening the *weld* band so near-miss corners snap
-  together is a **different** feature ("welding near-miss corners", still out of
-  scope) — this gap is only about not leaving debris behind.
+- **Un-splitting after a mid-span split — in flight (#100, scoped 2026-08-04;
+  surfaced during PR #97's acceptance, 2026-08-03).** Two related loose ends the split
+  (#96) deliberately left: (a) **delete the T-wall and the host stays as two collinear
+  segments**, so the user sees two length labels where they had one and the plan carries
+  a seam that no longer means anything — merging collinear segments that share a
+  now-2-wall junction is the fix; and (b) an endpoint that overshoots a corner by more
+  than `MIN_WALL_LENGTH` (1 cm) **does** split and leaves a short stub segment, because
+  that is all the "near a corner, do nothing" guard protects. The 2026-08-03 note said
+  to scope both as one issue; **on scoping them (2026-08-04) that turned out to be
+  wrong, and #100 covers (a) only.** (a) has a single unambiguous fix; (b)'s only
+  tidy fixes are *decline the split* — which reinstates exactly the looks-joined-but-
+  isn't bug #96 was written to fix — or *snap the endpoint onto the corner*, which **is**
+  the separate "welding near-miss corners" feature. So (b) is not independent cleanup at
+  all; it is an argument for that feature, and it is recorded as such on #100's
+  out-of-scope list rather than guessed at with a threshold.
+  Two product calls made while scoping (a) as #100, both worth carrying:
+  **the merge is scoped to the wall-removal path, not applied as a global `commit()`
+  invariant** — a straight click-to-chain run creates collinear same-thickness
+  neighbours *on purpose*, so collapsing every collinear 2-wall junction would change
+  wall drawing itself; and **merging a seam the user drew by hand is accepted collateral**
+  when a third wall at that point is deleted, because the plan records no difference
+  between a split seam and a drawn one, the seam has no visual or model meaning once the
+  third wall is gone, and one `Cmd+Z` restores it (the merge rides the delete's history
+  entry). Guards required: exactly two endpoints at the coordinate, same thickness,
+  same direction (a ~1° difference must not merge — it would bend the wall; a fold-back
+  is the overlap family). It also inherits the held-handle hazard in reverse — the seam
+  coordinate *ceases to exist*, so a held `selectedConnectionPoint` there must be
+  cleared, not left invisible-but-live.
 - **Viewport persistence — done (#2, merged).**
 - **Fit to content button — done (#9, merged).**
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
@@ -545,15 +568,17 @@ see the #93 bullet under "Known gaps")?
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-08-03, read during the #96 triage run): #10 (prune
-stale selection), #20 (fit shortcut/zoom to selection), #21 (error boundary), #52
-(custom door swing glyph, follow-up to #51), #63 (switch display units
+Current open issues (as of 2026-08-04, read during the fifteenth cycle run): #10
+(prune stale selection), #20 (fit shortcut/zoom to selection), #21 (error boundary),
+#52 (custom door swing glyph, follow-up to #51), #63 (switch display units
 cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a toolbar control has focus),
-#94 (44px touch targets for the options bar's existing controls), and **#96**
+#94 (44px touch targets for the options bar's existing controls), **#96**
 (split a wall where another ends on it — **implemented by PR #97**, product-accepted
-on `82d8348` pending the PR description being brought up to what shipped; awaiting
-that fix and a merge). **#93** (on-screen Remove/Hinge/Swing controls)
-merged 2026-08-02 as PR #95. Closed since: **#84**
+on `82d8348`, CI green and mergeable, still labelled `agent:reviewing`; awaiting the
+PR-description fix and a merge), plus the two written this run: **#99** (include a
+door's swing arc in the plan bounds) and **#100** (merge the segments back when the
+splitting wall is deleted — **depends on #96 landing first**). **#93** (on-screen
+Remove/Hinge/Swing controls) merged 2026-08-02 as PR #95. Closed since: **#84**
 (touch canvas, merged as PR #91), **#85** (tablet chrome, merged as PR #89), **#76**
 (commit typed length/width on click-away), **#33** (SVG export, PR #82), **#61**
 (Cmd/Ctrl+drag detach, PR #75), **#78** (README opening-width docs, PR #81); #60 and
@@ -561,10 +586,11 @@ merged 2026-08-02 as PR #95. Closed since: **#84**
 deliberately left out is still unticketed: on-screen **wall-thickness** editing for
 a selection (the `[`/`]` verb — needs a product call on the preset pills first,
 since it's genuinely ambiguous whether the existing preset row should retarget the
-current selection or keep setting the next-wall default). A **second** unticketed
-follow-up is now queued and needs no human call: **un-splitting / stub tidying after
-a mid-span split** (see its bullet under "Known gaps") — the next cycle should write
-it as one thin issue.
+current selection or keep setting the next-wall default). The other previously queued
+follow-up, **un-splitting after a mid-span split**, is now #100; the **stub near a
+corner** half of it was deliberately *not* ticketed — it resolves into the
+still-unscheduled "weld near-miss corners" feature (see that bullet under "Known
+gaps").
 
 The next high-value, well-scoped follow-ups once the current batch is clear (in
 rough priority order) are:
@@ -578,13 +604,16 @@ rough priority order) are:
    it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
    gaps" and the open question above. Do not write this issue until answered.
 
-The backlog is eight issues deep and every *known* gap that doesn't need a human
-call is ticketed. The next cycle should reconcile GitHub state, run the README
-backstop check again (it caught real drift two runs ago, and #93/PR #95 shipped a
-user-visible feature whose README delta should be spot-checked), and resist
-inventing work:
-rooms and cascading-follow both still await a human answer, and there is no other
-concrete queued slice.
+The backlog is **ten** issues deep and every *known* gap that doesn't need a human
+call is now ticketed — with #99 and #100 written this run, the queue that "Known gaps"
+had been carrying is empty. The next cycle should reconcile GitHub state, re-run the
+README backstop check, and **expect to create nothing**: the only unticketed items
+left are the three that need a human answer (rooms, cascading follow, the `[`/`]`
+thickness verb) plus two features nobody has asked for yet (weld near-miss corners,
+phone-width layout / stylus). A no-op cycle with that reasoning is the correct
+outcome — do not invent work to fill it. The one thing worth watching is whether
+**PR #97 has merged**; #100 is written against the code it lands, so it should not be
+promoted to `agent:ready` before then.
 
 **A note on testability for UI-behavior issues (#76, #77, #85) — updated 2026-07-30,
 the gap is now half closed.** This file previously recorded "no DOM testing library
@@ -625,6 +654,48 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-04 — Fifteenth Product Agent run (cycle). Cleared the two gaps this file had
+  been carrying as "no issue yet", both of which needed no human call:
+  **#99 — "Include a door's swing arc in the plan bounds so exports and Fit don't clip
+  it"** (the export-clipping gap found on PR #82 back on 2026-07-30) and
+  **#100 — "Merge the two segments back into one wall when the wall that split it is
+  deleted"** (the un-splitting half of the loose end PR #97's acceptance surfaced).
+  Re-verified both premises in code before writing, rather than trusting the notes:
+  `exportSvg.ts` draws a door's arc and open-leaf line out to `tipOpen`, `length` away
+  *perpendicular* to the wall, while `getPlanBounds` pads openings by only
+  `item.thickness / 2` — so the clip is real, and it hits **Fit** as well as both export
+  formats since `computeFitView` frames off the same bounds.
+  **The judgement call of the run: the 2026-08-03 note said to scope un-splitting and
+  the near-corner stub as one issue, and that was wrong — #100 covers un-splitting
+  only.** Merging leftover collinear segments has one unambiguous fix; the stub has
+  none. Its only tidy fixes are *decline the split near a corner*, which reinstates
+  precisely the looks-joined-but-isn't bug #96 exists to fix, or *snap the endpoint onto
+  the corner*, which **is** the separate "weld near-miss corners" feature. Bundling them
+  would have forced a guessed threshold into an otherwise clean spec, so the stub is
+  recorded on #100's out-of-scope list as an argument for that feature instead. General
+  lesson: *two symptoms sharing a shape ("debris left behind") is not evidence they
+  share a fix* — check that each half has an unambiguous remedy before merging them into
+  one ticket.
+  Two further product calls, both on #100: **the merge is scoped to the wall-removal
+  path, not a global `commit()` invariant** — a straight click-to-chain run creates
+  collinear same-thickness neighbours on purpose, so collapsing every such junction
+  would silently change wall drawing itself; and **merging a hand-drawn seam is accepted
+  collateral** when a wall at that point is deleted, since the plan records no
+  difference between a split seam and a drawn one, the seam has no meaning once the
+  third wall is gone, and one `Cmd+Z` restores it. #100 also carries the held-handle
+  hazard **in reverse** — the split *moves* a coordinate, the merge *destroys* one, so a
+  held `selectedConnectionPoint` at the vanished seam must be cleared rather than left
+  invisible-but-live. On #99 the added call was **tightness**: "nothing is clipped" is
+  satisfiable by padding the hinge with the arc radius on all four sides, which would
+  inflate every doored plan's Fit framing with dead space, so the criteria pin exact
+  numbers on the un-swept sides.
+  **README backstop check: no drift.** Features (including #93/PR #95's on-screen
+  Remove/Hinge/Swing, which reads accurately), shortcuts, "Not yet", scripts and stack
+  all match shipped reality; PR #97 carries its own README delta for mid-span splitting.
+  GitHub state otherwise unchanged: same eight issues open coming in, PR #97 still the
+  only open PR (CI green, mergeable, still labelled `agent:reviewing`, awaiting its
+  PR-description fix and a human merge). No new open questions for the human.
 
 - 2026-08-03 — Second clarify pass on **PR #97**, answering the one product call the
   Engineer Agent explicitly escalated rather than guessed at: two walls that each end
