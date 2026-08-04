@@ -5,6 +5,53 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## A split seam is merged back only where the commit vacated it
+
+**Decision.** `commit()` also runs the inverse of the split
+(`src/geometry/wallMerge.ts`): where an edit leaves exactly **two** wall
+endpoints on a coordinate an endpoint just *left*, and the two walls are
+collinear, continue in the same direction and share a `thickness`, they become
+one wall. The earlier wall in the array keeps its id and direction; the other
+disappears into it, its openings rebased onto the merged wall. This is what
+undoes the split when the T-wall that caused it is deleted or dragged out of the
+junction.
+
+**Why keyed on a *vacated* coordinate, not on "is this seam meaningless".** As a
+global invariant it would change wall drawing: a click-to-chain straight run
+creates collinear same-thickness neighbours **on purpose**, and so does an
+imported plan. There is no stored provenance to tell a split seam from a drawn
+one — connectivity is a query over coordinates and nothing else — so the trigger
+is the *edit*, not the shape: a coordinate that fewer endpoints sit on than
+before. An edit that only *adds* an endpoint merges nothing, and a whole-junction
+drag moves every end at the coordinate together, so it changes nothing about how
+many meet there. The corollary is deliberate: a chain's seam does merge if a
+third wall that was ending there is removed, because at that point the two
+arrangements are indistinguishable — and one straight wall is what the user sees
+either way.
+
+**Why all three conditions.** Exactly two ends means a 3-wall junction is a real
+junction and stays. Collinearity is judged on the sine of the angle with a `1e-6`
+tolerance — float noise from a projected split point is ~1e-13, while a degree of
+difference is ~0.017, so merging can never visibly bend a wall. Same direction
+*through* the point excludes two walls folding back over each other (an overlap,
+not a seam), and equal thickness excludes walls that are visibly different.
+
+**Why before the split in the same `commit()`.** The two share a trigger — an
+endpoint move — and can pull opposite ways: an endpoint dragged off a host but
+still *inside* its body should stay attached (#96's rule). Merging first and
+splitting second reaches that in one commit — the seam merges, then the split
+puts it back — and the result is a fixed point, whereas splitting first leaves a
+plan the next commit would re-split. Riding in the same `commit()` also gives the
+merge one undo entry with the edit that caused it, and keeps it out of live drag
+previews, so the host stays split until the drag is released.
+
+**The selection is repaired in the same step.** A merge removes a wall id and a
+junction coordinate, so `commit()` now also drops a held connection point that no
+endpoint sits on any more and prunes selected wall/item ids the committed plan no
+longer has. A selection left behind is *invisible but still live* — the handle
+isn't drawn, while an arrow key still routes to the junction nudge — which is the
+same hazard the split's weld-following solves from the other direction.
+
 ## A mid-span T-junction is made by splitting the host, not by a new relation
 
 **Decision.** When a wall's endpoint lands inside another wall's drawn body
@@ -225,7 +272,8 @@ wall, so it tiles seamlessly rather than overlaying. See `geometry/junction.ts`.
 
 **Scope.** Only shared **endpoints** form junctions. A wall ending mid-span of
 another is now made into one by splitting the host — see "A mid-span T-junction
-is made by splitting the host, not by a new relation" above; a true X crossing
+is made by splitting the host, not by a new relation" above, and "A split seam is
+merged back only where the commit vacated it" for the cleanup; a true X crossing
 (neither wall *ends* on the other) still isn't. Very acute angles are now capped
 by a miter limit (bevel fallback) — see "Miter limit is a multiple of
 half-thickness, not a fixed cm value" above.
