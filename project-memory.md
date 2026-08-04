@@ -433,6 +433,33 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   isolated mess from freezing splitting across the whole plan. Sequence note: (b) is
   the most user-visible of the three and does not depend on the other two. All three
   need the code #97 lands, so write them against merged `main`, not the branch.
+- **X crossings don't form a junction — no issue yet, promoted to a first-class gap
+  2026-08-04 (clarify pass on #100, human-raised).** When two walls *cross* and neither
+  one **ends** on the other, nothing joins them: the crossing point is not a wall
+  endpoint, so coordinate-equality connectivity can't see it, and the two walls behave
+  exactly like the pre-#96 mid-span T — they look joined, and the first drag pulls one
+  through the other. This limit was already recorded twice, but only as a **limit**, not
+  as queued work: `docs/DECISIONS.md` "Wall junctions → Scope" ("a true X crossing …
+  still isn't"), and as an out-of-scope footnote inside #96's and #100's bullets. The
+  human's read is right — it is the same defect class #96 fixed, so it is now carried
+  here as its own gap and should be **ticketed in a normal cycle** once #100 has landed.
+  Product framing already settled, so scoping doesn't restart from zero: **split both
+  walls at the true intersection**, giving four segments meeting at one coordinate where
+  four endpoints sit — the mitered core-fill already renders a 4-wall junction, and the
+  junction handle / auto-follow then work with no new model concept, exactly the #96
+  argument. Two ways it differs from the T and both matter to the spec: there is **no
+  snap** (the intersection is computed exactly, so nothing moves — the T's "mid-snap"
+  has no counterpart), and it splits **both** of the user's walls rather than only the
+  host, so a long wall the user drew becomes two selectable halves. That cost is
+  accepted — it's the same trade #96 already made and the visible result is the crossing
+  moving as one junction — but it makes **#100's merge a hard prerequisite**: without
+  the un-split, deleting one crossing wall would leave the other permanently in two
+  halves, which is a worse state than the bug being fixed. #96's guards carry over and
+  now apply to *both* walls: the `MIN_WALL_LENGTH` clearance from each wall's own ends
+  (a crossing within 1 cm of a corner is left alone), the same-thickness/no-coincident-
+  wall "an overlap is not a T" invariant, and openings rebased onto whichever segment
+  holds them. Still out of scope even then: the **overlap** family (a wall lying inside
+  another wall's body rather than crossing it).
 - **Viewport persistence — done (#2, merged).**
 - **Fit to content button — done (#9, merged).**
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
@@ -666,12 +693,16 @@ rough priority order) are:
 
 The backlog is **ten** issues deep and every *known* gap that doesn't need a human
 call is now ticketed — with #99 and #100 written this run, the queue that "Known gaps"
-had been carrying is empty. The next cycle should reconcile GitHub state, re-run the
-README backstop check, and **expect to create nothing**: the only unticketed items
-left are the three that need a human answer (rooms, cascading follow, the `[`/`]`
-thickness verb) plus two features nobody has asked for yet (weld near-miss corners,
-phone-width layout / stylus). A no-op cycle with that reasoning is the correct
-outcome — do not invent work to fill it. The one thing worth watching is whether
+had been carrying is refilling. The next cycle should reconcile GitHub state, re-run the
+README backstop check, and write from "Known gaps": the **three loose ends from #97's
+review rounds** (straddling-opening fallback, no decline affordance, plan-global discard
+verdict — all against merged `main`), and **X crossings**, promoted to a first-class gap
+by the 2026-08-04 clarify pass on #100 (product framing is settled in that bullet; it
+wants #100 landed first). Beyond those, expect to create nothing: the remaining
+unticketed items are the three that need a human answer (rooms, cascading follow, the
+`[`/`]` thickness verb) plus two features nobody has asked for yet (weld near-miss
+corners, phone-width layout / stylus). Do not invent work to fill the rest. The one thing
+worth watching is whether
 **PR #97 has merged**; #100 is written against the code it lands, so it should not be
 promoted to `agent:ready` before then.
 
@@ -715,6 +746,25 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-08-04 — Clarify pass on **issue #100** (merge the segments back), on a **human
+  question**: X crossings are correctly out of scope, but *is that recorded anywhere to be
+  picked up later*, since a crossing is just as much a real junction as a T? Answered
+  **yes but too weakly, and fixed it**. It was recorded only as a **limit** — in
+  `docs/DECISIONS.md` "Wall junctions → Scope" and as an out-of-scope footnote inside
+  #96's and #100's bullets — never as **queued work**, so nothing would have pulled it
+  into a cycle. Promoted it to its own "Known gaps" bullet with the product framing
+  pre-settled (split **both** walls at the exact intersection → four ends at one
+  coordinate; no snap, unlike the T's mid-snap; #96's `MIN_WALL_LENGTH` corner clearance
+  and the no-coincident-wall invariant now apply to both walls; the overlap family stays
+  out) and updated "focus next," which had told the next cycle to expect a no-op. **#100
+  itself is unchanged** — the merge's scope is right, and widening it would mix two
+  features. One sequencing call worth carrying: **#100 is a hard prerequisite for X
+  splitting**, because an X splits both of the user's walls, so without the un-split
+  deleting one crossing wall would leave the other permanently halved — a worse state
+  than the bug being fixed. The reusable judgement: **"we wrote it in the out-of-scope
+  list" is not the same as "it's on the roadmap"** — an out-of-scope note explains a
+  decision to whoever reads that ticket, but only a "Known gaps" entry gets the work
+  scheduled.
 - 2026-08-04 — Clarify pass on **PR #101** (#99's door-arc bounds), on a **human
   question** after the PR had already been accepted and approved: could the box be built
   from the leaf **tips only**, skipping "all the points on the arc," which might get
