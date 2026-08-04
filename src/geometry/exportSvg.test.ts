@@ -1,5 +1,6 @@
 import {
   createInitialPlan,
+  type DoorItem,
   type Item,
   type Plan,
   type Wall,
@@ -12,6 +13,7 @@ import {
   EXPORT_MARGIN,
   EXPORT_WALL_COLOR,
 } from "./exportSvg";
+import { getDoorGeometry, getDoorSweepPoints } from "./itemGeometry";
 
 const wall = (
   ax: number,
@@ -80,6 +82,47 @@ describe("buildExportSvg", () => {
     );
     expect(markup).toContain("<path");
     expect(markup).toContain("<circle");
+  });
+
+  it("frames a perimeter door's whole swing arc plus the margin", () => {
+    // Door on the outermost wall swinging outward: the arc's radius equals the
+    // opening's 80cm length, so it reaches y = -80 — 75cm past the wall's own
+    // -5 edge, which the fixed 40cm margin alone could never cover.
+    const outerWall = wall(0, 0, 400, 0, 10, "a");
+    const outwardDoor: DoorItem = {
+      id: "d",
+      type: "door",
+      wallAttach: { wallId: "a", offset: 100, length: 80 },
+      thickness: 10,
+      props: { hingeEdge: "end", swingSide: "outside" },
+    };
+    const { markup, width, height } = buildExportSvg(
+      planOf([outerWall], [outwardDoor]),
+    );
+
+    // Content bounds -5..405 x -80..5 (see bounds.test.ts), inflated by margin.
+    expect(width).toBe(410 + EXPORT_MARGIN * 2);
+    expect(height).toBe(85 + EXPORT_MARGIN * 2);
+    expect(markup).toContain(
+      `viewBox="${-5 - EXPORT_MARGIN} ${-80 - EXPORT_MARGIN} ${width} ${height}"`,
+    );
+
+    // Every point of the drawn sweep clears all four edges by the full margin.
+    const [vx, vy, vw, vh] = (/viewBox="([^"]+)"/.exec(markup)?.[1] ?? "")
+      .split(" ")
+      .map(Number);
+    for (const p of getDoorSweepPoints(
+      getDoorGeometry(outwardDoor, outerWall),
+    )) {
+      expect(p.x).toBeGreaterThanOrEqual(vx + EXPORT_MARGIN);
+      expect(p.x).toBeLessThanOrEqual(vx + vw - EXPORT_MARGIN);
+      expect(p.y).toBeGreaterThanOrEqual(vy + EXPORT_MARGIN);
+      expect(p.y).toBeLessThanOrEqual(vy + vh - EXPORT_MARGIN);
+    }
+  });
+
+  it("keeps EXPORT_MARGIN fixed — the arc is covered by the bounds, not padding", () => {
+    expect(EXPORT_MARGIN).toBe(40);
   });
 
   it("excludes grid, selection, and marquee overlays entirely", () => {
