@@ -345,6 +345,17 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   and deleting the visible wall leaves an unreachable copy — and a wall inside another
   wall's body is the out-of-scope **overlap** family, not a mid-span T. No survivor is
   picked by thickness, length or draw order (invisible to the user, still near-duplicate).
+  A **third clarify pass (2026-08-04)** finished repairing the spec, which by then
+  described a feature that hadn't shipped: **Split + snap** now says a weld moves the
+  whole **coordinate** (every wall end sitting on it) rather than the detected endpoint —
+  the endpoint-only reading was the regression `f088fcf` fixed, and leaving it in the
+  issue invited someone to "fix" the code straight back into disconnecting junctions;
+  and two criteria were added — **the run is all-or-nothing** (the detect→apply result is
+  kept only if the plan settled and gained no sub-minimum wall and no coincident pair,
+  with a **plan-global** verdict) and **three further declines** (already-joined pair,
+  host-moves-this-pass deferral, dropped weld target). The framing that makes them
+  coherent, now on the Detection criterion: **detection holding is necessary, not
+  sufficient**, and every decline falls back to leaving both walls exactly as drawn.
 - **Un-splitting after a mid-span split — in flight (#100, scoped 2026-08-04;
   surfaced during PR #97's acceptance, 2026-08-03).** Two related loose ends the split
   (#96) deliberately left: (a) **delete the T-wall and the host stays as two collinear
@@ -373,6 +384,24 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   is the overlap family). It also inherits the held-handle hazard in reverse — the seam
   coordinate *ceases to exist*, so a held `selectedConnectionPoint` there must be
   cleared, not left invisible-but-live.
+- **Three loose ends from the mid-span split — no issue yet (surfaced across PR #97's
+  review rounds, recorded 2026-08-04; to be ticketed next cycle).** All three are
+  deliberate limits of #96 rather than defects, each recorded on the PR body so it
+  survives the squash merge: **(a) a straddling opening is moved into the segment
+  holding its larger part and removed if it doesn't fit *there*, without trying the
+  sibling segment** that might have held it at full width — the removal is a real,
+  if rare, loss of the user's door/window and the fallback is one extra check;
+  **(b) nothing tells the user when a touch was declined** — the split now declines in
+  six distinct situations (overlap ×2, already-joined, deferral, dropped weld target,
+  run-level discard) and each leaves the walls looking joined without being joined,
+  which is exactly the state #96 exists to remove, so a snap/decline affordance while
+  drawing is now worth more than it was when #96 listed it as out of scope; and
+  **(c) the run-level discard's verdict is plan-global** — one unsettleable tangle
+  discards a good T drawn elsewhere in the same commit and keeps doing so on every
+  later commit, so scoping the verdict to the affected neighbourhood would stop an
+  isolated mess from freezing splitting across the whole plan. Sequence note: (b) is
+  the most user-visible of the three and does not depend on the other two. All three
+  need the code #97 lands, so write them against merged `main`, not the branch.
 - **Viewport persistence — done (#2, merged).**
 - **Fit to content button — done (#9, merged).**
 - **No fit-to-content keyboard shortcut / zoom to selection — in flight (#20).**
@@ -654,6 +683,41 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 ## Changelog
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
+
+- 2026-08-04 — Third clarify pass on **PR #97** (#96's mid-span split). Nothing
+  product-blocking on the code — both the acceptance pass and the Engineer's review
+  on `1a8168e` say the implementation is right and would merge as-is; what was
+  outstanding was **the record**. Made the four edits to #96 that my own acceptance
+  pass had specified, so the issue stops describing a version of the feature that
+  never shipped: **(1) Split + snap** now says the weld moves the whole **coordinate**,
+  not the detected endpoint — as previously written it documented the *regression*
+  `f088fcf` fixed, and someone "fixing" the code back to the criterion would reinstate
+  the disconnect; **(2)** a new **"The run is all-or-nothing"** criterion — the
+  detect→apply result is kept only if the plan settled and gained no sub-minimum wall
+  and no coincident pair, else the input is returned untouched, with the verdict
+  **plan-global** (one unsettleable tangle discards a good T drawn elsewhere in the same
+  commit) and stable across commits; **(3)** a new **"Three further declines"**
+  criterion — an already-joined pair is skipped, a touch whose host moves this pass is
+  deferred to the next (a deferral *cycle* settles to no split at all), and a split
+  point nothing welds onto is dropped with one weld target per coordinate; and **(4)** a
+  note on **Detection** that detection holding is **necessary, not sufficient**, which is
+  the sentence that ties the other three together. Verified each against the branch
+  source (`wallSplit.ts` run loop, `isWorse`, `detectTouches`/`applyTouches`) rather
+  than transcribing the PR body.
+  **The lesson this pass is really about: a spec whose criteria describe a behaviour
+  the implementation deliberately abandoned is worse than an incomplete one** — a
+  reader after merge doesn't know which side is authoritative, and #96 had reached the
+  point where at least three shipped rules would have been filed as bugs against it.
+  The pattern that produced it is worth naming: nine rounds of review each settled a
+  new rule *on the PR thread*, and the thread is not the record — the squash-merge body
+  and the issue are. Amend the issue in the same pass that settles the rule, not at the
+  end.
+  Deferred to the Engineer Agent by name: the PR body's two count bumps (334 tests / 27
+  files, 38 cases in `wallSplit.test.ts`) plus the missing "An overlap is not a T"
+  checklist line, and the `@util/*` tsconfig-alias nit for `src/util/uid.ts`. Recorded
+  the three remaining #97 follow-ups as their own gap below (straddling opening's
+  sibling segment, snap/decline affordance, scoping the discard verdict) — to be
+  ticketed next cycle, not on this PR.
 
 - 2026-08-04 — Fifteenth Product Agent run (cycle). Cleared the two gaps this file had
   been carrying as "no issue yet", both of which needed no human call:
