@@ -415,6 +415,15 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   criterion now names the detach case explicitly. **This did not block PR #97**:
   un-splitting was out of scope from #96 onward, #97 delivers the split itself, and the
   acceptance verdict stood.
+  **Delivered by PR #103 (accepted 2026-08-04 pending one spec repair, made in the
+  clarify pass the same day; awaiting merge).** The repair, worth carrying because it is
+  a fact about the app and not about this issue: **there is no single-endpoint keyboard
+  nudge** — arrow keys route to `translateSelectedConnectionPoint`, which moves *every*
+  endpoint at a junction together, so they can never detach one wall from a seam. #100's
+  AC 2 had claimed the merge "applies to the arrow-key nudge of a selected single
+  endpoint"; it now says the opposite (arrow keys must not merge), and a future
+  single-endpoint nudge would merge for free because every plan edit flows through
+  `commit()`. Don't spec a gesture against arrow keys as if they moved one endpoint.
 - **Three loose ends from the mid-span split — no issue yet (surfaced across PR #97's
   review rounds, recorded 2026-08-04; to be ticketed next cycle).** All three are
   deliberate limits of #96 rather than defects, each recorded on the PR body so it
