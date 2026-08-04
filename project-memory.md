@@ -372,8 +372,8 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   all; it is an argument for that feature, and it is recorded as such on #100's
   out-of-scope list rather than guessed at with a threshold.
   Two product calls made while scoping (a) as #100, both worth carrying:
-  **the merge is scoped to the wall-removal path, not applied as a global `commit()`
-  invariant** — a straight click-to-chain run creates collinear same-thickness
+  **the merge is scoped to the edit that removed the endpoint, not applied as a global
+  `commit()` invariant** — a straight click-to-chain run creates collinear same-thickness
   neighbours *on purpose*, so collapsing every collinear 2-wall junction would change
   wall drawing itself; and **merging a seam the user drew by hand is accepted collateral**
   when a third wall at that point is deleted, because the plan records no difference
@@ -384,6 +384,26 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   is the overlap family). It also inherits the held-handle hazard in reverse — the seam
   coordinate *ceases to exist*, so a held `selectedConnectionPoint` there must be
   cleared, not left invisible-but-live.
+  **Widened 2026-08-04 (clarify pass on PR #97, human-raised) to a second trigger:
+  *detaching* the T-wall, not just deleting it.** Dragging the T-wall's endpoint out of
+  the shared junction (the single-endpoint drag from #30) leaves exactly the same
+  meaningless seam, and it is a deliberate shipped gesture, so the defect is reachable
+  without deleting anything. Kept as **one** issue rather than two because the merge
+  decision is the same pure function for both triggers — only the trigger differs, so a
+  second issue would be a second PR on one new module adding a call site. The rule that
+  admits detach **without** reintroducing the click-to-chain hazard the original scoping
+  guarded against: **a seam is a merge candidate only at a coordinate the commit
+  *vacated*** — an endpoint that sat there no longer does (deleted or moved away) —
+  **never at one the commit filled**, since drawing only *adds* endpoints and dragging a
+  whole junction moves every end at it together (the count at the coordinate is
+  unchanged). This also makes a *partial* detach a no-op for free: four ends minus one
+  still leaves three, and the "exactly two endpoints" guard declines. Nothing is lost by
+  merging — re-attaching re-splits on the next commit (the split is idempotent) and one
+  `Cmd+Z` restores the seam. Sequencing the merge against the split inside one `commit()`
+  without the two oscillating is the Engineer's problem, but #100's non-oscillation
+  criterion now names the detach case explicitly. **This did not block PR #97**:
+  un-splitting was out of scope from #96 onward, #97 delivers the split itself, and the
+  acceptance verdict stood.
 - **Three loose ends from the mid-span split — no issue yet (surfaced across PR #97's
   review rounds, recorded 2026-08-04; to be ticketed next cycle).** All three are
   deliberate limits of #96 rather than defects, each recorded on the PR body so it
@@ -684,6 +704,24 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-08-04 — Fourth clarify pass on **PR #97**, this one on a **human question** rather
+  than an agent's: after the split, detaching the junction (dragging the T-wall's endpoint
+  off the host) leaves the host still split, so a junction persists with nothing left to
+  justify it — is that a problem, and does it need satisfying before merge? Answered
+  **yes it's a real problem, no it doesn't block #97**, and **widened #100** to cover it
+  instead of opening a second issue (new title "…is deleted **or detached**", a new
+  detach-case criterion, a new *vacated-coordinate* trigger criterion, the trigger-paths
+  and out-of-scope sections amended, plus the non-oscillation and pure-function criteria
+  extended to name detach). The reusable product judgement: **the same defect reached by a
+  different gesture belongs in the existing issue when the decision logic is identical and
+  only the trigger differs** — two issues would have meant two PRs on one new module where
+  the second just adds a call site. The care needed was in *how* to widen: #100 had
+  deliberately excluded "moving" because a straight click-to-chain run creates collinear
+  same-thickness neighbours on purpose, so the trigger is now phrased as **a coordinate
+  this commit *vacated*, never one it filled** — which admits delete and detach, still
+  refuses drawing and whole-junction drags, and makes a partial detach decline for free.
+  Also corrected the now-superseded "scoped to the wall-removal path" wording in the
+  Known-gaps entry, so the memory doesn't record two contradictory scopings.
 - 2026-08-04 — Third clarify pass on **PR #97** (#96's mid-span split). Nothing
   product-blocking on the code — both the acceptance pass and the Engineer's review
   on `1a8168e` say the implementation is right and would merge as-is; what was
