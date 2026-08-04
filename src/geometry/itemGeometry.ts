@@ -112,15 +112,16 @@ const AXIS_DIRECTIONS: Point[] = [
 
 /**
  * The points whose axis-aligned bounding box exactly contains everything a door
- * sweeps outside its opening rect: the 90° swing arc, the open leaf line
- * (hinge → open tip) and the closed leaf (hinge → closed tip).
+ * draws outside its opening rect: the 90° swing arc and the open leaf line
+ * (hinge → open tip).
  *
  * The arc is a quarter circle centered on the hinge with `radius` equal to the
- * opening's length, spanning the quadrant between the closed and open tips. Its
- * exact box is therefore the two tips plus any of the circle's four
- * axis-aligned extreme points (hinge ± radius in x / y) that fall *inside* that
- * quadrant — tested by projecting the candidate direction onto the quadrant's
- * two edge unit vectors and requiring both to be non-negative. Padding the
+ * opening's length, spanning the quadrant between its start point (the closed
+ * tip, which lies on the opening rect) and the open tip. Its exact box is
+ * therefore those two endpoints plus any of the circle's four axis-aligned
+ * extreme points (hinge ± radius in x / y) that fall *inside* that quadrant —
+ * tested by projecting the candidate direction onto the quadrant's two edge
+ * unit vectors and requiring both to be non-negative. Padding the
  * hinge by the radius on all four sides would be far looser: it grows the box
  * on the three sides the leaf never reaches.
  */
