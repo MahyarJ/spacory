@@ -35,10 +35,13 @@ sanity-check with `npm run dev` when feasible.
 
 ## 3. Commit
 
-Concise imperative subject + a short body explaining **why**.
+**One line, imperative subject — no body.** These PRs squash-merge to `main`, so a
+per-commit body doesn't survive; put the "why" in the PR description.
 
-**Do NOT add any AI/Claude attribution** — no `Co-Authored-By: Claude` trailer
-in the first place.
+Keep the message clean: **no AI/Claude attribution** (no `Co-Authored-By: Claude`),
+and **no local/operational data** — spend/token figures, automation on/off state,
+absolute paths, account/token/secret or `.env` contents. Public repo: describe the
+change, not your machine.
 
 ## 4. Push + open PR
 
@@ -47,8 +50,9 @@ git push -u origin <branch>
 gh pr create --base main --title "<title>" --body "<summary>"
 ```
 
-PR body: what changed, why, and how it was verified. **No "Generated with Claude
-Code" footer.**
+PR body: what changed, why, and how it was verified — **from the diff's view, never
+your environment** (same no-local-data rule as the commit above). **No "Generated
+with Claude Code" footer.**
 
 ## 5. Confirm CI is green
 
