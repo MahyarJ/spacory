@@ -496,6 +496,42 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   tracks its replacement with a custom plan-view swing glyph.
 - **On-canvas wall-length labels — done (#5, merged).**
 - **Editable wall lengths — done (#11, merged).** Type to resize; angle preserved.
+- **A typed wall length resizes from a *hidden* end, so remeasuring a room skews it —
+  in flight (#102, triaged & enriched 2026-08-05 from a human-submitted bug report).**
+  `resizeWallToLength` (`src/geometry/wall.ts`) always pins `a` and moves `b`, and a
+  rectangle drawn as one click-to-chain loop has its facing walls running in **opposite**
+  directions — so the same "type 500" grows the bottom wall rightwards and the top wall
+  leftwards, slanting both side walls into a parallelogram whose sides are ~316 cm
+  instead of the 300 they were measured at. The rule the user fights (`a` is pinned) is
+  invisible on screen and set by draw order. Retitled "Make a typed wall length resize
+  independently of drawing direction, so remeasuring a room keeps it rectangular."
+  **The product call, answering the reporter's own either/or ("resize both ends, or take
+  care of the shape somehow"): neither, exactly —** the **free** end moves when exactly
+  one end is joined to another wall, and the delta is **split evenly across both ends**
+  when both are joined (or neither is). That is direction-independent in all three
+  branches, which is the real defect; "always both ends" was rejected because on a chain
+  it would drag the junction the last wall hangs off and slant the neighbour (pinning the
+  joined end is strictly better there and never worse than today), and "fix the shape"
+  was rejected because keeping facing walls equal/parallel means real geometric
+  **constraints** — a far bigger feature that would still leave the underlying resize
+  unpredictable. The rectangle then falls out for free: 500 on the bottom + 500 on the
+  top yields a true 500 × 300 box with the sides still 300 (verified by hand while
+  scoping, both under the new rule and under today's, which is where the ~316 comes
+  from), so that is criterion 3 and its test must **fail on current code**. Two
+  consequences of both ends now being able to move, both specced: an opening's
+  `wallAttach.offset` must compensate so doors/windows never slide across the plan
+  (`offset` is measured from `a`), and a held `selectedConnectionPoint` at **either** end
+  must follow — the #97 held-handle hazard, previously reachable only at `b`. Also
+  flagged: the two existing test groups that pin the `a`-anchored rule
+  (`resizeWallToLength` in `wall.test.ts`, the `setSelectedWallLength` block in
+  `store.test.ts`) are to be *updated*, not deleted, and `docs/DECISIONS.md` gets an
+  entry (no README change — its Dimensions bullet stays true). Not a settled-decision
+  reversal: the `a`-pin was an unrecorded implementation default from #11, not a
+  DECISIONS.md entry. Explicit out-of-scope: **room-level editing** ("set this room's
+  width and both facing walls follow"), which is the good version of the reporter's first
+  reading but needs the rooms model in **#104**; geometric constraints; every other edit
+  path (whole-wall drag, endpoint/junction drag, arrow nudges, thickness, opening width);
+  cascading follow; and units (#63). Did not add `agent:ready` (a human promotes it).
 - **Auto-follow connected walls on move/resize — done (#19, merged).** Moving a
   whole selected wall, or type-to-resizing one, moves the immediate endpoint of
   any other wall sharing that point (`translateSelectedWallsFollowing` in
@@ -678,7 +714,12 @@ Remove/Hinge/Swing controls) merged 2026-08-02 as PR #95. Closed since: **#84**
 (touch canvas, merged as PR #91), **#85** (tablet chrome, merged as PR #89), **#76**
 (commit typed length/width on click-away), **#33** (SVG export, PR #82), **#61**
 (Cmd/Ctrl+drag detach, PR #75), **#78** (README opening-width docs, PR #81); #60 and
-#66 merged before that. Do **not** re-propose any of these. One follow-up #93
+#66 merged before that. Do **not** re-propose any of these. Two more are open that this
+list predates: **#104** (detect enclosed rooms and show each one's area, opened
+2026-08-04) and **#102** (typed wall length resizes from a hidden end — triaged and
+enriched 2026-08-05 from a human bug report, awaiting a human's `agent:ready`); don't
+re-propose either, and note #102's out-of-scope list points room-level wall editing at
+#104. One follow-up #93
 deliberately left out is still unticketed: on-screen **wall-thickness** editing for
 a selection (the `[`/`]` verb — needs a product call on the preset pills first,
 since it's genuinely ambiguous whether the existing preset row should retarget the
@@ -755,6 +796,25 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-08-05 — **Triage** of human-submitted **#102**: typing a length on two facing
+  walls of a rectangle turns the room into a parallelogram, because the resize always
+  pins `a` and the facing walls were drawn in opposite directions. **Accepted and
+  enriched** into a full spec (retitled "Make a typed wall length resize independently of
+  drawing direction, so remeasuring a room keeps it rectangular"); the report itself is
+  preserved as the issue's "What happens today" section. The reporter had explicitly left
+  the product call open — resize both ends, or fix the shape? — and the answer is a third
+  option: **free end moves when exactly one end is joined; delta splits evenly when both
+  are joined or neither is.** Rationale and the two rejected alternatives are in the new
+  "Known gaps" bullet. Two reusable judgements from this one: **when a behaviour's outcome
+  depends on a model detail the user cannot see, that dependency *is* the bug** — the fix
+  is to make the rule direction-independent, not to add UI that exposes which end is `a`;
+  and **the thin fix and the big feature can want the same thing** — "keep facing walls
+  equal" reads like a constraints engine, but it falls out of a one-function anchor change
+  once the rule is symmetric, so check whether the symmetric rule already delivers the
+  reported goal before scoping the general feature. Also noted while scoping: because both
+  ends can now move, this inherits the #97 held-handle hazard at *both* ends, and openings
+  need offset compensation (`wallAttach.offset` is measured from `a`) so a resize never
+  slides a door across the plan.
 - 2026-08-04 — Clarify pass on **issue #100** (merge the segments back), on a **human
   question**: X crossings are correctly out of scope, but *is that recorded anywhere to be
   picked up later*, since a crossing is just as much a real junction as a T? Answered
