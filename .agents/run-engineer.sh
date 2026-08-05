@@ -45,10 +45,10 @@
 #                            (use "bypassPermissions" for fully unattended runs)
 #   CLAUDE_MODEL             default: the session default model. Set in
 #                            .agents/.env to pin (dispatch.sh sources it); this
-#                            repo pins "opus".
+#                            repo defaults to "sonnet".
 #   CLAUDE_EFFORT            default: the CLI's default effort. Set in
 #                            .agents/.env to pin a reasoning-effort level (e.g.
-#                            "high"); passed through as `--effort`.
+#                            "medium"); passed through as `--effort`.
 #
 # Note: for an unattended headless run to not stall, the commands the agent uses
 # must be permitted. This repo's .claude/settings.json allows git, npm, `gh pr`
@@ -87,6 +87,14 @@ case "$NUM" in
 esac
 shift
 EXTRA="${*:-}"
+
+# Verify GitHub auth (bash, zero model cost) — after arg validation so a usage error
+# still reports usage. The agent works entirely through gh (and git), so fail loud
+# now rather than launching a session that would only hit the failure mid-run.
+gh auth status >/dev/null 2>&1 || {
+  echo "error: gh CLI is not authenticated — run 'gh auth login' (or refresh the token)" >&2
+  exit 1
+}
 
 # ── isolation: run in a throwaway git worktree, never the caller's checkout ────
 # (args are validated above, so a bad invocation fails before we create anything.)

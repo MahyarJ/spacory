@@ -31,11 +31,14 @@ usually run as separate agents): the engineer who reviews a PR is not the one wh
 wrote it or the one who fixes it, so the review is an **independent** perspective.
 Don't try to do more than your mode.
 
-## Preflight (every mode)
+## GitHub access (every mode)
 
-Follow the **`spacory-preflight`** skill first: confirm `gh auth status` succeeds
-(you also need `git` for code modes) before you start. If it fails, send the blocked
-wrap-up and stop.
+You work through `gh` (and `git` for code modes). In a **headless run** the runner
+(`run-engineer.sh`) has already gated `gh auth status` and won't launch you if it
+fails, so don't spend a turn re-checking. In an **interactive chat** there's no
+runner gate — just proceed (a human is there). Either way, if a `gh`/`git` call
+fails mid-run (e.g. an expired token), stop and, in a headless run, send the blocked
+wrap-up.
 
 ## Conventions (all modes that touch or judge code)
 

@@ -30,13 +30,11 @@
       "Bash(gh pr:*)",
       "Bash(gh run:*)",
       "Bash(gh issue:*)",
-      "Bash(gh auth status:*)",
       "Bash(gh repo view:*)",
       "Bash(gh api:*)",
       "Bash(.agents/notify.sh:*)",
       "Skill(product-agent)",
       "Skill(engineer-agent)",
-      "Skill(spacory-preflight)",
       "Skill(spacory-verify)",
       "Skill(spacory-conventions)",
       "Skill(spacory-notify)"

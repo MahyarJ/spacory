@@ -22,7 +22,8 @@ doing anything else:
 
 The skill relies on these shared skills; use them where it says to:
 
-- **`spacory-preflight`** — confirm `gh auth status` (and `git`) before starting.
+- GitHub auth (`gh`, and `git` for code modes) is verified by the runner before you
+  start, so assume it works.
 - **`spacory-conventions`** — the repo's code conventions (single store +
   `commit()`, pure tested modules, Biome, cm, scope discipline).
 - **`spacory-verify`** — the definition of done to run before pushing / opening a

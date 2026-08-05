@@ -21,7 +21,7 @@ doing anything else:
 
 The skill relies on these shared skills; use them where it says to:
 
-- **`spacory-preflight`** — confirm `gh auth status` before touching anything.
+- GitHub auth (`gh`) is verified by the runner before you start, so assume it works.
 - **`spacory-notify`** — post the one Telegram wrap-up at the end.
 - **`spacory-conventions`** / **`spacory-verify`** — the repo conventions and the
   definition of done to reference when writing issue technical context.

@@ -35,10 +35,13 @@ judges *how* it's built; you judge *whether it delivers the user value*. Triage 
 the **intake front door**: a human drops a rough idea and you decide whether it
 earns a place on the roadmap and, if so, shape it into an implementable issue.
 
-## Preflight (every mode)
+## GitHub access (every mode)
 
-Follow the **`spacory-preflight`** skill first: confirm `gh auth status` succeeds
-before you read or write anything. If it fails, send the blocked wrap-up and stop.
+You work through `gh`. In a **headless run** the runner (`run-product.sh`) has
+already gated `gh auth status` and won't launch you if it fails, so don't spend a
+turn re-checking. In an **interactive chat** there's no runner gate — just proceed
+(a human is there). Either way, if a `gh` call fails mid-run, stop and, in a headless
+run, send the blocked wrap-up.
 
 ## Answering the thread (every mode that reads or posts comments)
 

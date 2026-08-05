@@ -55,7 +55,6 @@ Shared building blocks each role reuses (also usable on their own in a chat):
 
 | Skill | What it is |
 |---|---|
-| [`spacory-preflight`](../.claude/skills/spacory-preflight/SKILL.md) | Confirm `gh auth status` before touching any issue/PR/memory |
 | [`spacory-verify`](../.claude/skills/spacory-verify/SKILL.md) | The definition of done — `npm run check && npx tsc -b && npm test` |
 | [`spacory-conventions`](../.claude/skills/spacory-conventions/SKILL.md) | Repo code conventions (single store + `commit()`, pure tested modules, Biome, cm) |
 | [`spacory-notify`](../.claude/skills/spacory-notify/SKILL.md) | The Telegram wrap-up via `.agents/notify.sh` |
@@ -182,8 +181,9 @@ and validates its input. Useful env overrides:
 
 - `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
   fully unattended run in a trusted environment.
-- `CLAUDE_MODEL` — pin a specific model; defaults to the session default. This repo
-  pins `opus` in `.agents/.env`.
+- `CLAUDE_MODEL` / `CLAUDE_EFFORT` — pin the model and reasoning effort; default to
+  the CLI session defaults. This repo defaults to `sonnet` at `medium` in
+  `.agents/.env`.
 
 > **Config surface:** `dispatch.sh` sources `.agents/.env` (gitignored) and exports
 > it, so that file is the single place to set any of these knobs — `CLAUDE_MODEL`,
@@ -195,8 +195,8 @@ and validates its input. Useful env overrides:
 > `gh issue` (Product creates issues; Engineer reads/comments on them), and
 > `.agents/notify.sh` (the Telegram helper). Because each role now runs by invoking a
 > **skill**, the allowlist also permits the `Skill(...)` invocations the shims and
-> shared skills rely on (`product-agent`, `engineer-agent`, `spacory-preflight`,
-> `spacory-verify`, `spacory-conventions`, `spacory-notify`) — otherwise an
+> shared skills rely on (`product-agent`, `engineer-agent`, `spacory-verify`,
+> `spacory-conventions`, `spacory-notify`) — otherwise an
 > `acceptEdits` run could stall on the first skill call. Otherwise run with
 > `CLAUDE_PERMISSION_MODE=bypassPermissions` so a headless run doesn't stall.
 
