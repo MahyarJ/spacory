@@ -66,8 +66,9 @@ Do **not** add AI/Claude attribution to commits or PRs:
 - The two-agent (Product / Engineer) workflow lives in `.agents/`; its living
   institutional memory is `project-memory.md` in the repo root. Each agent's
   behaviour is now a reusable **skill** (`.claude/skills/{product,engineer}-agent`,
-  plus shared `spacory-preflight` / `spacory-verify` / `spacory-conventions` /
-  `spacory-notify`); the `.agents/*-prompt.md` files are thin shims over them, so the
+  plus shared `spacory-verify` / `spacory-conventions` / `spacory-notify`); GitHub
+  auth is checked by the runners as a bash `gh auth status` gate, not an LLM skill.
+  The `.agents/*-prompt.md` files are thin shims over them, so the
   same contract works headlessly and in an interactive `/product-agent` chat.
 - The agent loop can be **orchestrated on a timer**: `.agents/dispatch.sh` is a
   stateless dispatcher over `agent:*` GitHub labels (triage → implement →

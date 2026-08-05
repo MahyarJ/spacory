@@ -182,7 +182,8 @@ Tune cadence/time by editing the `*.plist.template` files and re-running
 | `SPACORY_AGENT_RETRY_BACKOFF_SECS` | `20` | wait between those attempts |
 | `SPACORY_CYCLE_LOCK_WAIT_SECS` | `1800` | how long the daily `cycle` waits for the shared lock before forfeiting its slot (the fast tick never waits) |
 | `CLAUDE_PERMISSION_MODE` | `acceptEdits` | passed to run-\*.sh; use `bypassPermissions` for fully unattended if a command isn't allowlisted |
-| `CLAUDE_MODEL` | session default | passed to run-\*.sh |
+| `CLAUDE_MODEL` | `sonnet` | passed to run-\*.sh (pinned in `.agents/.env`) |
+| `CLAUDE_EFFORT` | `medium` | reasoning effort, passed to run-\*.sh as `--effort` |
 
 **Running a tick by hand:** an `implement`/`review`/`resolve` tick spawns agents
 that run for **several minutes** — longer than some interactive shells allow. Run
