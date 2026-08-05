@@ -1,6 +1,6 @@
 import type { DoorItem, Plan, Wall } from "@app/schema";
 import { findConnectedEndpoints } from "@geometry/connectivity";
-import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
+import { getPointOnWall, getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useApp } from "./store";
 
@@ -832,5 +832,237 @@ describe("mid-span wall splitting on commit", () => {
     // …and it has settled: further commits leave the plan where it is.
     useApp.getState().addWall(wall("far", 900, 900, 1000, 900, 40));
     expect(useApp.getState().plan.walls.slice(0, 4)).toEqual(walls);
+  });
+});
+
+describe("merging a split host back into one wall on commit", () => {
+  /**
+   * The plan every case starts from: "host" runs (0,0)→(400,0) and "t" ends on
+   * its middle, so #96's split has left the host as two 200cm segments meeting
+   * at (200,0). Returns the generated far segment's id.
+   */
+  function splitHost(items: Plan["items"] = []): string {
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 400, 0)], items));
+    useApp.getState().addWall(wall("t", 200, 0, 200, 150));
+    const walls = useApp.getState().plan.walls;
+    expect(walls).toHaveLength(3);
+    const far = walls.find((w) => w.id !== "host" && w.id !== "t");
+    if (!far) throw new Error("expected the host to have been split");
+    return far.id;
+  }
+
+  /** Drag "t"'s endpoint off the host and release, as the canvas does. */
+  function detachT(to: { x: number; y: number }) {
+    useApp.getState().beginLiveDrag();
+    useApp.getState().moveWallEndpointLive({ wallId: "t", end: "a" }, to);
+    useApp.getState().commitPlan();
+  }
+
+  const openingCentre = (item: Plan["items"][number]) => {
+    const w = useApp
+      .getState()
+      .plan.walls.find((x) => x.id === item.wallAttach.wallId);
+    if (!w) throw new Error(`no wall ${item.wallAttach.wallId}`);
+    return getPointOnWall(
+      w,
+      item.wallAttach.offset + item.wallAttach.length / 2,
+    );
+  };
+
+  it("merges the host back into one wall when the T-wall is deleted", () => {
+    splitHost();
+    useApp.setState({ selectedWalls: new Set(["t"]) });
+
+    useApp.getState().deleteSelected();
+
+    // One wall, so one 400cm dimension label where there were two of 200cm.
+    expect(useApp.getState().plan.walls).toEqual([wall("host", 0, 0, 400, 0)]);
+    expect(getWallLength(useApp.getState().plan.walls[0])).toBe(400);
+  });
+
+  it("merges the host back when the T-wall's endpoint is dragged off it", () => {
+    splitHost();
+
+    useApp.getState().beginLiveDrag();
+    useApp
+      .getState()
+      .moveWallEndpointLive({ wallId: "t", end: "a" }, { x: 280, y: 80 });
+    // The seam must survive the live preview: it goes when the drag is released.
+    expect(useApp.getState().plan.walls).toHaveLength(3);
+
+    useApp.getState().commitPlan();
+
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 400, 0),
+      wall("t", 280, 80, 200, 150),
+    ]);
+  });
+
+  it("collapses a whole run of segments in one delete", () => {
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 400, 0)]));
+    useApp.getState().addWall(wall("t1", 150, 0, 150, 90));
+    useApp.getState().addWall(wall("t2", 250, 0, 250, 90));
+    expect(useApp.getState().plan.walls).toHaveLength(5);
+    useApp.setState({ selectedWalls: new Set(["t1", "t2"]) });
+
+    useApp.getState().deleteSelected();
+
+    expect(useApp.getState().plan.walls).toEqual([wall("host", 0, 0, 400, 0)]);
+  });
+
+  it("leaves the seam when only one of two T-walls is removed", () => {
+    splitHost();
+    useApp.getState().addWall(wall("t2", 200, 0, 200, -150));
+    expect(
+      findConnectedEndpoints(useApp.getState().plan.walls, { x: 200, y: 0 }),
+    ).toHaveLength(4);
+    useApp.setState({ selectedWalls: new Set(["t"]) });
+
+    useApp.getState().deleteSelected();
+
+    // Three ends still meet at (200,0) — a real junction, not a seam.
+    expect(useApp.getState().plan.walls).toHaveLength(3);
+    expect(
+      findConnectedEndpoints(useApp.getState().plan.walls, { x: 200, y: 0 }),
+    ).toHaveLength(3);
+  });
+
+  it("leaves a collinear run the user drew as a chain", () => {
+    // Two same-thickness walls drawn end to end, plus a far wall to delete: the
+    // commit vacates the far wall's ends, never the chain's seam.
+    useApp.getState().loadPlan(planWith([]));
+    useApp.getState().addWall(wall("w1", 0, 0, 200, 0));
+    useApp.getState().addWall(wall("w2", 200, 0, 400, 0));
+    useApp.getState().addWall(wall("far", 0, 500, 200, 500));
+    useApp.setState({ selectedWalls: new Set(["far"]) });
+
+    useApp.getState().deleteSelected();
+
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("w1", 0, 0, 200, 0),
+      wall("w2", 200, 0, 400, 0),
+    ]);
+  });
+
+  it("leaves a collinear seam when the whole junction is dragged", () => {
+    useApp.getState().loadPlan(planWith([]));
+    useApp.getState().addWall(wall("w1", 0, 0, 200, 0));
+    useApp.getState().addWall(wall("w2", 200, 0, 400, 0));
+    useApp.getState().selectConnectionPoint({ x: 200, y: 0 });
+
+    useApp.getState().translateSelectedConnectionPoint(20, 0);
+
+    // Both ends moved together, so the same two ends still meet — nothing was
+    // vacated in the sense that matters, and the chain stays two walls.
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("w1", 0, 0, 220, 0),
+      wall("w2", 220, 0, 400, 0),
+    ]);
+  });
+
+  it("keeps an opening at the same world position across the merge", () => {
+    const door: DoorItem = {
+      id: "d1",
+      type: "door",
+      thickness: 10,
+      wallAttach: { wallId: "host", offset: 300, length: 20 },
+      props: { hingeEdge: "start", swingSide: "outside" },
+    };
+    useApp.getState().loadPlan(planWith([wall("host", 0, 0, 400, 0)], [door]));
+    const wasAt = openingCentre(door);
+    const far = splitHost([door]);
+    // The split moved it onto the far segment; the merge has to move it back.
+    expect(useApp.getState().plan.items[0].wallAttach.wallId).toBe(far);
+    expect(openingCentre(useApp.getState().plan.items[0])).toEqual(wasAt);
+    useApp.setState({ selectedWalls: new Set(["t"]) });
+
+    useApp.getState().deleteSelected();
+
+    const [item] = useApp.getState().plan.items;
+    expect(item.wallAttach).toEqual({
+      wallId: "host",
+      offset: 300,
+      length: 20,
+    });
+    expect(openingCentre(item)).toEqual(wasAt);
+  });
+
+  it("restores the seam in a single undo", () => {
+    const far = splitHost();
+    useApp.setState({ selectedWalls: new Set(["t"]) });
+    useApp.getState().deleteSelected();
+    expect(useApp.getState().plan.walls).toHaveLength(1);
+
+    useApp.getState().undo();
+
+    // One step brings back both the deleted wall and the seam: the merge rides
+    // in the same history entry as the delete that triggered it.
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 200, 0),
+      wall(far, 200, 0, 400, 0),
+      wall("t", 200, 0, 200, 150),
+    ]);
+  });
+
+  it("clears a connection-point selection held at the vanished seam", () => {
+    splitHost();
+    useApp.getState().selectConnectionPoint({ x: 200, y: 0 });
+
+    detachT({ x: 280, y: 80 });
+
+    // Left live, the handle would be invisible (no endpoint sits there) while an
+    // arrow key still routed to the junction nudge.
+    expect(useApp.getState().selectedConnectionPoint).toBeNull();
+    expect(useApp.getState().selectedConnectionPointEndpoints).toEqual([]);
+  });
+
+  it("drops a selected wall the merge removed", () => {
+    const far = splitHost();
+    useApp.setState({ selectedWalls: new Set([far]) });
+
+    detachT({ x: 280, y: 80 });
+
+    expect(useApp.getState().selectedWalls.has(far)).toBe(false);
+    expect(
+      [...useApp.getState().selectedWalls].every((id) =>
+        useApp.getState().plan.walls.some((w) => w.id === id),
+      ),
+    ).toBe(true);
+  });
+
+  it("settles on one outcome when the endpoint stays inside the host's body", () => {
+    // The merge and the split share a trigger here — an endpoint move — and pull
+    // opposite ways: 3cm off the centreline of a 10cm wall is still *inside* the
+    // host, so the seam merges away and the split immediately puts it back. What
+    // must not happen is the two trading the plan back and forth commit after
+    // commit.
+    splitHost();
+
+    detachT({ x: 200, y: 3 });
+
+    const settled = useApp.getState().plan.walls;
+    expect(settled).toHaveLength(3);
+    expect(settled.find((w) => w.id === "host")).toEqual(
+      wall("host", 0, 0, 200, 0),
+    );
+    expect(settled.find((w) => w.id === "t")?.a).toEqual({ x: 200, y: 0 });
+    expect(findConnectedEndpoints(settled, { x: 200, y: 0 })).toHaveLength(3);
+
+    // A fixed point: repeating the commit reaches the same plan.
+    useApp.getState().commitPlan();
+    expect(useApp.getState().plan.walls).toEqual(settled);
+  });
+
+  it("does not re-merge on a later commit", () => {
+    splitHost();
+    useApp.setState({ selectedWalls: new Set(["t"]) });
+    useApp.getState().deleteSelected();
+
+    useApp.getState().addWall(wall("far", 0, 500, 200, 500));
+
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 400, 0),
+      wall("far", 0, 500, 200, 500),
+    ]);
   });
 });

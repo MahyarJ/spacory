@@ -17,7 +17,8 @@ connected room structures.
   and T/X junctions join seamlessly (no overlap patches, no gaps); very acute
   angles fall back to a clean bevel. A wall ending part-way along another splits
   it in two, so mid-span T-junctions really connect and move like any other
-  junction
+  junction — and removing or detaching that wall merges the two segments back
+  into one
 - 🚪 **Openings** — place doors and windows along a wall by click-click or by
   dragging; toggle a door's hinge edge and swing side. Openings follow their
   wall as it moves and resizes
