@@ -5,6 +5,142 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Licence: MIT
+
+**Decision.** Spacory is licensed **MIT**. The repo had called itself "open
+source" while shipping *no* licence file — legally all-rights-reserved despite the
+wording — so this closes a real gap, not just a formality.
+
+**Why permissive, not copyleft.** MIT maximises freedom and frictionless adoption —
+anyone, including companies, can use, modify, and build on the engine without
+copyleft obligations, which is the whole point of publishing it openly. MIT (over
+Apache-2.0) matches that "no-scare" familiarity; the trade-off accepted is MIT's
+silence on patents and trademark, judged low-risk for a floor-plan geometry engine.
+
+**Reversibility.** Starting permissive is deliberate, not accidental: MIT can always
+be *relaxed* further, whereas going *stricter* later (e.g. AGPL) on an
+already-published core is a one-way door. Permissive keeps future licensing options
+open rather than foreclosing them.
+
+---
+
+## Rooms are derived planar-graph faces, not stored entities
+
+**Decision.** A room is **derived**, not modelled: it is a *bounded face of the
+planar graph formed by the wall centrelines*. Detection lives in a pure geometry
+module (`src/geometry/rooms.ts`, same pattern as `junction.ts` / `bounds.ts`) that
+traverses the subdivision, keeps the bounded faces, and discards the single
+unbounded "outside" face. Nothing about a room is written into the `Plan` except
+**user metadata** (name, and later fill/type), and that metadata is anchored to an
+**interior point**, not to the set of wall ids that bound the face.
+
+**Why derived, not stored.** Stored room entities inherit exactly the
+reconcile-against-every-edit burden we already fight for openings, and they desync
+the instant a wall moves. Derived rooms self-heal — move a wall and the faces
+recompute — which is the same architectural grain as `connectivity.ts` deriving
+junctions from coordinate equality rather than storing a "these walls are joined"
+relation. It also keeps the schema floor-plan-minimal (no room array to migrate,
+validate, or keep referentially consistent).
+
+**Why an interior-point anchor.** Metadata has to survive wall edits, so it needs a
+key that is stable across them. A key made of the bounding wall ids shatters the
+moment a wall splits (which the mid-span T-junction feature does routinely) or two
+faces merge. An interior point re-matches by point-in-polygon into whichever face
+now contains it, which is how a user already thinks of a label ("it sits here").
+Re-matching is cheap and degrades gracefully — a point stranded outside every face
+(its room was opened up) just goes unplaced rather than corrupting anything.
+
+**Why this is tractable now specifically.** Face detection is well-behaved on a
+planar *straight-line* graph but a mess against mid-span crossings. The just-landed
+mid-span T-split (see below) makes every wall connection a shared endpoint — a real
+graph vertex — so the walls now *are* a clean PSLG. The precondition the feature
+needs arrived with that change; this is the moment to answer it.
+
+**Scope / what's deferred.** Openings don't affect enclosure (a door in a wall
+doesn't open the polygon — enclosure is pure wall topology), and open/partial plans
+simply yield fewer faces. Holes/islands (a free-standing column inside a room, a
+room within a room) are a v2 concern, not part of the first cut. The
+product-facing choices (auto-name vs. blank, area shown always vs. on-select, fill
+in MVP) live in the feature issue, not here.
+
+---
+
+## App-first, SDK-seam-aware: keep the core instantiable, defer the public boundary
+
+**Decision.** Spacory is and stays a **standalone app**. We do **not** ship an
+embeddable SDK (`createSpacoryEditor(...)`, a public `exports` map, `types`, a
+library build, versioned npm consumption) as a *proactive* project. This is a "not
+yet, on demand" call — **not a "never"**: the boundary can become worth it quickly
+once a real consumer appears (comparable editors added one within their first year).
+The "SDK path" is split into two decisions with two answers:
+
+1. **The instance/storage seam — do soonish, opportunistically (not a sprint).**
+   Today `history` is a module-scope `let` in `src/app/store.ts` (reassigned on
+   every mutation) and persistence writes to fixed `localStorage` keys at module
+   scope, so a page can hold exactly one editor with storage the host can't
+   control. Lifting `history` into a `createAppStore()` instance and injecting a
+   `storage` port (get/set interface, default = a localStorage adapter) is
+   justified by the **app alone** — the planned content-library feature wants to
+   instantiate/preview multiple `Plan`s, and injected storage makes the store's
+   own tests cleaner. Do it the next time we're meaningfully in `store.ts`, or the
+   first time a feature reaches for it. Blast radius is one file; the only cost of
+   waiting is that the singleton accretes more code closing over it. Instance-scoping
+   the history this way is a well-trodden refactor for editors of this kind, and it's
+   what makes **switchable floors/layouts** cheap — one live editor swapping between
+   saved plans, each with its own undo. Editing two canvases *simultaneously* is a
+   further step (routing input and undo to the focused canvas, decoupling any
+   remaining page-global state), so it stays demand-triggered under boundary #2.
+
+2. **The public boundary — defer, demand-triggered.** Flip to building the facade,
+   `exports`, versioning, and docs only when a real consumer exists — not before.
+   Concrete triggers: a second surface wants to render Spacory (another app, a live
+   embed on a page, a plugin host); two editor instances must live on one page
+   (comparison view, template gallery with previews); or someone actually asks to
+   `npm install` it.
+
+**If/when the facade does get built**, prefer thin wrappers over the existing
+named store actions (`editor.addWall(w)`, `editor.loadPlan(p)`, …) over an
+`execute(command)` command bus. The bus's usual justification is undo/redo, which
+diff-based history (see below) already gives us without a serializable command
+vocabulary — so it would be a speculative public contract with no earned need.
+`on("change", …)` should fire from the `commit()` chokepoint (committed document
+changes only — not live-drag ticks or view pans), and `destroy()` only has meaning
+once seam #1 makes instances real.
+
+**Why.** A published SDK *with zero consumers* is a liability: every future refactor
+must then preserve a contract nobody uses, under semver, on an API designed by
+guessing. The point is the *ordering*, not hostility to an SDK — the same boundary
+shipped *once real consumers exist* earns its keep. The bigger risk to the project
+isn't "we can't embed it" —
+it's "the editor isn't yet good enough that anyone *wants* to embed it," so scarce
+attention belongs on the product, not a premature boundary. And because seam #1
+makes the facade ~50 lines of glue whenever we want it, waiting costs almost
+nothing — we're not saving future effort by building it now, just taking on the
+maintenance early. Note the hard part of SDK-readiness — a clean, framework-free
+core — is *already* largely done: geometry, `io.ts`, and `history.ts` are pure,
+tested modules; the single UI-oriented Zustand store is the only real coupling
+point, and its natural future cleave is document/history/persistence core vs.
+editor UI state (tool, view, canvasSize, selection, marquee). Separately, the
+"and library" wording lived only in the **GitHub repo description** metadata (not
+the README, which already says "editor"); it was dropped there to stop promising
+a boundary that doesn't exist.
+
+**The data model follows the same rule.** The general "spatial engine" concepts —
+arbitrary typed entities, product/catalog references, generic extension-metadata
+bags, layers/levels, parametric constraints, cross-object relationships,
+permissions/readonly entities, a formal migration framework — are **deferred behind
+the same triggers**, and constraints/permissions in particular may be *never*
+(parametric constraints cut against the non-CAD mission; permissions only exist
+once it's a hosted multi-user product). Two things are *not* in that deferred pile:
+**rooms**, which are a real product feature answered above (derived faces), and the
+**one schema seam worth watching** — `Item.wallAttach` is currently *mandatory*, so
+the first free-standing entity (furniture, a text label, a free dimension) is the
+point at which `Item` should be lifted to "typed entity, *optionally* wall-attached"
+rather than special-cased. Don't generalize it speculatively; let that first
+feature define the shape, since it touches serialized data.
+
+---
+
 ## A split seam is merged back only where the commit vacated it
 
 **Decision.** `commit()` also runs the inverse of the split
@@ -51,6 +187,8 @@ endpoint sits on any more and prunes selected wall/item ids the committed plan n
 longer has. A selection left behind is *invisible but still live* — the handle
 isn't drawn, while an arrow key still routes to the junction nudge — which is the
 same hazard the split's weld-following solves from the other direction.
+
+---
 
 ## A mid-span T-junction is made by splitting the host, not by a new relation
 

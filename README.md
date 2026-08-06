@@ -124,3 +124,11 @@ npm run check && npx tsc -b && npm test
 
 Geometry and serialization live in pure, well-tested modules (`src/geometry`,
 `src/app/io.ts`, `src/app/history.ts`) — prefer adding logic there with tests.
+
+---
+
+## 📄 Licence
+
+Spacory is open source under the [MIT License](LICENSE) — use it, embed it, fork
+it, build on it. If you do something interesting with it, I'd love to hear about
+it.
