@@ -58,7 +58,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROMPT="$SCRIPT_DIR/product-agent-prompt.md"
 
-command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PATH" >&2; exit 1; }
+source "$SCRIPT_DIR/engine.sh"
+require_engine || exit 1
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
 # Keep the caller's exact argv so we can re-invoke ourselves verbatim inside the
@@ -206,18 +207,13 @@ land_memory() {
   echo "warning: could not land project-memory.md on main after $tries attempts (origin/main kept advancing, or network down); NOT landed" >&2
 }
 
-echo "→ Product Agent  [$MODE]${NUM:+ #$NUM}  running…" >&2
-
-args=( -p "$TASK"
-       --append-system-prompt-file "$PROMPT"
-       --permission-mode "$PERMISSION_MODE" )
-[ -n "${CLAUDE_MODEL:-}" ] && args+=( --model "$CLAUDE_MODEL" )
-[ -n "${CLAUDE_EFFORT:-}" ] && args+=( --effort "$CLAUDE_EFFORT" )
+echo "→ Product Agent  [$MODE]${NUM:+ #$NUM}  (engine: $(spacory_engine))  running…" >&2
 
 # Not `exec`: we need to land project-memory.md from this worktree before it's torn
-# down by the wrapper's cleanup trap.
+# down by the wrapper's cleanup trap. launch_agent dispatches to the selected engine
+# (claude | codex) and returns its exit code.
 set +e
-claude "${args[@]}"
+launch_agent "$TASK" "$PROMPT" "$PERMISSION_MODE"
 rc=$?
 set -e
 

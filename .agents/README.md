@@ -173,17 +173,27 @@ back for a fresh review round against the updated spec; because editing the issu
 resets the review-round budget, refining a spec this way never trips the loop's
 non-convergence cap. See [`../docs/AUTOMATION.md`](../docs/AUTOMATION.md).
 
-Each script launches a **fresh, headless** `claude` session (`-p`) whose prompt leads
-with the `/<role>-agent <mode> [number]` slash form — so Claude Code deterministically
-expands the role skill (the documented user-invoked path) rather than leaving it to the
-model — with the matching shim appended as the system prompt, runs from the repo root,
-and validates its input. Useful env overrides:
+Each script launches a **fresh, headless** agent session whose prompt leads with the
+`/<role>-agent <mode> [number]` slash form — so Claude Code deterministically expands
+the role skill (the documented user-invoked path) rather than leaving it to the model —
+with the matching shim appended as the system prompt, runs from the repo root, and
+validates its input. The actual CLI launch is factored into an **engine adapter**
+(`engine.sh`) so the same runner drives either Claude Code or OpenAI Codex; everything
+else (the dispatcher, the six skills, `notify.sh`, the worktree isolation) is
+engine-agnostic. Useful env overrides:
 
+- `SPACORY_AGENT_ENGINE` (default `claude`) — set `codex` to drive OpenAI Codex
+  instead. Codex has no skill loader or `--append-system-prompt-file`, so the adapter
+  folds the shim + a note ("read `.claude/skills/<name>/SKILL.md`") into the prompt and
+  maps the permission mode onto Codex's `--sandbox`/`approval_policy` flags. See the
+  [Codex section](#with-codex-instead-of-claude-code) below.
 - `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
-  fully unattended run in a trusted environment.
-- `CLAUDE_MODEL` / `CLAUDE_EFFORT` — pin the model and reasoning effort; default to
-  the CLI session defaults. This repo defaults to `sonnet` at `medium` in
-  `.agents/.env`.
+  fully unattended run in a trusted environment. Under `codex` this maps to
+  `--dangerously-bypass-approvals-and-sandbox` (vs. sandboxed workspace-write).
+- `CLAUDE_MODEL` / `CLAUDE_EFFORT` — pin the model and reasoning effort for the `claude`
+  engine; default to the CLI session defaults. This repo defaults to `sonnet` at
+  `medium` in `.agents/.env`. For `codex`, use `CODEX_MODEL` instead (effort is
+  Claude-only).
 
 > **Config surface:** `dispatch.sh` sources `.agents/.env` (gitignored) and exports
 > it, so that file is the single place to set any of these knobs — `CLAUDE_MODEL`,
@@ -217,6 +227,34 @@ without the wrapper scripts — just invoke the skill and name the mode:
 The shared skills work standalone too — e.g. `/spacory-verify` to run the definition
 of done, or `/spacory-conventions` to load the repo's code conventions. This is the
 same behaviour the headless runs use, so the two never drift.
+
+### With Codex instead of Claude Code
+
+The agents are engine-pluggable, so a contributor who uses **OpenAI Codex** can run the
+exact same roles off the exact same skills — no Claude Code required.
+
+**Headless / dispatcher.** Set the engine once in `.agents/.env`:
+
+```bash
+SPACORY_AGENT_ENGINE=codex
+CODEX_MODEL=gpt-5-codex        # optional; else Codex's own default
+```
+
+Then everything works unchanged — `.agents/run-engineer.sh implement 42`,
+`.agents/run-product.sh acceptance 14`, and the timer-driven `dispatch.sh` all route
+through Codex. Codex reads `AGENTS.md` (a pointer to `CLAUDE.md`) the way Claude Code
+reads `CLAUDE.md`; the adapter inlines the role shim and tells Codex to read each
+`.claude/skills/<name>/SKILL.md` where the instructions say to invoke a skill.
+
+**Interactive.** Install the repo's Codex custom prompts once to get `/engineer-agent`
+and `/product-agent` slash commands in a `codex` session:
+
+```bash
+.agents/codex/install-prompts.sh      # symlinks into ~/.codex/prompts (idempotent)
+```
+
+Then, in `codex`: `/engineer-agent implement 42`, `/product-agent triage 9`, etc. —
+the same mode words as the Claude skills.
 
 ### Manual: feed the prompt yourself
 
@@ -300,7 +338,9 @@ so the prompts never embed a token and headless runs need just one permission ru
 > `sandbox.network.allowedDomains`. Permissions gate *what runs* (the helper); the
 > sandbox gates *what it can reach* (only Telegram). `bypassPermissions` skips prompts
 > but does **not** lift the network sandbox, so the domain allowlist is required either
-> way.
+> way. Under the **`codex`** engine this allowlist doesn't apply — the adapter grants
+> network via Codex's own sandbox (`sandbox_workspace_write.network_access=true`, or
+> full access under `bypassPermissions`), which is not domain-scoped.
 
 **Credentials are never stored in the committed prompt files** — they live in a
 gitignored env file (or, in CI, repository secrets). To enable notifications:

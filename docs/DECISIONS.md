@@ -5,6 +5,36 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## The agents are engine-pluggable (Claude Code **or** Codex)
+
+The Product / Engineer automation is CLI-agnostic: `SPACORY_AGENT_ENGINE`
+(`claude` default | `codex`) picks which coding-agent CLI the headless runners
+drive. The engine-specific launch is the *only* thing that varies — it's factored
+into `.agents/engine.sh` (`launch_agent`), which both `run-engineer.sh` and
+`run-product.sh` call. `dispatch.sh`, the six `.claude/skills/*/SKILL.md`
+contracts, `notify.sh`, and the worktree isolation are untouched.
+
+**Why an adapter, not a fork.** The roles' whole substance lives in the skills —
+plain Markdown that references sibling skills by path and does its work through
+`gh`/`git`/`npm`. Nothing there is Claude-specific. Only two things are: Claude
+Code's `--append-system-prompt-file` (inject the role shim) and its `/role-agent
+<mode>` slash form (auto-load the skill). Codex has neither, so the codex backend
+folds the shim into the prompt and prepends a one-paragraph note mapping "invoke
+the `<name>` skill" and the slash line onto "read `.claude/skills/<name>/SKILL.md`
+and follow it." So the same skills drive both engines with zero duplication — the
+alternative (parallel Codex copies of every skill) would double the surface and
+guarantee drift.
+
+**Permission mapping.** `CLAUDE_PERMISSION_MODE` maps onto Codex's sandbox/approval
+model: `acceptEdits` → `--sandbox workspace-write` with `approval_policy=never` and
+`network_access=true` (writes the repo, reaches `gh`/Telegram, never stalls on a
+prompt); `bypassPermissions` → `--dangerously-bypass-approvals-and-sandbox`. Model
+selection is `CODEX_MODEL` (Claude model names don't transfer), and `CLAUDE_EFFORT`
+is Claude-only. `AGENTS.md` is a thin pointer to `CLAUDE.md` so Codex's
+auto-discovered instructions file stays a single source of truth. Interactive Codex
+users get `/engineer-agent` / `/product-agent` by symlinking the repo's prompts into
+`~/.codex/prompts` (`.agents/codex/install-prompts.sh`).
+
 ## Licence: MIT
 
 **Decision.** Spacory is licensed **MIT**. The repo had called itself "open
