@@ -7,7 +7,10 @@ same guidance Claude Code reads from `CLAUDE.md`.
 it covers what Spacory is, the commands, the definition of done, conventions, and
 the branch → PR → green-CI workflow.
 
-The Product / Engineer agent contracts are Markdown "skills" under
-[`.claude/skills/`](.claude/skills/); they're plain files any agent can read and
-follow. The headless runners work with either engine — set `SPACORY_AGENT_ENGINE`
-(`claude` | `codex`). See [`.agents/README.md`](.agents/README.md).
+The Product / Engineer / Reviewer contracts are canonical Markdown under
+[`.agents/instructions/`](.agents/instructions/). Existing Claude skills remain
+byte-identical compatibility copies under [`.claude/skills/`](.claude/skills/);
+run `npm run agents:sync` after canonical edits. The headless shell adapter supports
+Claude and Codex with explicit provider/model overrides by role and mode. Codex
+requires `CODEX_HOME` from the calling environment; never store account paths in
+repository configuration. See [`.agents/README.md`](.agents/README.md).
