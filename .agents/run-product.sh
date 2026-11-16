@@ -59,7 +59,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROMPT="$SCRIPT_DIR/product-agent-prompt.md"
 
 source "$SCRIPT_DIR/engine.sh"
-require_engine || exit 1
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
 # Keep the caller's exact argv so we can re-invoke ourselves verbatim inside the
@@ -85,6 +84,10 @@ case "${1:-}" in
     ;;
 esac
 EXTRA="${*:-}"
+
+ROLE=product
+configure_agent "$ROLE" "$MODE" || exit 1
+require_engine || exit 1
 
 # Verify GitHub auth (bash, zero model cost) — after arg validation so a usage error
 # still reports usage. The agent works entirely through gh, so fail loud now rather

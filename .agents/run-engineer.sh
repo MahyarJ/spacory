@@ -64,7 +64,6 @@ PROMPT="$SCRIPT_DIR/engineer-agent-prompt.md"
 # The Claude/Codex coupling lives entirely in the engine adapter; pick the CLI
 # with SPACORY_AGENT_ENGINE (default: claude). See engine.sh.
 source "$SCRIPT_DIR/engine.sh"
-require_engine || exit 1
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
 usage() {
@@ -90,6 +89,11 @@ case "$NUM" in
 esac
 shift
 EXTRA="${*:-}"
+
+ROLE=engineer
+[ "$MODE" != review ] || ROLE=reviewer
+configure_agent "$ROLE" "$MODE" || exit 1
+require_engine || exit 1
 
 # Verify GitHub auth (bash, zero model cost) — after arg validation so a usage error
 # still reports usage. The agent works entirely through gh (and git), so fail loud

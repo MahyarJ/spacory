@@ -9,12 +9,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:agents",
     "test:watch": "vitest",
     "lint": "biome lint",
     "format": "biome format --write",
     "check": "biome check",
-    "check:fix": "biome check --write"
+    "check:fix": "biome check --write",
+    "test:agents": "node --test .agents/tests/*.test.mjs",
+    "agents:sync": "node .agents/sync-instructions.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
