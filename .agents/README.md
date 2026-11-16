@@ -338,8 +338,12 @@ After validation or execution, shell callers can inspect:
 CLI stdout/stderr stream immediately through separate `tee` readers while being
 captured in a private temporary directory. Both readers are drained before results
 are retained in shell variables, including trailing newlines. Stdin is forwarded
-unchanged. Capture resources belong to a subshell with EXIT/HUP/INT/TERM cleanup;
-caller traps and file descriptors are preserved. No post-run replay duplicates
+unchanged. The runner waits on a background capture worker and forwards handled
+HUP/INT/TERM signals to it. The worker stops and reaps its CLI/readers before the
+runner removes the capture directory. Original signal handlers run after cleanup;
+explicitly ignored signals remain ignored. Default cancellation exits with
+129/130/143 for HUP/INT/TERM, allowing the caller's EXIT trap to run. Caller traps
+and file descriptors are restored. No post-run replay duplicates
 output. Ordering within each stream is preserved; cross-stream scheduling remains
 subject to the operating system. Bash result strings represent text, not NUL-bearing
 binary output. Uncatchable termination such as SIGKILL cannot run cleanup traps.

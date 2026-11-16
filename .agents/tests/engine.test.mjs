@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import {
   cpSync,
   existsSync,
@@ -54,10 +55,10 @@ function fixture() {
   }
   const mock = `#!${process.execPath}
 const fs = require('node:fs');
-fs.appendFileSync(process.env.CALLS, JSON.stringify({cli: require('node:path').basename(process.argv[1]), args: process.argv.slice(2), home: process.env.CODEX_HOME}) + '\\n');
+fs.appendFileSync(process.env.CALLS, JSON.stringify({cli: require('node:path').basename(process.argv[1]), args: process.argv.slice(2), home: process.env.CODEX_HOME, pid: process.pid, ppid: process.ppid}) + '\\n');
 const cli = require('node:path').basename(process.argv[1]);
 const code = Number((cli === 'claude' || cli === 'codex') ? (process.env.MOCK_EXIT || 0) : 0);
-if (process.env.MOCK_GATE === '1') {
+if (process.env.MOCK_GATE === '1' && (cli === 'claude' || cli === 'codex')) {
   process.stdout.write('stdout-before\\n');
   process.stderr.write('stderr-before\\n');
   process.stdin.once('data', () => {
@@ -66,7 +67,7 @@ if (process.env.MOCK_GATE === '1') {
     process.stdin.destroy();
     process.exitCode = code;
   });
-} else if (process.env.MOCK_SIGNAL_PARENT === '1') {
+} else if (process.env.MOCK_SIGNAL_PARENT === '1' && (cli === 'claude' || cli === 'codex')) {
   process.kill(process.ppid, 'SIGTERM');
   process.stdin.resume();
 } else {
@@ -809,4 +810,170 @@ test("stream readers drain large outputs without changing the raw failure exit",
       name.startsWith("spacory-agent-result."),
     ),
   );
+});
+
+// Signal only the public runner PID, not the capture worker or process group.
+// A detached group gives failed tests a bounded, mock-only cleanup fallback.
+async function cancellationFixture(provider, script) {
+  const f = fixture();
+  const child = spawn(
+    "/bin/bash",
+    script
+      ? ["-c", script, "caller", engine, f.shim]
+      : [path.join(root, ".agents/run-engineer.sh"), "implement", "14"],
+    {
+      cwd: root,
+      env: { ...f.env, SPACORY_AGENT_ENGINE: provider, MOCK_GATE: "1" },
+      detached: true,
+    },
+  );
+  const exited = once(child, "exit");
+  let stdout = "";
+  let stderr = "";
+  let readyResolve;
+  const ready = new Promise((resolve) => {
+    readyResolve = resolve;
+  });
+  const checkReady = () => {
+    if (
+      stdout.includes("stdout-before\n") &&
+      stderr.includes("stderr-before\n")
+    )
+      readyResolve();
+  };
+  child.stdout.on("data", (data) => {
+    stdout += data;
+    checkReady();
+  });
+  child.stderr.on("data", (data) => {
+    stderr += data;
+    checkReady();
+  });
+  const stopGroup = () => {
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
+    }
+  };
+  const timer = setTimeout(stopGroup, 10000);
+  try {
+    await Promise.race([
+      ready,
+      exited.then(() => {
+        throw new Error(`runner exited before mock CLI was ready: ${stderr}`);
+      }),
+    ]);
+  } catch (error) {
+    clearTimeout(timer);
+    stopGroup();
+    throw error;
+  }
+  return {
+    ...f,
+    child,
+    exited,
+    finish: () => {
+      clearTimeout(timer);
+      stopGroup();
+    },
+  };
+}
+
+for (const [provider, signal, code] of [
+  ["claude", "SIGTERM", 143],
+  ["claude", "SIGINT", 130],
+  ["claude", "SIGHUP", 129],
+  ["codex", "SIGTERM", 143],
+]) {
+  test(`${provider}: ${signal} to the public runner stops the CLI and removes captures`, async () => {
+    const f = await cancellationFixture(provider);
+    try {
+      const cli = f.calls().find((call) => call.cli === provider);
+      assert.ok(cli);
+      f.child.kill(signal);
+      const [exitCode, exitSignal] = await f.exited;
+      assert.equal(exitCode, code);
+      assert.equal(exitSignal, null);
+      for (const pid of [cli.pid, cli.ppid]) {
+        assert.throws(
+          () => process.kill(pid, 0),
+          { code: "ESRCH" },
+          `process ${pid} must be reaped before the runner exits`,
+        );
+      }
+      assert.ok(
+        !readdirSync(f.dir).some((name) =>
+          name.startsWith("spacory-agent-result."),
+        ),
+      );
+    } finally {
+      f.finish();
+    }
+  });
+}
+
+test("runner cancellation invokes the original signal handler after cleanup and restores traps", async () => {
+  const f = await cancellationFixture(
+    "claude",
+    `set -euo pipefail
+source "$1"
+trap 'printf exit > "$TMPDIR/caller-exit"' EXIT
+trap 'for dir in "$TMPDIR"/spacory-agent-result.*; do [ ! -d "$dir" ] || exit 99; done; printf term > "$TMPDIR/caller-term"' TERM
+trap -p EXIT HUP INT TERM > "$TMPDIR/traps-before"
+rc=0
+launch_agent task "$2" acceptEdits || rc=$?
+trap -p EXIT HUP INT TERM > "$TMPDIR/traps-after"
+exit "$rc"`,
+  );
+  try {
+    f.child.kill("SIGTERM");
+    const [code] = await f.exited;
+    assert.equal(code, 143);
+    assert.equal(readFileSync(path.join(f.dir, "caller-term"), "utf8"), "term");
+    assert.equal(readFileSync(path.join(f.dir, "caller-exit"), "utf8"), "exit");
+    assert.equal(
+      readFileSync(path.join(f.dir, "traps-before"), "utf8"),
+      readFileSync(path.join(f.dir, "traps-after"), "utf8"),
+    );
+    assert.ok(
+      !readdirSync(f.dir).some((name) =>
+        name.startsWith("spacory-agent-result."),
+      ),
+    );
+  } finally {
+    f.finish();
+  }
+});
+
+test("an explicitly ignored caller signal remains ignored during execution", async () => {
+  const f = await cancellationFixture(
+    "claude",
+    `set -euo pipefail
+source "$1"
+trap '' TERM
+trap -p EXIT HUP INT TERM > "$TMPDIR/traps-before"
+rc=0
+launch_agent task "$2" acceptEdits || rc=$?
+trap -p EXIT HUP INT TERM > "$TMPDIR/traps-after"
+exit "$rc"`,
+  );
+  try {
+    f.child.kill("SIGTERM");
+    f.child.stdin.end("continue\n");
+    const [code, signal] = await f.exited;
+    assert.equal(code, 0);
+    assert.equal(signal, null);
+    assert.equal(
+      readFileSync(path.join(f.dir, "traps-before"), "utf8"),
+      readFileSync(path.join(f.dir, "traps-after"), "utf8"),
+    );
+    assert.ok(
+      !readdirSync(f.dir).some((name) =>
+        name.startsWith("spacory-agent-result."),
+      ),
+    );
+  } finally {
+    f.finish();
+  }
 });

@@ -76,13 +76,15 @@ require_engine() {
   command -v "$provider" >/dev/null 2>&1 || { _spacory_config_error "'$provider' CLI not found on PATH"; return 1; }
 }
 
-# A subshell owns all temporary resources and traps. FD 3/4 are the caller's
+# The background worker owns its CLI/readers. FD 3/4 are the caller's
 # stdout/stderr; stdout itself returns only Bash-quoted result assignments.
 # Private provider launchers exec here so cli_pid is the actual CLI process.
-_spacory_stream_agent() (
+_spacory_stream_agent() {
   # Subshell variables survive explicit exit until EXIT traps run on Bash 3.2.
-  capture='' cli_pid='' stdout_pid='' stderr_pid='' rc=0 output='' errors=''
+  capture="$1"; shift
+  cli_pid='' stdout_pid='' stderr_pid='' rc=0 output='' errors=''
   _spacory_cleanup_capture() {
+    trap '' HUP INT TERM
     local pid
     for pid in "$cli_pid" "$stdout_pid" "$stderr_pid"; do
       [ -z "$pid" ] || { kill -TERM "$pid" 2>/dev/null || :; }
@@ -92,14 +94,12 @@ _spacory_stream_agent() (
     done
     if [ -n "$capture" ]; then
       rm -f "$capture/stdout" "$capture/stderr" "$capture/stdout.pipe" "$capture/stderr.pipe"
-      rmdir "$capture"
     fi
   }
   trap _spacory_cleanup_capture EXIT
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
-  capture="$(mktemp -d "${TMPDIR:-/tmp}/spacory-agent-result.XXXXXX")" || exit 1
   mkfifo "$capture/stdout.pipe" "$capture/stderr.pipe" || exit 1
   tee "$capture/stdout" <"$capture/stdout.pipe" >&3 &
   stdout_pid=$!
@@ -123,7 +123,7 @@ _spacory_stream_agent() (
   printf 'SPACORY_AGENT_RESULT_STDOUT=%q\n' "${output%.}"
   printf 'SPACORY_AGENT_RESULT_STDERR=%q\n' "${errors%.}"
   printf 'SPACORY_AGENT_RESULT_EXIT_CODE=%q\n' "$rc"
-)
+}
 
 launch_agent() {
   require_engine || return
@@ -135,12 +135,72 @@ launch_agent() {
       *) _spacory_config_error "unsupported Codex permission mapping: $3"; return 1 ;;
     esac
   fi
-  local metadata stream_rc=0 rc
+  local metadata stream_rc=0 rc result_dir='' worker='' launch_signal=''
+  local saved_hup saved_int saved_term saved_signal signal_rc
   if [ "$(spacory_engine)" = codex ]; then
     _prepare_codex_contract "$1" || return
   fi
-  # Scope FD changes to this block; preserve caller descriptors and traps.
-  { metadata="$(_spacory_stream_agent "$@")" || stream_rc=$?; } 3>&1 4>&2
+  saved_hup="$(trap -p HUP)"
+  saved_int="$(trap -p INT)"
+  saved_term="$(trap -p TERM)"
+  # Waiting on a background worker lets Bash run these traps immediately. A
+  # foreground command substitution would defer cancellation or orphan the CLI.
+  # Keep explicitly ignored signals ignored; other handlers run after cleanup.
+  case "$saved_hup" in "trap -- '' SIGHUP") ;; *)
+    trap '[ -n "$launch_signal" ] || launch_signal=HUP; [ -z "$worker" ] || kill -TERM "$worker" 2>/dev/null || :' HUP ;;
+  esac
+  case "$saved_int" in "trap -- '' SIGINT") ;; *)
+    trap '[ -n "$launch_signal" ] || launch_signal=INT; [ -z "$worker" ] || kill -TERM "$worker" 2>/dev/null || :' INT ;;
+  esac
+  case "$saved_term" in "trap -- '' SIGTERM") ;; *)
+    trap '[ -n "$launch_signal" ] || launch_signal=TERM; [ -z "$worker" ] || kill -TERM "$worker" 2>/dev/null || :' TERM ;;
+  esac
+  result_dir="$(mktemp -d "${TMPDIR:-/tmp}/spacory-agent-result.XXXXXX")" || stream_rc=$?
+  if [ "$stream_rc" -eq 0 ] && [ -z "$launch_signal" ]; then
+    # Scope FD changes to this block; the parent owns the directory/metadata.
+    {
+      _spacory_stream_agent "$result_dir" "$@" >"$result_dir/result" <&0 &
+      worker=$!
+      # Also cover a signal delivered between spawning and recording the PID.
+      [ -z "$launch_signal" ] || kill -TERM "$worker" 2>/dev/null || :
+      wait "$worker" || stream_rc=$?
+      if [ -n "$launch_signal" ]; then
+        # wait may return as soon as its trap runs; reap the worker only after
+        # it has stopped its CLI/readers and completed its own cleanup.
+        while kill -0 "$worker" 2>/dev/null; do wait "$worker" || :; done
+      fi
+      worker=''
+    } 3>&1 4>&2
+  fi
+  if [ "$stream_rc" -eq 0 ] && [ -z "$launch_signal" ]; then
+    metadata="$(cat "$result_dir/result")" || stream_rc=$?
+  fi
+  if [ -n "$result_dir" ]; then
+    rm -f "$result_dir/result" "$result_dir/stdout" "$result_dir/stderr" "$result_dir/stdout.pipe" "$result_dir/stderr.pipe"
+    rmdir "$result_dir"
+  fi
+  trap - HUP INT TERM
+  eval "$saved_hup"
+  eval "$saved_int"
+  eval "$saved_term"
+  if [ -n "$launch_signal" ]; then
+    case "$launch_signal" in
+      HUP) saved_signal="$saved_hup"; signal_rc=129 ;;
+      INT) saved_signal="$saved_int"; signal_rc=130 ;;
+      TERM) saved_signal="$saved_term"; signal_rc=143 ;;
+    esac
+    SPACORY_AGENT_RESULT_EXIT_CODE="$signal_rc"
+    SPACORY_AGENT_RESULT_STATUS=execution_error
+    if [ -n "$saved_signal" ]; then
+      # trap -p supplies Bash-quoted handler text and signal name. Decode the
+      # original handler and run it once, after resources/traps are restored.
+      eval "set -- ${saved_signal#trap -- }"
+      eval "$1"
+      return "$signal_rc"
+    fi
+    # Default cancellation terminates the runner, allowing its EXIT trap to run.
+    exit "$signal_rc"
+  fi
   if [ "$stream_rc" -ne 0 ]; then
     SPACORY_AGENT_RESULT_EXIT_CODE="$stream_rc"
     SPACORY_AGENT_RESULT_STATUS=execution_error

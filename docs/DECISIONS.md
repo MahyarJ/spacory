@@ -46,7 +46,10 @@ selects a default account, authenticates, or falls back to another provider.
 
 **Streaming results and compatibility limits.** Separate FIFO/tee readers stream
 and capture stdout/stderr, then drain before shell results are collected. A
-subshell owns cleanup traps, preserving caller traps and stdin forwarding. Raw
+background worker owns CLI/reader cleanup. The runner forwards cancellation,
+waits for the worker, removes captures, then restores caller traps and invokes
+any original signal handler. Ignored signals remain ignored; default cancellation
+exits with 128 + signal number so EXIT cleanup still runs. Stdin forwarding and raw
 CLI exit codes remain unchanged; known failed-process diagnostics are classified
 as configuration/authentication errors, and unknown failures as execution errors.
 Classification is best effort. Capture interruption can leave result strings
