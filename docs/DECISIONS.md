@@ -5,35 +5,63 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
-## The agents are engine-pluggable (Claude Code **or** Codex)
+## Share canonical agent contracts through small Claude/Codex adapters
 
-The Product / Engineer automation is CLI-agnostic: `SPACORY_AGENT_ENGINE`
-(`claude` default | `codex`) picks which coding-agent CLI the headless runners
-drive. The engine-specific launch is the *only* thing that varies — it's factored
-into `.agents/engine.sh` (`launch_agent`), which both `run-engineer.sh` and
-`run-product.sh` call. `dispatch.sh`, the six `.claude/skills/*/SKILL.md`
-contracts, `notify.sh`, and the worktree isolation are untouched.
+**Decision.** Extend PR #108's Bash execution adapter instead of rewriting the
+GitHub-label state machine. `.agents/engine.sh` resolves configuration and returns
+normalized shell results; `.agents/providers/{claude,codex}.sh` own CLI arguments
+and provider loading. Product, Engineer, and Reviewer contracts are independent
+of the selected provider. Reviewer remains Engineer **review** mode with the same
+entry point, comment header, and verdicts; it gains independent configuration,
+not a new pipeline stage.
 
-**Why an adapter, not a fork.** The roles' whole substance lives in the skills —
-plain Markdown that references sibling skills by path and does its work through
-`gh`/`git`/`npm`. Nothing there is Claude-specific. Only two things are: Claude
-Code's `--append-system-prompt-file` (inject the role shim) and its `/role-agent
-<mode>` slash form (auto-load the skill). Codex has neither, so the codex backend
-folds the shim into the prompt and prepends a one-paragraph note mapping "invoke
-the `<name>` skill" and the slash line onto "read `.claude/skills/<name>/SKILL.md`
-and follow it." So the same skills drive both engines with zero duplication — the
-alternative (parallel Codex copies of every skill) would double the surface and
-guarantee drift.
+**One canonical contract, compatible Claude skills.** Role/shared Markdown lives
+in `.agents/instructions/`. The existing `.claude/skills/` files retain their
+original content and discovery metadata as byte-identical compatibility copies.
+`npm run agents:sync` refreshes those copies; mocked tests check equality. The
+`ship` skill stays in `.claude/skills/`. Claude keeps its existing task/slash text,
+role shim, skill names, and launch arguments. Native skill expansion is the
+installed Claude CLI's responsibility, not a guarantee made by this adapter.
 
-**Permission mapping.** `CLAUDE_PERMISSION_MODE` maps onto Codex's sandbox/approval
-model: `acceptEdits` → `--sandbox workspace-write` with `approval_policy=never` and
-`network_access=true` (writes the repo, reaches `gh`/Telegram, never stalls on a
-prompt); `bypassPermissions` → `--dangerously-bypass-approvals-and-sandbox`. Model
-selection is `CODEX_MODEL` (Claude model names don't transfer), and `CLAUDE_EFFORT`
-is Claude-only. `AGENTS.md` is a thin pointer to `CLAUDE.md` so Codex's
-auto-discovered instructions file stays a single source of truth. Interactive Codex
-users get `/engineer-agent` / `/product-agent` by symlinking the repo's prompts into
-`~/.codex/prompts` (`.agents/codex/install-prompts.sh`).
+**Codex receives instructions directly.** Before launching Codex, the adapter
+resolves the selected role/mode against its own checkout, validates the exact
+canonical role and three shared files, and embeds their text alongside the shim
+and task. Reviewer also includes the Engineer contract it references. Missing,
+empty, unreadable, or ambiguous contract selection fails before a CLI process.
+This replaces the earlier generic note asking the model to find skill files.
+Interactive Codex prompt files remain optional references to the same contracts;
+their installer never starts an agent and requires `--force` to replace unrelated
+files/symlinks. It unlinks symlinks rather than overwriting their targets, refuses
+directories, and preflights both prompt destinations before installation.
+
+**Explicit provider, model, and account selection.** Provider and model each
+resolve from role+mode to role to global settings. `SPACORY_AGENT_PROVIDER`
+precedes the legacy `SPACORY_AGENT_ENGINE`; absent overrides, Claude remains the
+default. Models fall back to the selected provider's `CLAUDE_MODEL` or
+`CODEX_MODEL`, then its CLI default. `CLAUDE_EFFORT` remains Claude-only; model
+names do not transfer across providers. Codex requires an explicitly supplied,
+absolute, accessible `CODEX_HOME` directory from the calling environment. Account
+paths and credentials stay outside repository configuration. The adapter never
+selects a default account, authenticates, or falls back to another provider.
+
+**Streaming results and compatibility limits.** Separate FIFO/tee readers stream
+and capture stdout/stderr, then drain before shell results are collected. A
+subshell owns cleanup traps, preserving caller traps and stdin forwarding. Raw
+CLI exit codes remain unchanged; known failed-process diagnostics are classified
+as configuration/authentication errors, and unknown failures as execution errors.
+Classification is best effort. Capture interruption can leave result strings
+incomplete, and SIGKILL cannot execute cleanup traps. Dispatcher retries and
+Product memory landing remain unchanged.
+
+**Permission flags are not live permission guarantees.** Claude retains its
+permission-mode/allowlist behavior. Codex maps `acceptEdits` to network-enabled
+workspace-write with approval policy `never`, and `bypassPermissions` to bypass
+approvals and sandbox; unsupported mappings fail explicitly. Codex does not use
+Claude's allowlist, and neither provider's flags override host restrictions or
+grant model/account access. Tests use mocked executables on a closed PATH and
+temporary accounts; native CLI loading, authentication, and actual approval
+behavior are unverified. No timer, workflow, or unattended execution is enabled.
+See [provider setup and limitations](../.agents/README.md#provider-setup-and-configuration).
 
 ## Licence: MIT
 
@@ -786,33 +814,3 @@ which can't clobber a preview committed in the same window. The sticky comment
 `pr-preview-action` posts is the preview link; we deliberately don't register a
 GitHub deployment environment for a "View deployment" button, since it only
 duplicates that comment at the cost of extra plumbing.
-
-## Keep provider execution in shell and share canonical contracts
-
-Extend PR #108's shell adapter rather than replacing the dispatcher or label
-state machine. Provider adapters own CLI arguments and instruction loading;
-role/mode selection resolves explicit provider/model overrides before launching.
-Review remains Engineer review mode, with independent Reviewer configuration and
-unchanged comment headers/verdicts.
-
-Canonical Product/Engineer/shared Markdown lives in `.agents/instructions/`.
-Claude skill files remain byte-identical compatibility copies, including discovery
-metadata, checked by deterministic tests and refreshed by `npm run agents:sync`.
-This preserves existing skill loading and behavior while letting Codex read the
-canonical files directly. Reviewer references the existing review contract.
-
-Normalized shell results carry role, mode, provider, model, status, raw exit code,
-and stdout/stderr. Separate FIFO/tee readers stream and capture both outputs,
-then drain before results are collected; a subshell owns cleanup traps so caller
-traps remain intact. Raw process exit codes are preserved. Headless Codex embeds
-the exact validated role and shared contracts before launch. The prompt installer
-preflights all destinations and requires `--force` to replace unrelated content,
-unlinking symlinks rather than writing through them. Known failed-process diagnostics classify
-configuration/authentication errors; unknown errors remain execution errors.
-Dispatcher retry behavior is unchanged.
-
-Codex requires an explicitly selected, absolute, existing `CODEX_HOME` supplied
-by the calling environment. Account paths and credentials stay outside repository
-configuration. No default-account fallback or implicit authentication is added.
-Tests use mocked executables on a closed PATH and temporary account directories;
-provider execution and orchestrator activation are outside local verification.
