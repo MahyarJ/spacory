@@ -35,7 +35,7 @@ run coordinating through GitHub.
 | | Product Agent | Engineer Agent |
 |---|---|---|
 | **Role** | Senior PM / analyst — the "what & why" | Senior engineer — the "how" |
-| **Skill** (source of truth) | [`product-agent`](../.claude/skills/product-agent/SKILL.md) | [`engineer-agent`](../.claude/skills/engineer-agent/SKILL.md) |
+| **Canonical contract** | [`product-agent`](instructions/product-agent.md) | [`engineer-agent`](instructions/engineer-agent.md) |
 | **System-prompt shim** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
 | **Modes** | `cycle` · `acceptance` · `clarify` · `triage` | `implement` · `review` · `resolve` · `clarify` |
 | **Never** | writes app code; revisits settled architecture; merges | reads `project-memory.md` or other product context; guesses on ambiguity; merges |
@@ -45,10 +45,9 @@ that mode per run.
 
 ### Where the behaviour lives: skills, not the system prompt
 
-Each role's full contract lives in a **skill** under
-[`.claude/skills/`](../.claude/skills/), so it can be **reused** both by these
-headless runs and directly in an interactive Claude Code chat (via the `/` command
-of the same name). The two `*-prompt.md` files are now **thin shims**: they set the
+Each role's full contract lives under [`.agents/instructions/`](instructions/).
+Byte-identical Claude **skill** copies under [`.claude/skills/`](../.claude/skills/)
+preserve interactive Claude Code loading via the `/` command of the same name. The two `*-prompt.md` files are now **thin shims**: they set the
 role identity and hard invariants, then tell the agent to invoke its skill.
 
 Shared building blocks each role reuses (also usable on their own in a chat):
@@ -184,7 +183,7 @@ engine-agnostic. Useful env overrides:
 
 - `SPACORY_AGENT_ENGINE` (default `claude`) — set `codex` to drive OpenAI Codex
   instead. Codex has no skill loader or `--append-system-prompt-file`, so the adapter
-  folds the shim + a note ("read `.claude/skills/<name>/SKILL.md`") into the prompt and
+  folds the shim + a note ("read `.agents/instructions/<name>.md`") into the prompt and
   maps the permission mode onto Codex's `--sandbox`/`approval_policy` flags. See the
   [Codex section](#with-codex-instead-of-claude-code) below.
 - `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
@@ -228,33 +227,115 @@ The shared skills work standalone too — e.g. `/spacory-verify` to run the defi
 of done, or `/spacory-conventions` to load the repo's code conventions. This is the
 same behaviour the headless runs use, so the two never drift.
 
-### With Codex instead of Claude Code
+### Provider setup and configuration
 
-The agents are engine-pluggable, so a contributor who uses **OpenAI Codex** can run the
-exact same roles off the exact same skills — no Claude Code required.
+The existing shell runners support `claude` (default) and `codex`. This is
+execution plumbing only: configuring a provider does not install a timer, enable
+automation, or run the dispatcher. Existing Claude commands, skill names, mode
+arguments, and verdict formats remain unchanged.
 
-**Headless / dispatcher.** Set the engine once in `.agents/.env`:
+Install the chosen CLI separately and authenticate it using that provider's
+normal setup. For Codex, first select a dedicated account directory by exporting
+`CODEX_HOME` **in the calling shell or service environment**, then authenticate
+Codex in that environment. Keep account paths and credentials outside repository
+configuration, including `.agents/.env`. The adapter requires an explicit,
+absolute, existing `CODEX_HOME`; it never substitutes `~/.codex`, copies credentials,
+or chooses a different account. A directory's existence does not prove that its
+account is authenticated: failed CLI diagnostics are classified after execution.
+Claude continues to use its existing CLI authentication configuration.
+
+Provider/model settings may be exported directly. The dispatcher already exports
+`.agents/.env` to its children; direct runner invocations do **not** source it.
+Provider and model resolve independently, from most specific to least specific:
+
+| Scope | Provider | Model |
+|---|---|---|
+| Role + mode | `SPACORY_<ROLE>_<MODE>_PROVIDER` | `SPACORY_<ROLE>_<MODE>_MODEL` |
+| Role | `SPACORY_<ROLE>_PROVIDER` | `SPACORY_<ROLE>_MODEL` |
+| Global | `SPACORY_AGENT_PROVIDER` | `SPACORY_AGENT_MODEL` |
+| Legacy fallback | `SPACORY_AGENT_ENGINE`, then `claude` | `CLAUDE_MODEL` or `CODEX_MODEL`, then CLI default |
+
+Empty values fall through. Model names are provider-specific: when mixing
+providers, use role/mode models or provider-specific legacy defaults rather than
+sharing a global model name. There is no automatic provider fallback on failure.
+`CLAUDE_EFFORT` remains Claude-only and is passed unchanged.
+
+Roles/modes are `PRODUCT` (`CYCLE`, `ACCEPTANCE`, `CLARIFY`, `TRIAGE`), `ENGINEER`
+(`IMPLEMENT`, `RESOLVE`, `RECONCILE`, `CLARIFY`), and `REVIEWER` (`REVIEW`). Review
+remains `.agents/run-engineer.sh review N` and posts the same **Engineer review**
+comment. Reviewer settings are independent of Engineer settings; when absent,
+they fall through to global/legacy settings.
+
+For example (configuration only; these assignments launch nothing):
 
 ```bash
-SPACORY_AGENT_ENGINE=codex
-CODEX_MODEL=gpt-5-codex        # optional; else Codex's own default
+export SPACORY_PRODUCT_PROVIDER=claude
+export SPACORY_ENGINEER_PROVIDER=codex
+export SPACORY_REVIEWER_PROVIDER=claude
+export SPACORY_PRODUCT_TRIAGE_MODEL=sonnet
+export SPACORY_REVIEWER_MODEL=sonnet
+# Export CODEX_HOME separately in the calling environment before using Codex.
+# Set CODEX_MODEL or SPACORY_ENGINEER_MODEL to a model available to that account.
 ```
 
-Then everything works unchanged — `.agents/run-engineer.sh implement 42`,
-`.agents/run-product.sh acceptance 14`, and the timer-driven `dispatch.sh` all route
-through Codex. Codex reads `AGENTS.md` (a pointer to `CLAUDE.md`) the way Claude Code
-reads `CLAUDE.md`; the adapter inlines the role shim and tells Codex to read each
-`.claude/skills/<name>/SKILL.md` where the instructions say to invoke a skill.
+`CLAUDE_PERMISSION_MODE` retains its existing meaning for Claude. Codex accepts
+only the established mappings: `acceptEdits` → workspace-write, approval policy
+`never`, network enabled; `bypassPermissions` → bypass approvals and sandbox.
+Other mappings fail explicitly. Neither mapping makes an account or model
+available if it is not configured/authenticated.
 
-**Interactive.** Install the repo's Codex custom prompts once to get `/engineer-agent`
-and `/product-agent` slash commands in a `codex` session:
+**Interactive Codex loading.** With the intended `CODEX_HOME` already exported,
+`.agents/codex/install-prompts.sh` links the repo's prompt files into that
+account's `prompts` directory (`--copy` copies them). It requires an existing
+account directory and never falls back to the default home. It does not log in
+or start an agent. The prompt files load the same canonical Markdown contracts.
 
-```bash
-.agents/codex/install-prompts.sh      # symlinks into ~/.codex/prompts (idempotent)
-```
+### Canonical instructions and compatibility
 
-Then, in `codex`: `/engineer-agent implement 42`, `/product-agent triage 9`, etc. —
-the same mode words as the Claude skills.
+Edit role/shared instructions in `.agents/instructions/`. Product and Engineer
+contracts keep their existing text; `reviewer.md` references the Engineer review
+contract rather than introducing a new stage or duplicating review rules.
+The `.claude/skills/{product-agent,engineer-agent,spacory-*}/SKILL.md` files are
+byte-identical compatibility copies, retaining all existing Claude discovery
+metadata and behavior. Run `npm run agents:sync` after canonical edits;
+`npm run test:agents` checks that copies match. The `ship` skill remains unchanged
+in `.claude/skills/`. Headless shims and Claude slash commands still work.
+Codex's adapter maps skill names to canonical files (falling back to the original
+skill path for names such as `ship`).
+
+### Execution results and local verification
+
+`.agents/engine.sh` retains `require_engine` and
+`launch_agent <prompt> <shim> <permission_mode>`. Runners first call
+`configure_agent <role> <mode>`. Loading the adapter starts no agent process.
+After validation or execution, shell callers can inspect:
+
+- `SPACORY_AGENT_RESULT_PROVIDER`, `MODEL`, `ROLE`, `MODE` (each with the same prefix).
+- `SPACORY_AGENT_RESULT_STATUS`: `success`, `configuration_error`,
+  `authentication_error`, or `execution_error`.
+- `SPACORY_AGENT_RESULT_EXIT_CODE`, `STDOUT`, `STDERR`.
+
+CLI stdout/stderr are captured in a temporary directory, replayed to their
+original streams after completion, and retained in shell variables (including
+trailing newlines). Temporary captures are removed on normal completion. This
+buffers output; relative timing/interleaving of the two streams is not retained.
+Results are shell state, not exported secrets or persistent logs. Inspect them in
+the same shell, without command substitution or a subshell around `launch_agent`.
+External runner callers continue to receive the original output and exit code.
+
+A CLI's exit code is returned unchanged. Preflight configuration failures return
+1. Known authentication/configuration diagnostics on nonzero exits are classified;
+unknown failures remain `execution_error`. Classification is best effort and never
+interprets successful agent text or PR verdicts. The dispatcher and its nonzero
+retry policy remain unchanged, including retries for configuration/auth errors.
+Product memory cleanup/landing behavior is also unchanged.
+
+Run `npm run test:agents` for deterministic unit tests: CLI executables are mocks
+on a closed PATH, accounts and installer destinations are temporary, and no live
+agent, dispatcher, or external mutation is used. `npm test` runs existing Vitest
+tests followed by these tests. Static checks are `npm run check`, `npx tsc -b`,
+and `bash -n` over the shell files. Live provider execution is intentionally not
+part of these checks.
 
 ### Manual: feed the prompt yourself
 

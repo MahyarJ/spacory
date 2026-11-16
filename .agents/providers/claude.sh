@@ -7,4 +7,3 @@ _launch_claude() {
   [ -n "${CLAUDE_EFFORT:-}" ] && args+=( --effort "$CLAUDE_EFFORT" )
   claude "${args[@]}"
 }
-

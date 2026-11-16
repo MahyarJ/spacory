@@ -786,3 +786,29 @@ which can't clobber a preview committed in the same window. The sticky comment
 `pr-preview-action` posts is the preview link; we deliberately don't register a
 GitHub deployment environment for a "View deployment" button, since it only
 duplicates that comment at the cost of extra plumbing.
+
+## Keep provider execution in shell and share canonical contracts
+
+Extend PR #108's shell adapter rather than replacing the dispatcher or label
+state machine. Provider adapters own CLI arguments and instruction loading;
+role/mode selection resolves explicit provider/model overrides before launching.
+Review remains Engineer review mode, with independent Reviewer configuration and
+unchanged comment headers/verdicts.
+
+Canonical Product/Engineer/shared Markdown lives in `.agents/instructions/`.
+Claude skill files remain byte-identical compatibility copies, including discovery
+metadata, checked by deterministic tests and refreshed by `npm run agents:sync`.
+This preserves existing skill loading and behavior while letting Codex read the
+canonical files directly. Reviewer references the existing review contract.
+
+Normalized shell results carry role, mode, provider, model, status, raw exit code,
+and stdout/stderr. Capturing and replaying streams buffers output, but preserves
+stream contents and process exit codes. Known failed-process diagnostics classify
+configuration/authentication errors; unknown errors remain execution errors.
+Dispatcher retry behavior is unchanged.
+
+Codex requires an explicitly selected, absolute, existing `CODEX_HOME` supplied
+by the calling environment. Account paths and credentials stay outside repository
+configuration. No default-account fallback or implicit authentication is added.
+Tests use mocked executables on a closed PATH and temporary account directories;
+provider execution and orchestrator activation are outside local verification.
