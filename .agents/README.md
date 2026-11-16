@@ -288,7 +288,12 @@ available if it is not configured/authenticated.
 `.agents/codex/install-prompts.sh` links the repo's prompt files into that
 account's `prompts` directory (`--copy` copies them). It requires an existing
 account directory and never falls back to the default home. It does not log in
-or start an agent. The prompt files load the same canonical Markdown contracts.
+or start an agent. Existing matching links/copies are left intact; unrelated files
+or symlinks cause the whole preflight to fail before either prompt is installed.
+Use `--force` (optionally with `--copy`) to explicitly replace those destinations.
+Symlink targets are never overwritten, and directories are never replaced. A
+symlinked `prompts` directory is refused, even with `--force`. The interactive
+prompt files reference the same canonical Markdown contracts.
 
 ### Canonical instructions and compatibility
 
@@ -300,8 +305,14 @@ byte-identical compatibility copies, retaining all existing Claude discovery
 metadata and behavior. Run `npm run agents:sync` after canonical edits;
 `npm run test:agents` checks that copies match. The `ship` skill remains unchanged
 in `.claude/skills/`. Headless shims and Claude slash commands still work.
-Codex's adapter maps skill names to canonical files (falling back to the original
-skill path for names such as `ship`).
+Before headless Codex launch, the adapter resolves the exact role/mode against
+its own checkout, validates every required canonical file, and embeds the role
+contract plus all three shared contracts in the prompt. Reviewer includes both
+`reviewer.md` and its referenced Engineer contract. Missing, empty, or unreadable
+contracts fail before any CLI process starts. The legacy three-argument adapter
+API also accepts an explicit `/product-agent <mode>` or `/engineer-agent <mode>`
+first line to select the contract; ambiguous Codex prompts fail instead of guessing.
+Claude's existing prompt/skill loading is unchanged.
 
 ### Execution results and local verification
 
@@ -315,10 +326,13 @@ After validation or execution, shell callers can inspect:
   `authentication_error`, or `execution_error`.
 - `SPACORY_AGENT_RESULT_EXIT_CODE`, `STDOUT`, `STDERR`.
 
-CLI stdout/stderr are captured in a temporary directory, replayed to their
-original streams after completion, and retained in shell variables (including
-trailing newlines). Temporary captures are removed on normal completion. This
-buffers output; relative timing/interleaving of the two streams is not retained.
+CLI stdout/stderr stream immediately through separate `tee` readers while being
+captured in a private temporary directory. Both readers are drained before results
+are retained in shell variables, including trailing newlines. Stdin is forwarded
+unchanged. Capture resources belong to a subshell with EXIT/HUP/INT/TERM cleanup;
+caller traps and file descriptors are preserved. No post-run replay duplicates
+output. Ordering within each stream is preserved; cross-stream scheduling remains
+subject to the operating system.
 Results are shell state, not exported secrets or persistent logs. Inspect them in
 the same shell, without command substitution or a subshell around `launch_agent`.
 External runner callers continue to receive the original output and exit code.

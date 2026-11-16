@@ -802,8 +802,12 @@ This preserves existing skill loading and behavior while letting Codex read the
 canonical files directly. Reviewer references the existing review contract.
 
 Normalized shell results carry role, mode, provider, model, status, raw exit code,
-and stdout/stderr. Capturing and replaying streams buffers output, but preserves
-stream contents and process exit codes. Known failed-process diagnostics classify
+and stdout/stderr. Separate FIFO/tee readers stream and capture both outputs,
+then drain before results are collected; a subshell owns cleanup traps so caller
+traps remain intact. Raw process exit codes are preserved. Headless Codex embeds
+the exact validated role and shared contracts before launch. The prompt installer
+preflights all destinations and requires `--force` to replace unrelated content,
+unlinking symlinks rather than writing through them. Known failed-process diagnostics classify
 configuration/authentication errors; unknown errors remain execution errors.
 Dispatcher retry behavior is unchanged.
 

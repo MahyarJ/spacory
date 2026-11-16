@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -41,6 +43,10 @@ function fixture() {
     "mkdir",
     "ln",
     "cp",
+    "tee",
+    "mkfifo",
+    "cmp",
+    "readlink",
   ]) {
     const source = [`/bin/${name}`, `/usr/bin/${name}`].find(existsSync);
     assert.ok(source, `missing test utility ${name}`);
@@ -49,10 +55,25 @@ function fixture() {
   const mock = `#!${process.execPath}
 const fs = require('node:fs');
 fs.appendFileSync(process.env.CALLS, JSON.stringify({cli: require('node:path').basename(process.argv[1]), args: process.argv.slice(2), home: process.env.CODEX_HOME}) + '\\n');
-process.stdout.write(process.env.MOCK_STDOUT || '');
-process.stderr.write(process.env.MOCK_STDERR || '');
 const cli = require('node:path').basename(process.argv[1]);
-process.exit(Number((cli === 'claude' || cli === 'codex') ? (process.env.MOCK_EXIT || 0) : 0));
+const code = Number((cli === 'claude' || cli === 'codex') ? (process.env.MOCK_EXIT || 0) : 0);
+if (process.env.MOCK_GATE === '1') {
+  process.stdout.write('stdout-before\\n');
+  process.stderr.write('stderr-before\\n');
+  process.stdin.once('data', () => {
+    process.stdout.write('stdout-after\\n');
+    process.stderr.write('stderr-after\\n');
+    process.stdin.destroy();
+    process.exitCode = code;
+  });
+} else if (process.env.MOCK_SIGNAL_PARENT === '1') {
+  process.kill(process.ppid, 'SIGTERM');
+  process.stdin.resume();
+} else {
+  process.stdout.write(process.env.MOCK_STDOUT || '');
+  process.stderr.write(process.env.MOCK_STDERR || '');
+  process.exitCode = code;
+}
 `;
   for (const cli of ["claude", "codex", "gh", "git"]) {
     writeFileSync(path.join(bin, cli), mock, { mode: 0o755 });
@@ -68,14 +89,14 @@ process.exit(Number((cli === 'claude' || cli === 'codex') ? (process.env.MOCK_EX
     RESULT: path.join(dir, "result"),
     SPACORY_AGENT_ISOLATED: "1",
   };
-  const run = (script, overrides = {}, args = []) =>
+  const run = (script, overrides = {}, args = [], adapter = engine) =>
     spawnSync(
       "/bin/bash",
       [
         "-c",
         `set -euo pipefail\nsource "$1"\n${script}`,
         "test",
-        engine,
+        adapter,
         ...args,
       ],
       {
@@ -103,11 +124,20 @@ function launch(
   setup = "",
   permission = "acceptEdits",
   shim = f.shim,
+  adapter = engine,
 ) {
+  const selected = setup.match(
+    /configure_agent (product|engineer|reviewer) (\w+)/,
+  );
+  const taskRole =
+    selected?.[1] === "reviewer" ? "engineer" : selected?.[1] || "engineer";
+  const taskMode = selected?.[2] || "implement";
+  const task = `/${taskRole}-agent ${taskMode} 14\n\ntask with 'quotes'\nnext line`;
   const process = f.run(
     `${setup}\nrc=0\nlaunch_agent "$2" "$3" "$4" || rc=$?\n${save}\nexit "$rc"`,
     overrides,
-    ["task with 'quotes'\nnext line", shim, permission],
+    [task, shim, permission],
+    adapter,
   );
   return {
     ...process,
@@ -126,7 +156,7 @@ test("Claude legacy invocation is unchanged, with exact output and raw exit stat
   assert.equal(r.status, 0);
   assert.deepEqual(f.calls()[0].args, [
     "-p",
-    "task with 'quotes'\nnext line",
+    "/engineer-agent implement 14\n\ntask with 'quotes'\nnext line",
     "--append-system-prompt-file",
     f.shim,
     "--permission-mode",
@@ -229,9 +259,25 @@ for (const permission of ["acceptEdits", "bypassPermissions"]) {
     const call = f.calls()[0];
     assert.equal(call.home, f.env.CODEX_HOME);
     assert.equal(call.args[0], "exec");
-    assert.ok(call.args[1].startsWith("Role instructions\n\nNOTE"));
-    assert.ok(call.args[1].includes(".agents/instructions/<name>.md"));
-    assert.ok(call.args[1].endsWith("task with 'quotes'\nnext line"));
+    assert.ok(
+      call.args[1].startsWith("Role instructions\n\nCanonical instructions"),
+    );
+    assert.ok(
+      call.args[1].includes("BEGIN .agents/instructions/engineer-agent.md"),
+    );
+    assert.ok(
+      call.args[1].includes(
+        readFileSync(
+          path.join(root, ".agents/instructions/engineer-agent.md"),
+          "utf8",
+        ).trimEnd(),
+      ),
+    );
+    assert.ok(
+      call.args[1].endsWith(
+        "/engineer-agent implement 14\n\ntask with 'quotes'\nnext line",
+      ),
+    );
     assert.deepEqual(call.args.slice(2, 7), [
       "-C",
       root,
@@ -444,7 +490,7 @@ test("Claude compatibility copies match canonical contracts byte for byte", () =
 test("legacy engine selection can change between launches in the same shell", () => {
   const f = fixture();
   const r = f.run(
-    `launch_agent task "$2" acceptEdits\nSPACORY_AGENT_ENGINE=codex\nlaunch_agent task "$2" acceptEdits\n${save}`,
+    `launch_agent task "$2" acceptEdits\nSPACORY_AGENT_ENGINE=codex\nconfigure_agent engineer implement\nlaunch_agent task "$2" acceptEdits\n${save}`,
     {},
     [f.shim],
   );
@@ -473,4 +519,294 @@ test("CLI exits remain unchanged through both runners, including product cleanup
     assert.equal(r.status, 19, r.stderr);
     assert.ok(f.calls().some((c) => c.cli === "claude"));
   }
+});
+
+test("stdout and stderr stream before the mock CLI is allowed to finish", async () => {
+  const f = fixture();
+  const child = spawn(
+    "/bin/bash",
+    [
+      "-c",
+      `set -euo pipefail
+source "$1"
+rc=0
+launch_agent task "$2" acceptEdits || rc=$?
+${save}
+exit "$rc"`,
+      "stream-test",
+      engine,
+      f.shim,
+    ],
+    {
+      cwd: root,
+      env: { ...f.env, MOCK_GATE: "1", MOCK_EXIT: "17" },
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  let released = false;
+  const release = () => {
+    if (
+      !released &&
+      stdout.includes("stdout-before\n") &&
+      stderr.includes("stderr-before\n")
+    ) {
+      released = true;
+      child.stdin.end("continue\n");
+    }
+  };
+  child.stdout.on("data", (data) => {
+    stdout += data;
+    release();
+  });
+  child.stderr.on("data", (data) => {
+    stderr += data;
+    release();
+  });
+  const timer = setTimeout(() => child.kill("SIGKILL"), 10000);
+  try {
+    const code = await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    assert.ok(
+      released,
+      "both streams must arrive while the CLI is waiting for input",
+    );
+    assert.equal(code, 17);
+    const result = readFileSync(f.env.RESULT, "utf8").split("\0");
+    assert.equal(stdout, "stdout-before\nstdout-after\n");
+    assert.equal(stderr, "stderr-before\nstderr-after\n");
+    assert.equal(result[6], stdout);
+    assert.equal(result[7], stderr);
+    assert.ok(
+      !readdirSync(f.dir).some((name) =>
+        name.startsWith("spacory-agent-result."),
+      ),
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
+test("capture cleans up on interruption and preserves caller traps", () => {
+  const f = fixture();
+  const trapResult = path.join(f.dir, "caller-trap");
+  const r = f.run(
+    `trap 'printf caller-exit > "$TRAP_RESULT"' EXIT
+trap ':' TERM
+trap -p EXIT TERM > "$TMPDIR/traps-before"
+rc=0
+launch_agent task "$2" acceptEdits || rc=$?
+trap -p EXIT TERM > "$TMPDIR/traps-after"
+${save}
+exit "$rc"`,
+    { MOCK_SIGNAL_PARENT: "1", TRAP_RESULT: trapResult },
+    [f.shim],
+  );
+  assert.equal(r.status, 143, r.stderr);
+  assert.equal(readFileSync(trapResult, "utf8"), "caller-exit");
+  assert.equal(
+    readFileSync(path.join(f.dir, "traps-before"), "utf8"),
+    readFileSync(path.join(f.dir, "traps-after"), "utf8"),
+  );
+  assert.ok(
+    !readdirSync(f.dir).some((name) =>
+      name.startsWith("spacory-agent-result."),
+    ),
+    r.stderr,
+  );
+});
+
+test("stream capture quotes agent text as data and cleans up after setup failure", () => {
+  const f = fixture();
+  const text = "quotes '\" `ignored` $(ignored) \\ ";
+  const r = launch(f, {
+    MOCK_STDOUT: `${text}\n\n`,
+    MOCK_STDERR: `${text}\n`,
+    MOCK_EXIT: "29",
+  });
+  assert.equal(r.status, 29);
+  assert.equal(r.result[6], `${text}\n\n`);
+  assert.equal(r.result[7], `${text}\n`);
+  rmSync(path.join(f.bin, "mkfifo"));
+  writeFileSync(path.join(f.bin, "mkfifo"), "#!/bin/bash\nexit 1\n", {
+    mode: 0o755,
+  });
+  const failed = launch(f);
+  assert.equal(failed.status, 1, failed.stderr);
+  assert.ok(
+    !readdirSync(f.dir).some((name) =>
+      name.startsWith("spacory-agent-result."),
+    ),
+    r.stderr,
+  );
+});
+
+for (const [role, mode, names] of [
+  ["product", "triage", ["product-agent"]],
+  ["engineer", "implement", ["engineer-agent"]],
+  ["reviewer", "review", ["reviewer", "engineer-agent"]],
+]) {
+  test(`Codex embeds the exact ${role} and shared contracts independently of cwd`, () => {
+    const f = fixture();
+    const r = launch(
+      f,
+      { SPACORY_AGENT_ENGINE: "codex" },
+      `configure_agent ${role} ${mode}\ncd "$TMPDIR"`,
+    );
+    assert.equal(r.status, 0, r.stderr);
+    const prompt = f.calls()[0].args[1];
+    const expected = [
+      ...names,
+      "spacory-conventions",
+      "spacory-verify",
+      "spacory-notify",
+    ];
+    assert.deepEqual(
+      [...prompt.matchAll(/BEGIN \.agents\/instructions\/([^\n]+)\.md/g)].map(
+        (match) => match[1],
+      ),
+      expected,
+    );
+    for (const name of expected) {
+      const content = readFileSync(
+        path.join(root, `.agents/instructions/${name}.md`),
+        "utf8",
+      ).trimEnd();
+      assert.ok(
+        prompt.includes(
+          `BEGIN .agents/instructions/${name}.md\n${content}\nEND .agents/instructions/${name}.md`,
+        ),
+      );
+    }
+    assert.ok(prompt.includes(`role=${role} mode=${mode}`));
+  });
+}
+
+for (const [role, mode, name, damage] of [
+  ["product", "cycle", "product-agent", "missing"],
+  ["engineer", "implement", "engineer-agent", "empty"],
+  ["reviewer", "review", "reviewer", "missing"],
+  ["reviewer", "review", "engineer-agent", "missing"],
+  ["engineer", "resolve", "spacory-verify", "directory"],
+]) {
+  test(`Codex rejects ${damage} ${name} contract before invoking any CLI`, () => {
+    const f = fixture();
+    const copy = path.join(f.dir, "checkout/.agents");
+    mkdirSync(copy, { recursive: true });
+    for (const file of ["engine.sh", "providers", "instructions"]) {
+      cpSync(path.join(root, ".agents", file), path.join(copy, file), {
+        recursive: true,
+      });
+    }
+    const file = path.join(copy, "instructions", `${name}.md`);
+    rmSync(file);
+    if (damage === "empty") writeFileSync(file, "");
+    if (damage === "directory") mkdirSync(file);
+    const r = launch(
+      f,
+      { SPACORY_AGENT_ENGINE: "codex" },
+      `configure_agent ${role} ${mode}`,
+      "acceptEdits",
+      f.shim,
+      path.join(copy, "engine.sh"),
+    );
+    assert.equal(r.status, 1, r.stderr);
+    assert.equal(r.result[4], "configuration_error");
+    assert.ok(r.stderr.includes(`${name}.md`));
+    assert.deepEqual(f.calls(), []);
+  });
+}
+
+test("Codex refuses an ambiguous legacy prompt rather than guessing a contract", () => {
+  const f = fixture();
+  const r = f.run(
+    `rc=0; launch_agent 'unstructured task' "$2" acceptEdits || rc=$?\n${save}\nexit "$rc"`,
+    { SPACORY_AGENT_ENGINE: "codex" },
+    [f.shim],
+  );
+  assert.equal(r.status, 1);
+  assert.ok(r.stderr.includes("explicit valid role/mode"));
+  assert.deepEqual(f.calls(), []);
+});
+
+for (const kind of ["file", "symlink", "dangling", "directory"]) {
+  test(`installer preserves unrelated ${kind} destinations and preflights both prompts`, () => {
+    const f = fixture();
+    const prompts = path.join(f.env.CODEX_HOME, "prompts");
+    mkdirSync(prompts);
+    const dest = path.join(prompts, "product-agent.md");
+    const target = path.join(f.dir, "unrelated-target");
+    if (kind === "file") writeFileSync(dest, "unrelated");
+    if (kind === "directory") mkdirSync(dest);
+    if (kind === "symlink") writeFileSync(target, "unrelated target");
+    if (["symlink", "dangling"].includes(kind)) symlinkSync(target, dest);
+    const installer = path.join(root, ".agents/codex/install-prompts.sh");
+    const run = (args = []) =>
+      spawnSync("/bin/bash", [installer, ...args], {
+        env: f.env,
+        encoding: "utf8",
+        timeout: 10000,
+      });
+    assert.equal(run().status, 1);
+    assert.ok(
+      !existsSync(path.join(prompts, "engineer-agent.md")),
+      "preflight must avoid partial installation",
+    );
+    if (kind === "file") assert.equal(readFileSync(dest, "utf8"), "unrelated");
+    if (["symlink", "dangling"].includes(kind))
+      assert.equal(readlinkSync(dest), target);
+    if (kind === "symlink")
+      assert.equal(readFileSync(target, "utf8"), "unrelated target");
+    assert.equal(
+      run(["--force", "--copy"]).status,
+      kind === "directory" ? 1 : 0,
+    );
+    if (kind === "symlink")
+      assert.equal(readFileSync(target, "utf8"), "unrelated target");
+    assert.deepEqual(f.calls(), []);
+  });
+}
+
+test("installer safely converts owned links to copies and refuses symlinked prompt directories", () => {
+  const f = fixture();
+  const installer = path.join(root, ".agents/codex/install-prompts.sh");
+  const run = (args = []) =>
+    spawnSync("/bin/bash", [installer, ...args], {
+      env: f.env,
+      encoding: "utf8",
+      timeout: 10000,
+    });
+  assert.equal(run().status, 0);
+  assert.equal(run(["--copy"]).status, 0);
+  assert.equal(run().status, 0);
+  const prompts = path.join(f.env.CODEX_HOME, "prompts");
+  rmSync(prompts, { recursive: true });
+  const unrelated = path.join(f.dir, "unrelated-prompts");
+  mkdirSync(unrelated);
+  symlinkSync(unrelated, prompts);
+  assert.equal(run(["--force"]).status, 1);
+  assert.deepEqual(readdirSync(unrelated), []);
+});
+
+test("stream readers drain large outputs without changing the raw failure exit", () => {
+  const f = fixture();
+  const stdout = `${"out'\"\\$".repeat(4096)}\n\n`;
+  const stderr = `${"err'\"\\$".repeat(4096)}\n\n`;
+  const r = launch(f, {
+    MOCK_STDOUT: stdout,
+    MOCK_STDERR: stderr,
+    MOCK_EXIT: "31",
+  });
+  assert.equal(r.status, 31);
+  assert.equal(r.stdout, stdout);
+  assert.equal(r.stderr, stderr);
+  assert.equal(r.result[6], stdout);
+  assert.equal(r.result[7], stderr);
+  assert.ok(
+    !readdirSync(f.dir).some((name) =>
+      name.startsWith("spacory-agent-result."),
+    ),
+  );
 });

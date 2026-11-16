@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Source-only shell interface; no agent process launches until launch_agent is called.
 # configure_agent <role> <mode>; require_engine; launch_agent <prompt> <shim> <permissions>
-# launch_agent returns the RAW CLI exit code and replays captured stdout/stderr.
+# launch_agent returns the RAW CLI exit code while streaming and capturing stdout/stderr.
 # Result variables: SPACORY_AGENT_RESULT_{PROVIDER,MODEL,ROLE,MODE,STATUS,EXIT_CODE,STDOUT,STDERR}.
 # STATUS: success | configuration_error | authentication_error | execution_error.
 
@@ -76,6 +76,55 @@ require_engine() {
   command -v "$provider" >/dev/null 2>&1 || { _spacory_config_error "'$provider' CLI not found on PATH"; return 1; }
 }
 
+# A subshell owns all temporary resources and traps. FD 3/4 are the caller's
+# stdout/stderr; stdout itself returns only Bash-quoted result assignments.
+# Private provider launchers exec here so cli_pid is the actual CLI process.
+_spacory_stream_agent() (
+  # Subshell variables survive explicit exit until EXIT traps run on Bash 3.2.
+  capture='' cli_pid='' stdout_pid='' stderr_pid='' rc=0 output='' errors=''
+  _spacory_cleanup_capture() {
+    local pid
+    for pid in "$cli_pid" "$stdout_pid" "$stderr_pid"; do
+      [ -z "$pid" ] || { kill -TERM "$pid" 2>/dev/null || :; }
+    done
+    for pid in "$cli_pid" "$stdout_pid" "$stderr_pid"; do
+      [ -z "$pid" ] || { wait "$pid" 2>/dev/null || :; }
+    done
+    if [ -n "$capture" ]; then
+      rm -f "$capture/stdout" "$capture/stderr" "$capture/stdout.pipe" "$capture/stderr.pipe"
+      rmdir "$capture"
+    fi
+  }
+  trap _spacory_cleanup_capture EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  capture="$(mktemp -d "${TMPDIR:-/tmp}/spacory-agent-result.XXXXXX")" || exit 1
+  mkfifo "$capture/stdout.pipe" "$capture/stderr.pipe" || exit 1
+  tee "$capture/stdout" <"$capture/stdout.pipe" >&3 &
+  stdout_pid=$!
+  tee "$capture/stderr" <"$capture/stderr.pipe" >&4 &
+  stderr_pid=$!
+  case "$(spacory_engine)" in
+    claude) _launch_claude "$@" >"$capture/stdout.pipe" 2>"$capture/stderr.pipe" <&0 & ;;
+    codex) _launch_codex "$@" >"$capture/stdout.pipe" 2>"$capture/stderr.pipe" <&0 & ;;
+  esac
+  cli_pid=$!
+  wait "$cli_pid" || rc=$?
+  cli_pid=''
+  # Explicitly drain both readers before reading results or removing resources.
+  wait "$stdout_pid" || :
+  stdout_pid=''
+  wait "$stderr_pid" || :
+  stderr_pid=''
+  output="$(cat "$capture/stdout"; printf '.')"
+  errors="$(cat "$capture/stderr"; printf '.')"
+  # %q is Bash-generated shell quoting: agent text is data, never shell code.
+  printf 'SPACORY_AGENT_RESULT_STDOUT=%q\n' "${output%.}"
+  printf 'SPACORY_AGENT_RESULT_STDERR=%q\n' "${errors%.}"
+  printf 'SPACORY_AGENT_RESULT_EXIT_CODE=%q\n' "$rc"
+)
+
 launch_agent() {
   require_engine || return
   [ "$#" -eq 3 ] || { _spacory_config_error 'launch_agent requires prompt, shim, and permission mode'; return 1; }
@@ -86,23 +135,19 @@ launch_agent() {
       *) _spacory_config_error "unsupported Codex permission mapping: $3"; return 1 ;;
     esac
   fi
-  local capture rc=0
-  capture="$(mktemp -d "${TMPDIR:-/tmp}/spacory-agent-result.XXXXXX")" || { _spacory_config_error 'cannot create result capture directory'; return 1; }
-  # Conditional invocation records failures without changing the caller's errexit.
-  case "$(spacory_engine)" in
-    claude) _launch_claude "$@" >"$capture/stdout" 2>"$capture/stderr" || rc=$? ;;
-    codex) _launch_codex "$@" >"$capture/stdout" 2>"$capture/stderr" || rc=$? ;;
-  esac
-  # Sentinel preserves trailing newlines in the normalized shell strings.
-  SPACORY_AGENT_RESULT_STDOUT="$(cat "$capture/stdout"; printf '.')"
-  SPACORY_AGENT_RESULT_STDOUT="${SPACORY_AGENT_RESULT_STDOUT%.}"
-  SPACORY_AGENT_RESULT_STDERR="$(cat "$capture/stderr"; printf '.')"
-  SPACORY_AGENT_RESULT_STDERR="${SPACORY_AGENT_RESULT_STDERR%.}"
-  cat "$capture/stdout"
-  cat "$capture/stderr" >&2
-  rm -f "$capture/stdout" "$capture/stderr"
-  rmdir "$capture"
-  SPACORY_AGENT_RESULT_EXIT_CODE="$rc"
+  local metadata stream_rc=0 rc
+  if [ "$(spacory_engine)" = codex ]; then
+    _prepare_codex_contract "$1" || return
+  fi
+  # Scope FD changes to this block; preserve caller descriptors and traps.
+  { metadata="$(_spacory_stream_agent "$@")" || stream_rc=$?; } 3>&1 4>&2
+  if [ "$stream_rc" -ne 0 ]; then
+    SPACORY_AGENT_RESULT_EXIT_CODE="$stream_rc"
+    SPACORY_AGENT_RESULT_STATUS=execution_error
+    return "$stream_rc"
+  fi
+  eval "$metadata"
+  rc="$SPACORY_AGENT_RESULT_EXIT_CODE"
   if [ "$rc" -ne 0 ]; then
     SPACORY_AGENT_RESULT_STATUS=execution_error
     local diagnostics

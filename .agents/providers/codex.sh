@@ -1,16 +1,44 @@
 #!/usr/bin/env bash
 # Codex loading adapter; CODEX_HOME is validated by engine.sh.
+# Resolve against this adapter's checkout, never the caller's cwd. Legacy
+# launch_agent callers may supply the existing /role-agent mode first line.
+_prepare_codex_contract() {
+  local role="${SPACORY_AGENT_ROLE:-}" mode="${SPACORY_AGENT_MODE:-}"
+  local first command ignored name file text
+  local files=()
+  if [ -z "$role" ]; then
+    first="${1%%$'\n'*}"
+    read -r command mode ignored <<< "$first"
+    case "$command:$mode" in
+      /product-agent:*) role=product ;;
+      /engineer-agent:review) role=reviewer ;;
+      /engineer-agent:*) role=engineer ;;
+    esac
+  fi
+  case "$role:$mode" in
+    product:cycle|product:acceptance|product:clarify|product:triage) files=(product-agent) ;;
+    engineer:implement|engineer:resolve|engineer:reconcile|engineer:clarify) files=(engineer-agent) ;;
+    reviewer:review) files=(reviewer engineer-agent) ;;
+    *) _spacory_config_error 'Codex requires an explicit valid role/mode or /role-agent mode prompt'; return 1 ;;
+  esac
+  files+=(spacory-conventions spacory-verify spacory-notify)
+  _SPACORY_CODEX_CONTRACT="Canonical instructions for role=$role mode=$mode. Run exactly this mode. The contracts below are already loaded; references to these skills mean the included text."
+  for name in "${files[@]}"; do
+    file="$_SPACORY_ENGINE_DIR/instructions/$name.md"
+    [ -f "$file" ] && [ -r "$file" ] && [ -s "$file" ] || { _spacory_config_error "missing, empty, or unreadable canonical contract: $name.md"; return 1; }
+    text="$(cat "$file")" || { _spacory_config_error "cannot read canonical contract: $name.md"; return 1; }
+    _SPACORY_CODEX_CONTRACT+=$'\n\n'"BEGIN .agents/instructions/$name.md"$'\n'"$text"$'\n'"END .agents/instructions/$name.md"
+  done
+  SPACORY_AGENT_RESULT_ROLE="$role"
+  SPACORY_AGENT_RESULT_MODE="$mode"
+}
+
 _launch_codex() {
   local prompt="$1" shim="$2" mode="$3"
 
-  # Codex has no --append-system-prompt-file and no skill loader: fold the role
-  # shim + a skill-resolution note into the prompt itself. The note is what lets
-  # the canonical contracts drive Codex without copying role behavior.
-  local shim_text=""
-  [ -f "$shim" ] && shim_text="$(cat "$shim")"$'\n\n'
-  local note
-  note=$'NOTE FOR THIS RUN (Codex engine): this project\'s canonical agent instructions are plain Markdown files at .agents/instructions/<name>.md. Wherever the text below tells you to invoke or use the `<name>` skill, read .agents/instructions/<name>.md and follow it exactly. For a skill with no canonical file (such as ship), read .claude/skills/<name>/SKILL.md instead. If the prompt opens with a Claude slash-command line such as `/engineer-agent implement 2`, read it as: invoke the engineer-agent skill in "implement" mode on item #2. Do all your work through the gh and git CLIs and this repo\'s npm scripts.'
-  local full="${shim_text}${note}"$'\n\n'"${prompt}"
+  # All role/shared text was resolved and validated before any CLI process.
+  local full
+  full="$(cat "$shim")"$'\n\n'"$_SPACORY_CODEX_CONTRACT"$'\n\n'"$prompt"
 
   local args=( exec "$full" -C "$PWD" --skip-git-repo-check )
   [ -n "${SPACORY_RESOLVED_MODEL:-}" ] && args+=( -m "$SPACORY_RESOLVED_MODEL" )
@@ -27,5 +55,5 @@ _launch_codex() {
               -c sandbox_workspace_write.network_access=true ) ;;
   esac
 
-  CODEX_HOME="$CODEX_HOME" codex "${args[@]}"
+  CODEX_HOME="$CODEX_HOME" exec codex "${args[@]}"
 }

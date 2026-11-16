@@ -5,5 +5,5 @@ _launch_claude() {
   local args=( -p "$prompt" --append-system-prompt-file "$shim" --permission-mode "$mode" )
   [ -n "${SPACORY_RESOLVED_MODEL:-}" ]  && args+=( --model  "$SPACORY_RESOLVED_MODEL" )
   [ -n "${CLAUDE_EFFORT:-}" ] && args+=( --effort "$CLAUDE_EFFORT" )
-  claude "${args[@]}"
+  exec claude "${args[@]}"
 }
