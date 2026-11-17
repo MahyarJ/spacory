@@ -46,6 +46,7 @@ import {
   THEME_KEY,
   type ThemeMode,
 } from "./theming";
+import { drawingThickness, type ThicknessPreset } from "./thickness";
 import {
   computeFitView,
   DEFAULT_VIEW,
@@ -77,6 +78,8 @@ interface AppState {
   fitView: () => void;
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
+  wallThicknessPreset: ThicknessPreset | null;
+  setWallThicknessPreset: (preset: ThicknessPreset) => void;
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
@@ -323,8 +326,8 @@ export const useApp = create<AppState>((set, get) => ({
   setMeasurementSystem: (measurementSystem) => {
     const state = get();
     if (state.plan.meta.measurementSystem === measurementSystem) return;
-    set(
-      commit(
+    set({
+      ...commit(
         {
           ...state.plan,
           meta: {
@@ -335,10 +338,32 @@ export const useApp = create<AppState>((set, get) => ({
         },
         state,
       ),
-    );
+      currentWallThickness: drawingThickness(
+        measurementSystem,
+        state.wallThicknessPreset,
+        state.currentWallThickness,
+      ),
+    });
   },
-  currentWallThickness: 10, // cm default
-  setCurrentWallThickness: (t) => set({ currentWallThickness: Math.max(1, t) }),
+  wallThicknessPreset: "standard",
+  currentWallThickness: drawingThickness(
+    history.present.meta.measurementSystem,
+    "standard",
+    10,
+  ),
+  setWallThicknessPreset: (wallThicknessPreset) =>
+    set({
+      wallThicknessPreset,
+      currentWallThickness: drawingThickness(
+        get().plan.meta.measurementSystem,
+        wallThicknessPreset,
+        get().currentWallThickness,
+      ),
+    }),
+  setCurrentWallThickness: (t) => {
+    if (!Number.isFinite(t)) return;
+    set({ currentWallThickness: Math.max(1, t), wallThicknessPreset: null });
+  },
   selectedWalls: new Set(),
   selectedItems: new Set(),
   selectedConnectionPoint: null,
@@ -563,6 +588,11 @@ export const useApp = create<AppState>((set, get) => ({
     // risk a following nudge dragging the wrong walls.
     set({
       plan: history.present,
+      currentWallThickness: drawingThickness(
+        history.present.meta.measurementSystem,
+        get().wallThicknessPreset,
+        get().currentWallThickness,
+      ),
       selectedConnectionPoint: null,
       selectedConnectionPointEndpoints: [],
     });
@@ -573,6 +603,11 @@ export const useApp = create<AppState>((set, get) => ({
     persist();
     set({
       plan: history.present,
+      currentWallThickness: drawingThickness(
+        history.present.meta.measurementSystem,
+        get().wallThicknessPreset,
+        get().currentWallThickness,
+      ),
       selectedConnectionPoint: null,
       selectedConnectionPointEndpoints: [],
     });
@@ -585,6 +620,11 @@ export const useApp = create<AppState>((set, get) => ({
     persist();
     set({
       plan: history.present,
+      currentWallThickness: drawingThickness(
+        history.present.meta.measurementSystem,
+        get().wallThicknessPreset,
+        get().currentWallThickness,
+      ),
       selectedWalls: new Set(),
       selectedItems: new Set(),
       marquee: null,

@@ -852,4 +852,10 @@ Imperial lengths display tenths of an inch, with carry into feet. Editors use
 separate ft/in fields and validate the combined cm value. An unchanged rounded
 display never resizes geometry; moving focus between the two fields does not
 commit, and leaving the editor commits before a measurement-system change.
-Thickness presets retain their exact physical sizes across systems.
+Thickness presets are specific to each system: 10/15 cm in Metric and 4½″/6½″
+in Imperial, with custom overall thickness entered in cm or decimal inches.
+Preset identity stays selected when switching systems: 10 cm maps to 4½″ and
+15 cm maps to 6½″ for newly drawn walls. Custom retains its exact cm value, even
+when it happens to equal a preset. Existing walls are never resized. Drawing
+thickness and preset identity are session tool settings, separate from the plan. These are drawing conveniences based on framed partition assemblies,
+not nominal stud/block dimensions or guarantees about construction suitability.

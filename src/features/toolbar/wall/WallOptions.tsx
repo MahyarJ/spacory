@@ -1,24 +1,19 @@
-import { formatSystemLength } from "@app/format";
 import { type SelectionAction, selectionActions } from "@app/selection";
 import { useApp } from "@app/store";
 import { ICON_SIZE } from "@features/toolbar/constants";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
-import clsx from "clsx";
 import {
   SquareCenterlineDashedHorizontal,
   SquareCenterlineDashedVertical,
   Trash2,
 } from "lucide-react";
 import { LengthField } from "./LengthField";
+import { ThicknessOptions } from "./ThicknessOptions";
 import styles from "./WallOptions.module.css";
-
-const PRESETS = [7, 10, 12, 15, 20, 40]; // cm
 
 export function WallOptions() {
   const tool = useApp((s) => s.tool);
-  const currentWallThickness = useApp((s) => s.currentWallThickness);
-  const setThickness = useApp((s) => s.setCurrentWallThickness);
   const selectedWalls = useApp((s) => s.selectedWalls);
   const selectedItems = useApp((s) => s.selectedItems);
   const plan = useApp((s) => s.plan);
@@ -53,27 +48,7 @@ export function WallOptions() {
 
   return (
     <div className={styles.wallOptions}>
-      {tool === "wall" && (
-        <>
-          <span className={styles.label}>Thickness</span>
-          <div className={styles.presets}>
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={clsx(
-                  styles.pill,
-                  currentWallThickness === p && styles.active,
-                )}
-                onClick={() => setThickness(p)}
-                title={formatSystemLength(p, system)}
-              >
-                {formatSystemLength(p, system)}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {tool === "wall" && <ThicknessOptions />}
 
       {selectedWall && (
         // Key by id so a different selection resets the field's local draft.

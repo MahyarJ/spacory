@@ -63,6 +63,7 @@ function switchTo(name: string) {
 }
 beforeEach(() => {
   useApp.getState().loadPlan(plan());
+  useApp.getState().setWallThicknessPreset("standard");
   useApp.setState({ tool: "select", selectedWalls: new Set(["w0"]) });
 });
 afterEach(() => {
@@ -199,9 +200,9 @@ it("converts opening width entries and thickness preset labels", () => {
   fireEvent.submit(inches.closest("form")!);
   expect(useApp.getState().plan.items[0].wallAttach.length).toBeCloseTo(91.44);
   act(() => useApp.getState().setTool("wall"));
-  const preset = screen.getByRole("button", { name: "0′ 3.9″" });
+  const preset = screen.getByRole("button", { name: "4½″" });
   fireEvent.click(preset);
-  expect(useApp.getState().currentWallThickness).toBe(10);
+  expect(useApp.getState().currentWallThickness).toBeCloseTo(11.43);
 });
 
 it("commits both imperial inputs on Enter without waiting for blur", () => {
@@ -217,4 +218,87 @@ it("commits both imperial inputs on Enter without waiting for blur", () => {
   expect(loadPersistedHistory()?.past).toHaveLength(2);
   fireEvent.blur(inches);
   expect(loadPersistedHistory()?.past).toHaveLength(2);
+});
+
+it("keeps corresponding presets selected through system changes and undo/redo", () => {
+  useApp.setState({ tool: "wall", currentWallThickness: 10 });
+  mount();
+  expect(
+    screen.getByRole("button", { name: "10 cm" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  fireEvent.click(screen.getByRole("button", { name: "15 cm" }));
+  expect(useApp.getState().currentWallThickness).toBe(15);
+  const walls = useApp.getState().plan.walls;
+  switchTo("Imperial");
+  expect(screen.queryByRole("button", { name: "15 cm" })).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "6½″" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().currentWallThickness).toBeCloseTo(16.51);
+  fireEvent.click(screen.getByRole("button", { name: "6½″" }));
+  expect(useApp.getState().currentWallThickness).toBeCloseTo(16.51);
+  expect(screen.queryByLabelText("Custom thickness")).toBeNull();
+  switchTo("Metric");
+  expect(useApp.getState().currentWallThickness).toBe(15);
+  expect(
+    screen.getByRole("button", { name: "15 cm" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  act(() => useApp.getState().undo());
+  expect(
+    screen.getByRole("button", { name: "6½″" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  act(() => useApp.getState().redo());
+  expect(
+    screen.getByRole("button", { name: "15 cm" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().plan.walls).toEqual(walls);
+});
+
+it("edits custom overall thickness in cm or inches, rejects invalid entries, and preserves rounded values", () => {
+  useApp.setState({ tool: "wall", currentWallThickness: 10 });
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+  let input = screen.getByLabelText("Custom thickness");
+  fireEvent.change(input, { target: { value: "12.5" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(useApp.getState().currentWallThickness).toBe(12.5);
+  switchTo("Imperial");
+  input = screen.getByLabelText("Custom thickness");
+  input.focus();
+  fireEvent.blur(input);
+  expect(useApp.getState().currentWallThickness).toBe(12.5);
+  fireEvent.change(input, { target: { value: "0.1" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(useApp.getState().currentWallThickness).toBe(12.5);
+  expect((input as HTMLInputElement).value).toBe("4.92");
+  fireEvent.change(input, { target: { value: "8" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(useApp.getState().currentWallThickness).toBeCloseTo(20.32);
+  expect(screen.queryByLabelText("Custom thickness feet")).toBeNull();
+});
+
+it("keeps Custom selected even when its value happens to equal a preset", () => {
+  useApp.setState({ tool: "wall" });
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+  switchTo("Imperial");
+  expect(useApp.getState().currentWallThickness).toBe(10);
+  expect(
+    screen.getByRole("button", { name: "Custom" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  switchTo("Metric");
+  expect(
+    screen.getByRole("button", { name: "Custom" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().currentWallThickness).toBe(10);
+  fireEvent.click(screen.getByRole("button", { name: "10 cm" }));
+  switchTo("Imperial");
+  expect(
+    screen.getByRole("button", { name: "4½″" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().currentWallThickness).toBeCloseTo(11.43);
+  switchTo("Metric");
+  expect(
+    screen.getByRole("button", { name: "10 cm" }).getAttribute("aria-pressed"),
+  ).toBe("true");
 });
