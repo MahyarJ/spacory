@@ -836,3 +836,20 @@ drifting while retaining provider-specific sandbox and skill configuration.
 Codex rules require a trusted project configuration and a new session. Preserve
 the existing prefixes, including their option-order limitations, rather than
 silently broadening interpreter permissions. See [Agent command permissions](AGENT-PERMISSIONS.md).
+
+
+## Plan measurement systems (#63)
+
+Store `meta.measurementSystem` (`metric` or `imperial`) with the plan. Metric
+uses cm for lengths and m² for areas; Imperial uses feet/inches and ft².
+Coordinates, thicknesses, and snap spacing remain in cm. JSON and autosaved
+history preserve the setting; SVG/PNG measurement labels use the same formatters
+as the canvas. Legacy `meta.units` maps mm/cm/m to Metric and in/ft to Imperial,
+without rescaling geometry. Persisted legacy history is re-diffed after
+normalization so undo/redo also addresses the new metadata field.
+
+Imperial lengths display tenths of an inch, with carry into feet. Editors use
+separate ft/in fields and validate the combined cm value. An unchanged rounded
+display never resizes geometry; moving focus between the two fields does not
+commit, and leaving the editor commits before a measurement-system change.
+Thickness presets retain their exact physical sizes across systems.

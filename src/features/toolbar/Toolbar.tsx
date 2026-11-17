@@ -14,6 +14,7 @@ import {
 import type { ComponentType } from "react";
 import { ICON_SIZE } from "./constants";
 import { HintBar } from "./HintBar";
+import { MeasurementSystemSwitch } from "./MeasurementSystemSwitch";
 import { ProjectActions } from "./ProjectActions";
 import { ThemeSwitch } from "./ThemeSwitch";
 import styles from "./Toolbar.module.css";
@@ -66,6 +67,7 @@ export function Toolbar() {
           Fit
         </button>
         <div className={styles.spacer} />
+        <MeasurementSystemSwitch />
         <ProjectActions />
         <ThemeSwitch />
         <button type="button" className={styles.button} onClick={undo}>

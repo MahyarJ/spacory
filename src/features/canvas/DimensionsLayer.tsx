@@ -1,4 +1,4 @@
-import { formatLength } from "@app/format";
+import { formatSystemLength } from "@app/format";
 import { useApp } from "@app/store";
 import { getPointOnWall, getWallAngle, getWallLength } from "@geometry/wall";
 
@@ -37,7 +37,7 @@ const MIN_ON_SCREEN_PX = 24;
  */
 export function DimensionsLayer() {
   const walls = useApp((s) => s.plan.walls);
-  const units = useApp((s) => s.plan.meta.units);
+  const system = useApp((s) => s.plan.meta.measurementSystem);
   const scale = useApp((s) => s.view.scale);
 
   return (
@@ -74,7 +74,7 @@ export function DimensionsLayer() {
               strokeWidth={3}
               paintOrder="stroke"
             >
-              {formatLength(len, units)}
+              {formatSystemLength(len, system)}
             </text>
           </g>
         );

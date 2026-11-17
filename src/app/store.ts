@@ -35,6 +35,7 @@ import {
   createInitialPlan,
   type Item,
   isDoor,
+  type MeasurementSystem,
   type Plan,
   type Point,
   type Wall,
@@ -63,6 +64,7 @@ interface AppState {
   canvasSize: { width: number; height: number };
   isPanning: boolean;
   setTool: (t: Tool) => void;
+  setMeasurementSystem: (system: MeasurementSystem) => void;
   addWall: (w: Wall) => void;
   addItem: (i: Item) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
@@ -318,6 +320,23 @@ export const useApp = create<AppState>((set, get) => ({
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
   setTool: (t) => set({ tool: t }),
+  setMeasurementSystem: (measurementSystem) => {
+    const state = get();
+    if (state.plan.meta.measurementSystem === measurementSystem) return;
+    set(
+      commit(
+        {
+          ...state.plan,
+          meta: {
+            ...state.plan.meta,
+            measurementSystem,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        state,
+      ),
+    );
+  },
   currentWallThickness: 10, // cm default
   setCurrentWallThickness: (t) => set({ currentWallThickness: Math.max(1, t) }),
   selectedWalls: new Set(),

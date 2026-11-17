@@ -76,3 +76,18 @@
     }
   }
 }
+
+.measurementSystem {
+  margin: 0;
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--sp-grid);
+  border-radius: 8px;
+}
+
+.toolbar .systemActive {
+  background: var(--sp-panel);
+  box-shadow: inset 0 0 0 2px var(--sp-accent);
+}

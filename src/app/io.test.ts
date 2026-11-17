@@ -24,7 +24,12 @@ const win: WindowItem = {
 };
 const plan: Plan = {
   ...base,
-  meta: { ...base.meta, name: "My Plan", gridSize: 25, units: "m" },
+  meta: {
+    ...base.meta,
+    name: "My Plan",
+    gridSize: 25,
+    measurementSystem: "imperial",
+  },
   walls: [
     { id: "wall_1", a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thickness: 10 },
     { id: "wall_2", a: { x: 300, y: 0 }, b: { x: 300, y: 200 }, thickness: 15 },
@@ -40,7 +45,7 @@ describe("serializePlan / parsePlan round-trip", () => {
     expect(parsed.walls).toEqual(plan.walls);
     expect(parsed.items).toEqual(plan.items);
     expect(parsed.meta.name).toBe(plan.meta.name);
-    expect(parsed.meta.units).toBe(plan.meta.units);
+    expect(parsed.meta.measurementSystem).toBe(plan.meta.measurementSystem);
     expect(parsed.meta.gridSize).toBe(plan.meta.gridSize);
     expect(parsed.meta.createdAt).toBe(plan.meta.createdAt);
   });
@@ -102,7 +107,7 @@ describe("parsePlan normalization", () => {
       items: [],
     });
     const parsed = parsePlan(text);
-    expect(parsed.meta.units).toBe(defaults.meta.units);
+    expect(parsed.meta.measurementSystem).toBe(defaults.meta.measurementSystem);
     expect(parsed.meta.gridSize).toBe(defaults.meta.gridSize);
     expect(parsed.meta.name).toBe(defaults.meta.name);
   });
@@ -178,5 +183,44 @@ describe("parsePlan validation errors", () => {
       ],
     });
     expectError(text, /must be "door" or "window"/i);
+  });
+});
+
+describe("measurement system metadata", () => {
+  it.each([
+    "metric",
+    "imperial",
+  ] as const)("round-trips %s with unchanged geometry", (measurementSystem) => {
+    const source = { ...plan, meta: { ...plan.meta, measurementSystem } };
+    const parsed = parsePlan(serializePlan(source));
+    expect(parsed.meta.measurementSystem).toBe(measurementSystem);
+    expect(parsed.walls).toEqual(source.walls);
+    expect(parsed.items).toEqual(source.items);
+  });
+
+  it.each([
+    ["mm", "metric"],
+    ["cm", "metric"],
+    ["m", "metric"],
+    ["in", "imperial"],
+    ["ft", "imperial"],
+    [undefined, "metric"],
+    ["invalid", "metric"],
+  ])("migrates legacy units %s without converting coordinates", (units, expected) => {
+    const parsed = parsePlan(JSON.stringify({ ...plan, meta: { units } }));
+    expect(parsed.meta.measurementSystem).toBe(expected);
+    expect(parsed.walls).toEqual(plan.walls);
+    expect(parsed.items).toEqual(plan.items);
+    expect(parsed.meta).not.toHaveProperty("units");
+  });
+
+  it("prefers an explicit system over legacy units", () => {
+    const parsed = parsePlan(
+      JSON.stringify({
+        ...plan,
+        meta: { measurementSystem: "metric", units: "ft" },
+      }),
+    );
+    expect(parsed.meta.measurementSystem).toBe("metric");
   });
 });

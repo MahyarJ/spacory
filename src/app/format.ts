@@ -1,4 +1,4 @@
-import type { Units } from "@app/schema";
+import type { MeasurementSystem, Units } from "@app/schema";
 
 /**
  * Pure, unit-aware formatting of measured lengths.
@@ -47,4 +47,38 @@ export function formatArea(areaCm2: number, units: Units): string {
   const value = areaCm2 / CM_PER_UNIT[units] ** 2;
   const rounded = Number(value.toFixed(DECIMALS[units]));
   return `${rounded || 0} ${units}²`;
+}
+
+/** Convert a numeric length to internal centimetres. */
+export function lengthToCm(value: number, units: Units): number {
+  return value * CM_PER_UNIT[units];
+}
+
+/** Round to tenths of an inch before splitting, carrying 12 inches into feet. */
+export function toFeetAndInches(lengthCm: number): {
+  feet: number;
+  inches: number;
+} {
+  const tenths = Math.round((lengthCm / CM_PER_UNIT.in) * 10);
+  return { feet: Math.floor(tenths / 120), inches: (tenths % 120) / 10 };
+}
+
+export function feetAndInchesToCm(feet: number, inches: number): number {
+  return lengthToCm(feet * 12 + inches, "in");
+}
+
+export function formatSystemLength(
+  lengthCm: number,
+  system: MeasurementSystem,
+): string {
+  if (system === "metric") return formatLength(lengthCm, "cm");
+  const { feet, inches } = toFeetAndInches(lengthCm);
+  return `${feet}′ ${inches}″`;
+}
+
+export function formatSystemArea(
+  areaCm2: number,
+  system: MeasurementSystem,
+): string {
+  return formatArea(areaCm2, system === "metric" ? "m" : "ft");
 }

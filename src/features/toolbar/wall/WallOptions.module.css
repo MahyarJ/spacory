@@ -2,6 +2,7 @@
    than a toolbar row) so it never reflows the canvas when it toggles. */
 .bar {
   position: absolute;
+  max-width: calc(100% - 16px);
   top: 8px;
   left: 8px;
   z-index: 5;
@@ -16,6 +17,7 @@
 
 .wallOptions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -28,6 +30,7 @@
 
 .presets {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

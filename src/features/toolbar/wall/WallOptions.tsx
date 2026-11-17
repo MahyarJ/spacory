@@ -1,4 +1,4 @@
-import type { Item, Units, Wall } from "@app/schema";
+import { formatSystemLength } from "@app/format";
 import { type SelectionAction, selectionActions } from "@app/selection";
 import { useApp } from "@app/store";
 import { ICON_SIZE } from "@features/toolbar/constants";
@@ -10,9 +10,7 @@ import {
   SquareCenterlineDashedVertical,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { parseDraft } from "./draftField";
-import { useCommitOnClickAway } from "./useCommitOnClickAway";
+import { LengthField } from "./LengthField";
 import styles from "./WallOptions.module.css";
 
 const PRESETS = [7, 10, 12, 15, 20, 40]; // cm
@@ -25,7 +23,9 @@ export function WallOptions() {
   const selectedItems = useApp((s) => s.selectedItems);
   const plan = useApp((s) => s.plan);
   const { walls, items } = plan;
-  const units = plan.meta.units;
+  const system = plan.meta.measurementSystem;
+  const setWallLength = useApp((s) => s.setSelectedWallLength);
+  const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
 
   // Length editing is a single-wall affair (see issue scope) and walls are only
   // selectable with the select tool. Gate on that tool too: a selection
@@ -66,9 +66,9 @@ export function WallOptions() {
                   currentWallThickness === p && styles.active,
                 )}
                 onClick={() => setThickness(p)}
-                title={`${p} cm`}
+                title={formatSystemLength(p, system)}
               >
-                {p} cm
+                {formatSystemLength(p, system)}
               </button>
             ))}
           </div>
@@ -77,19 +77,27 @@ export function WallOptions() {
 
       {selectedWall && (
         // Key by id so a different selection resets the field's local draft.
-        <WallLengthField
+        <LengthField
           key={selectedWall.id}
-          wall={selectedWall}
-          units={units}
+          id="wall-length-input"
+          label="Length"
+          lengthCm={getWallLength(selectedWall)}
+          minCm={MIN_WALL_LENGTH}
+          system={system}
+          onCommit={setWallLength}
         />
       )}
 
       {selectedOpening && (
         // Key by id so switching selection resets the field's local draft.
-        <OpeningWidthField
+        <LengthField
           key={selectedOpening.id}
-          item={selectedOpening}
-          units={units}
+          id="opening-width-input"
+          label="Width"
+          lengthCm={selectedOpening.wallAttach.length}
+          minCm={MIN_OPENING_WIDTH}
+          system={system}
+          onCommit={setOpeningWidth}
         />
       )}
 
@@ -159,111 +167,5 @@ function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
         );
       })}
     </div>
-  );
-}
-
-/** Numeric length editor for the currently selected wall. */
-function WallLengthField({ wall, units }: { wall: Wall; units: Units }) {
-  const setSelectedWallLength = useApp((s) => s.setSelectedWallLength);
-  // Match the on-canvas label's cm precision (whole centimetres).
-  const current = Math.round(getWallLength(wall));
-  const [value, setValue] = useState(String(current));
-
-  // Re-sync the draft when the wall's length changes underneath us — e.g. via
-  // undo/redo while the wall stays selected.
-  useEffect(() => {
-    setValue(String(current));
-  }, [current]);
-
-  const commit = () => {
-    const parsed = parseDraft(value, MIN_WALL_LENGTH);
-    if (parsed !== null) {
-      setSelectedWallLength(parsed);
-    } else {
-      // Reject invalid input (non-numeric, zero, negative, below minimum):
-      // leave the wall untouched and revert the field.
-      setValue(String(current));
-    }
-  };
-  const fieldRef = useCommitOnClickAway(commit);
-
-  return (
-    <form
-      ref={fieldRef}
-      className={styles.lengthField}
-      onSubmit={(e) => {
-        e.preventDefault();
-        commit();
-      }}
-    >
-      <label className={styles.label} htmlFor="wall-length-input">
-        Length
-      </label>
-      <input
-        id="wall-length-input"
-        type="number"
-        inputMode="decimal"
-        min={MIN_WALL_LENGTH}
-        step={1}
-        className={styles.lengthInput}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-      />
-      <span className={styles.unit}>{units}</span>
-    </form>
-  );
-}
-
-/** Numeric width editor for the currently selected opening (door/window). */
-function OpeningWidthField({ item, units }: { item: Item; units: Units }) {
-  const setSelectedOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
-  // Match the wall-length field: whole-centimetre precision.
-  const current = Math.round(item.wallAttach.length);
-  const [value, setValue] = useState(String(current));
-
-  // Re-sync the draft when the width changes underneath us — e.g. via undo/redo,
-  // or the on-resize reconcile clamp, while the opening stays selected.
-  useEffect(() => {
-    setValue(String(current));
-  }, [current]);
-
-  const commit = () => {
-    const parsed = parseDraft(value, MIN_OPENING_WIDTH);
-    if (parsed !== null) {
-      setSelectedOpeningWidth(parsed);
-    } else {
-      // Reject invalid input (non-numeric, zero, negative, below minimum):
-      // leave the opening untouched and revert the field.
-      setValue(String(current));
-    }
-  };
-  const fieldRef = useCommitOnClickAway(commit);
-
-  return (
-    <form
-      ref={fieldRef}
-      className={styles.lengthField}
-      onSubmit={(e) => {
-        e.preventDefault();
-        commit();
-      }}
-    >
-      <label className={styles.label} htmlFor="opening-width-input">
-        Width
-      </label>
-      <input
-        id="opening-width-input"
-        type="number"
-        inputMode="decimal"
-        min={MIN_OPENING_WIDTH}
-        step={1}
-        className={styles.lengthInput}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={commit}
-      />
-      <span className={styles.unit}>{units}</span>
-    </form>
   );
 }

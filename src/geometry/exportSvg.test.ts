@@ -130,3 +130,23 @@ describe("buildExportSvg", () => {
     expect(markup).not.toMatch(/data-layer="(grid|selection|marquee)"/);
   });
 });
+
+it("uses the plan's system for measurements in shared SVG/PNG markup", () => {
+  const plan = planOf([
+    wall(0, 0, 400, 0, 10, "a"),
+    wall(400, 0, 400, 300, 10, "b"),
+    wall(400, 300, 0, 300, 10, "c"),
+    wall(0, 300, 0, 0, 10, "d"),
+  ]);
+  const metric = buildExportSvg(plan);
+  const imperial = buildExportSvg({
+    ...plan,
+    meta: { ...plan.meta, measurementSystem: "imperial" },
+  });
+  expect(metric.markup).toContain(">400 cm</text>");
+  expect(metric.markup).toContain(">12 m²</text>");
+  expect(imperial.markup).toContain(">13′ 1.5″</text>");
+  expect(imperial.markup).toContain(">129.17 ft²</text>");
+  expect(imperial.width).toBe(metric.width);
+  expect(imperial.height).toBe(metric.height);
+});

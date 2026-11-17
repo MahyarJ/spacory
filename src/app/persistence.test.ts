@@ -1,6 +1,6 @@
 import type { Operation } from "fast-json-patch";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { History } from "./history";
+import { commit, createHistory, type History, redo, undo } from "./history";
 import {
   clearPersistedHistory,
   HISTORY_STORAGE_KEY,
@@ -149,4 +149,43 @@ describe("graceful degradation", () => {
     expect(loaded?.past).toEqual([]); // undo/redo stacks dropped
     expect(loaded?.future).toEqual([]);
   });
+});
+
+it("migrates legacy unit patches through undo and redo without changing geometry", () => {
+  vi.stubGlobal("localStorage", makeStorage());
+  const legacy = {
+    ...planNamed("legacy", 200),
+    meta: { units: "ft", gridSize: 20 },
+  };
+  localStorage.setItem(
+    HISTORY_STORAGE_KEY,
+    JSON.stringify({
+      format: 2,
+      present: legacy,
+      past: [[{ op: "replace", path: "/meta/units", value: "cm" }]],
+      future: [[{ op: "replace", path: "/meta/units", value: "m" }]],
+    }),
+  );
+  const loaded = loadPersistedHistory()!;
+  expect(loaded.present.meta.measurementSystem).toBe("imperial");
+  expect(undo(loaded).present.meta.measurementSystem).toBe("metric");
+  expect(redo(loaded).present.meta.measurementSystem).toBe("metric");
+  expect(redo(undo(loaded)).present.meta.measurementSystem).toBe("imperial");
+  expect(undo(loaded).present.walls).toEqual(legacy.walls);
+});
+
+it("keeps the measurement-system timeline usable after a refresh", () => {
+  vi.stubGlobal("localStorage", makeStorage());
+  const metric = planNamed("systems", 250.123);
+  const imperial: Plan = {
+    ...metric,
+    meta: { ...metric.meta, measurementSystem: "imperial" },
+  };
+  savePersistedHistory(commit(createHistory(metric), imperial));
+  const refreshed = loadPersistedHistory()!;
+  expect(refreshed.present.meta.measurementSystem).toBe("imperial");
+  const undone = undo(refreshed);
+  expect(undone.present.meta.measurementSystem).toBe("metric");
+  expect(undone.present.walls).toEqual(metric.walls);
+  expect(redo(undone).present.meta.measurementSystem).toBe("imperial");
 });
