@@ -825,3 +825,14 @@ which can't clobber a preview committed in the same window. The sticky comment
 `pr-preview-action` posts is the preview link; we deliberately don't register a
 GitHub deployment environment for a "View deployment" button, since it only
 duplicates that comment at the cost of extra plumbing.
+
+## Shared interactive agent command policy
+
+Keep command prefixes in `.agents/command-policy.json` and generate Claude Bash
+permissions and Codex project rules with `agents:sync`. Previously only Claude
+had a repository command allowlist; the Codex headless flags did not cover
+interactive sessions. Generating both formats prevents their command lists from
+drifting while retaining provider-specific sandbox and skill configuration.
+Codex rules require a trusted project configuration and a new session. Preserve
+the existing prefixes, including their option-order limitations, rather than
+silently broadening interpreter permissions. See [Agent command permissions](AGENT-PERMISSIONS.md).

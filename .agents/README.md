@@ -278,8 +278,11 @@ expansion, model availability, authentication, or live tool approval behavior.
 Preserving the Claude entry points does not establish identical sandbox or
 permission semantics across providers.
 
-Claude's existing `.claude/settings.json` includes command and named-skill
-allowlist entries. Those entries are not a blanket permission grant: changed
+The shared `.agents/command-policy.json` generates Claude Bash permissions and
+Codex project rules through `npm run agents:sync`. See
+[Agent command permissions](../docs/AGENT-PERMISSIONS.md) for interactive setup,
+trust requirements, and exact-prefix limitations. Claude's `.claude/settings.json`
+also includes named-skill allowlist entries. Those entries are not a blanket permission grant: changed
 commands, paths, CLI policy, or host restrictions can still deny an action or
 require approval. The adapter preserves the permission mode rather than expanding
 the allowlist. `bypassPermissions` is an explicit opt-in and is not a guarantee

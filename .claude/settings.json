@@ -50,9 +50,5 @@
       "Bash(rm -rf:*)"
     ]
   },
-  "sandbox": {
-    "network": {
-      "allowedDomains": ["api.telegram.org"]
-    }
-  }
+  "sandbox": { "network": { "allowedDomains": ["api.telegram.org"] } }
 }

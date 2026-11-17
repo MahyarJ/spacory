@@ -25,3 +25,5 @@ for (const name of instructionNames) {
   }
 }
 if (stale) process.exitCode = 1;
+
+await import("./sync-command-policy.mjs");
