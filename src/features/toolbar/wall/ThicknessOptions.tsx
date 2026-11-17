@@ -1,5 +1,6 @@
 import { useApp } from "@app/store";
 import { THICKNESS_PRESETS } from "@app/thickness";
+import segments from "@ui/SegmentedControl.module.css";
 import clsx from "clsx";
 import { LengthField } from "./LengthField";
 import styles from "./WallOptions.module.css";
@@ -18,14 +19,14 @@ export function ThicknessOptions() {
       <span className={styles.label} title="Overall wall thickness">
         Thickness
       </span>
-      <div className={styles.presets}>
+      <div className={segments.group}>
         {presets.map(({ id, label }) => (
           <button
             key={label}
             type="button"
             className={clsx(
-              styles.pill,
-              selectedPreset === id && styles.active,
+              segments.segment,
+              selectedPreset === id && segments.active,
             )}
             aria-pressed={selectedPreset === id}
             onClick={() => {
@@ -37,7 +38,7 @@ export function ThicknessOptions() {
         ))}
         <button
           type="button"
-          className={clsx(styles.pill, custom && styles.active)}
+          className={clsx(segments.segment, custom && segments.active)}
           aria-pressed={custom}
           onClick={() => setThickness(thickness)}
         >

@@ -13,7 +13,8 @@ connected room structures.
 
 - 📐 **Metric / Imperial** — switch between cm and m² or feet/inches and ft².
   Measurement inputs, thickness labels, and SVG/PNG exports follow the plan’s
-  system; JSON files and autosave preserve it.
+  system; JSON files and autosave preserve it. Unit, theme, and thickness
+  choices share a consistent segmented control.
 
 - 🧱 **Walls** — click-to-chain or drag to draw, with grid snapping and
   thickness presets (10 / 15 cm or 4½″ / 6½″) and custom overall thickness
