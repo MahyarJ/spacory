@@ -65,11 +65,17 @@ Do **not** add AI/Claude attribution to commits or PRs:
 - `docs/` is the shared source of truth for architecture and decisions.
 - The two-agent (Product / Engineer) workflow lives in `.agents/`; its living
   institutional memory is `project-memory.md` in the repo root. Each agent's
-  behaviour is now a reusable **skill** (`.claude/skills/{product,engineer}-agent`,
-  plus shared `spacory-verify` / `spacory-conventions` / `spacory-notify`); GitHub
-  auth is checked by the runners as a bash `gh auth status` gate, not an LLM skill.
+  behaviour is exposed as a reusable **skill** (`.claude/skills/{product,engineer}-agent`,
+  plus shared `spacory-verify` / `spacory-conventions` / `spacory-notify`). These
+  remain byte-identical compatibility copies of `.agents/instructions/`; edit
+  canonical files and run `npm run agents:sync`. Reviewer is Engineer review mode.
+  GitHub auth is checked by the runners as a bash `gh auth status` gate, not an
+  LLM skill.
   The `.agents/*-prompt.md` files are thin shims over them, so the
   same contract works headlessly and in an interactive `/product-agent` chat.
+  The runners are **engine-pluggable** via `SPACORY_AGENT_ENGINE` (`claude` |
+  `codex`) — the CLI-specific launch is factored into `.agents/engine.sh`, and
+  Codex reads `AGENTS.md` (a pointer to this file). See `.agents/README.md`.
 - The agent loop can be **orchestrated on a timer**: `.agents/dispatch.sh` is a
   stateless dispatcher over `agent:*` GitHub labels (triage → implement →
   review+accept → resolve → merge, plus `agent:clarify` for mid-flight spec

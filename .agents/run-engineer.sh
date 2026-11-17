@@ -61,7 +61,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROMPT="$SCRIPT_DIR/engineer-agent-prompt.md"
 
-command -v claude >/dev/null 2>&1 || { echo "error: 'claude' CLI not found on PATH" >&2; exit 1; }
+# The Claude/Codex coupling lives entirely in the engine adapter; pick the CLI
+# with SPACORY_AGENT_ENGINE (default: claude). See engine.sh.
+source "$SCRIPT_DIR/engine.sh"
 [ -f "$PROMPT" ] || { echo "error: missing prompt file: $PROMPT" >&2; exit 1; }
 
 usage() {
@@ -87,6 +89,11 @@ case "$NUM" in
 esac
 shift
 EXTRA="${*:-}"
+
+ROLE=engineer
+[ "$MODE" != review ] || ROLE=reviewer
+configure_agent "$ROLE" "$MODE" || exit 1
+require_engine || exit 1
 
 # Verify GitHub auth (bash, zero model cost) — after arg validation so a usage error
 # still reports usage. The agent works entirely through gh (and git), so fail loud
@@ -147,12 +154,8 @@ TASK="/engineer-agent $MODE $NUM
 $TASK"
 
 cd "$REPO_ROOT"
-echo "→ Engineer Agent  [$MODE] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
+echo "→ Engineer Agent  [$MODE] #$NUM  (engine: $(spacory_engine), permission-mode: $PERMISSION_MODE)" >&2
 
-args=( -p "$TASK"
-       --append-system-prompt-file "$PROMPT"
-       --permission-mode "$PERMISSION_MODE" )
-[ -n "${CLAUDE_MODEL:-}" ] && args+=( --model "$CLAUDE_MODEL" )
-[ -n "${CLAUDE_EFFORT:-}" ] && args+=( --effort "$CLAUDE_EFFORT" )
-
-exec claude "${args[@]}"
+# The engine adapter runs the CLI in-process (no exec) so it works identically
+# for the product runner, which needs to keep going after the model exits.
+launch_agent "$TASK" "$PROMPT" "$PERMISSION_MODE"

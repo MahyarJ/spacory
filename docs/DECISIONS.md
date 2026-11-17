@@ -5,6 +5,67 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Share canonical agent contracts through small Claude/Codex adapters
+
+**Decision.** Extend PR #108's Bash execution adapter instead of rewriting the
+GitHub-label state machine. `.agents/engine.sh` resolves configuration and returns
+normalized shell results; `.agents/providers/{claude,codex}.sh` own CLI arguments
+and provider loading. Product, Engineer, and Reviewer contracts are independent
+of the selected provider. Reviewer remains Engineer **review** mode with the same
+entry point, comment header, and verdicts; it gains independent configuration,
+not a new pipeline stage.
+
+**One canonical contract, compatible Claude skills.** Role/shared Markdown lives
+in `.agents/instructions/`. The existing `.claude/skills/` files retain their
+original content and discovery metadata as byte-identical compatibility copies.
+`npm run agents:sync` refreshes those copies; mocked tests check equality. The
+`ship` skill stays in `.claude/skills/`. Claude keeps its existing task/slash text,
+role shim, skill names, and launch arguments. Native skill expansion is the
+installed Claude CLI's responsibility, not a guarantee made by this adapter.
+
+**Codex receives instructions directly.** Before launching Codex, the adapter
+resolves the selected role/mode against its own checkout, validates the exact
+canonical role and three shared files, and embeds their text alongside the shim
+and task. Reviewer also includes the Engineer contract it references. Missing,
+empty, unreadable, or ambiguous contract selection fails before a CLI process.
+This replaces the earlier generic note asking the model to find skill files.
+Interactive Codex prompt files remain optional references to the same contracts;
+their installer never starts an agent and requires `--force` to replace unrelated
+files/symlinks. It unlinks symlinks rather than overwriting their targets, refuses
+directories, and preflights both prompt destinations before installation.
+
+**Explicit provider, model, and account selection.** Provider and model each
+resolve from role+mode to role to global settings. `SPACORY_AGENT_PROVIDER`
+precedes the legacy `SPACORY_AGENT_ENGINE`; absent overrides, Claude remains the
+default. Models fall back to the selected provider's `CLAUDE_MODEL` or
+`CODEX_MODEL`, then its CLI default. `CLAUDE_EFFORT` remains Claude-only; model
+names do not transfer across providers. Codex requires an explicitly supplied,
+absolute, accessible `CODEX_HOME` directory from the calling environment. Account
+paths and credentials stay outside repository configuration. The adapter never
+selects a default account, authenticates, or falls back to another provider.
+
+**Streaming results and compatibility limits.** Separate FIFO/tee readers stream
+and capture stdout/stderr, then drain before shell results are collected. A
+background worker owns CLI/reader cleanup. The runner forwards cancellation,
+waits for the worker, removes captures, then restores caller traps and invokes
+any original signal handler. Ignored signals remain ignored; default cancellation
+exits with 128 + signal number so EXIT cleanup still runs. Stdin forwarding and raw
+CLI exit codes remain unchanged; known failed-process diagnostics are classified
+as configuration/authentication errors, and unknown failures as execution errors.
+Classification is best effort. Capture interruption can leave result strings
+incomplete, and SIGKILL cannot execute cleanup traps. Dispatcher retries and
+Product memory landing remain unchanged.
+
+**Permission flags are not live permission guarantees.** Claude retains its
+permission-mode/allowlist behavior. Codex maps `acceptEdits` to network-enabled
+workspace-write with approval policy `never`, and `bypassPermissions` to bypass
+approvals and sandbox; unsupported mappings fail explicitly. Codex does not use
+Claude's allowlist, and neither provider's flags override host restrictions or
+grant model/account access. Tests use mocked executables on a closed PATH and
+temporary accounts; native CLI loading, authentication, and actual approval
+behavior are unverified. No timer, workflow, or unattended execution is enabled.
+See [provider setup and limitations](../.agents/README.md#provider-setup-and-configuration).
+
 ## Licence: MIT
 
 **Decision.** Spacory is licensed **MIT**. The repo had called itself "open

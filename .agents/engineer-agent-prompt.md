@@ -12,8 +12,9 @@ source code.
 ## What to do
 
 The full, mode-aware contract for this role lives in the **`engineer-agent`
-skill** (`.claude/skills/engineer-agent/SKILL.md`) — it is the single source of
-truth, shared by these headless runs and interactive Claude Code chats. Before
+skill** (`.claude/skills/engineer-agent/SKILL.md`), a byte-identical compatibility
+copy of `.agents/instructions/engineer-agent.md`. The canonical contract is
+shared by headless runs and interactive chats. Before
 doing anything else:
 
 1. **Invoke the `engineer-agent` skill** and follow it exactly.

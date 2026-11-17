@@ -9,7 +9,8 @@ reviewer who leaves comments is the **Engineer Agent** (review capacity); the on
 addresses those comments is the **Engineer Agent** (resolve capacity); the one who
 acceptance-tests in the product voice is the **Product Agent** (acceptance capacity). No
 new agent "types" are invented — same two roles, different modes, each a fresh headless
-run coordinating through GitHub.
+run coordinating through GitHub. `REVIEWER` is an independent configuration name
+for the existing Engineer review capacity, not an additional pipeline stage.
 
 ```
                  reads/writes
@@ -35,29 +36,31 @@ run coordinating through GitHub.
 | | Product Agent | Engineer Agent |
 |---|---|---|
 | **Role** | Senior PM / analyst — the "what & why" | Senior engineer — the "how" |
-| **Skill** (source of truth) | [`product-agent`](../.claude/skills/product-agent/SKILL.md) | [`engineer-agent`](../.claude/skills/engineer-agent/SKILL.md) |
+| **Canonical contract** | [`product-agent`](instructions/product-agent.md) | [`engineer-agent`](instructions/engineer-agent.md) |
 | **System-prompt shim** | [`product-agent-prompt.md`](product-agent-prompt.md) | [`engineer-agent-prompt.md`](engineer-agent-prompt.md) |
-| **Modes** | `cycle` · `acceptance` · `clarify` · `triage` | `implement` · `review` · `resolve` · `clarify` |
+| **Modes** | `cycle` · `acceptance` · `clarify` · `triage` | `implement` · `review` · `resolve` · `reconcile` · `clarify` |
 | **Never** | writes app code; revisits settled architecture; merges | reads `project-memory.md` or other product context; guesses on ambiguity; merges |
 
 Each role is **mode-aware**: the task it's given selects the mode, and it runs only
 that mode per run.
 
-### Where the behaviour lives: skills, not the system prompt
+### Where the behaviour lives: canonical contracts
 
-Each role's full contract lives in a **skill** under
-[`.claude/skills/`](../.claude/skills/), so it can be **reused** both by these
-headless runs and directly in an interactive Claude Code chat (via the `/` command
-of the same name). The two `*-prompt.md` files are now **thin shims**: they set the
-role identity and hard invariants, then tell the agent to invoke its skill.
+Each role's provider-independent contract lives under
+[`.agents/instructions/`](instructions/). The existing Claude skill files are
+byte-identical compatibility copies. Claude keeps its native skill names, slash
+commands, role shims, and CLI arguments. The Codex adapter reads and validates the
+selected canonical role and shared files itself, then includes their contents
+in the CLI prompt; it does not depend on the model finding a generic skill path.
 
-Shared building blocks each role reuses (also usable on their own in a chat):
+The two `*-prompt.md` files retain role framing and invariants. Shared contracts
+are also available as standalone Claude skills:
 
-| Skill | What it is |
+| Canonical contract | What it is |
 |---|---|
-| [`spacory-verify`](../.claude/skills/spacory-verify/SKILL.md) | The definition of done — `npm run check && npx tsc -b && npm test` |
-| [`spacory-conventions`](../.claude/skills/spacory-conventions/SKILL.md) | Repo code conventions (single store + `commit()`, pure tested modules, Biome, cm) |
-| [`spacory-notify`](../.claude/skills/spacory-notify/SKILL.md) | The Telegram wrap-up via `.agents/notify.sh` |
+| [`spacory-verify`](instructions/spacory-verify.md) | The definition of done — `npm run check && npx tsc -b && npm test` |
+| [`spacory-conventions`](instructions/spacory-conventions.md) | Repo code conventions (single store + `commit()`, pure tested modules, Biome, cm) |
+| [`spacory-notify`](instructions/spacory-notify.md) | The Telegram wrap-up via `.agents/notify.sh` |
 
 ### Engineer Agent modes
 
@@ -66,6 +69,7 @@ Shared building blocks each role reuses (also usable on their own in a chat):
 | `implement` | an Issue # | **only** that issue + the source code | a branch + PR referencing the issue |
 | `review` | a PR # | the PR diff + its linked issue (read-only on code) | a code-review **comment** on the PR |
 | `resolve` | a PR # | the PR's comments + diff | new commits pushed to the PR's branch |
+| `reconcile` | a PR # | the branch and latest `main` | merge `main`, resolve conflicts, verify and push; never rebase/force-push |
 | `clarify` | a PR/Issue # | the open questions (or a settled decision) + diff/code | a reply **comment** answering **technical** questions + any **non-code** PR edit (title/description); **code → `resolve`** |
 
 ### Product Agent modes
@@ -140,6 +144,7 @@ action.
 .agents/run-engineer.sh '#2' "note"    # leading # tolerated; optional extra note
 .agents/run-engineer.sh review 14      # review PR #14 (posts a comment, no code changes)
 .agents/run-engineer.sh resolve 14     # resolve PR #14's review comments (pushes fixes)
+.agents/run-engineer.sh reconcile 14   # merge main and resolve conflicts (pushes fixes)
 .agents/run-engineer.sh clarify 14     # answer technical questions on #14 (posts a reply)
 ```
 
@@ -161,9 +166,10 @@ wait
 The dividing line is **code vs. non-code, on the artifact you own**: `clarify` does the
 **non-code** work — it answers questions and, when an answer settles the spec, makes the
 non-code edit to its own artifact (Product → the issue / `project-memory.md`; Engineer →
-the PR title/description). **Code** changes are only ever Engineer `resolve` (commits +
-push). Product therefore has no `resolve` — it has no code job. Merging stays a human
-action, as does trivial metadata hygiene if you'd rather not spin an agent for it.
+the PR title/description). **Code** fixes belong to Engineer `resolve` or
+`reconcile` (commits + push). Product therefore has no `resolve` — it has no code
+job. Merging stays a human action, as does trivial metadata hygiene if you'd
+rather not spin an agent for it.
 
 In the **orchestrated loop** you don't dispatch this by hand: label the issue *or* the
 PR **`agent:clarify`** and the dispatcher runs Product `clarify` for you — the
@@ -173,32 +179,21 @@ back for a fresh review round against the updated spec; because editing the issu
 resets the review-round budget, refining a spec this way never trips the loop's
 non-convergence cap. See [`../docs/AUTOMATION.md`](../docs/AUTOMATION.md).
 
-Each script launches a **fresh, headless** `claude` session (`-p`) whose prompt leads
-with the `/<role>-agent <mode> [number]` slash form — so Claude Code deterministically
-expands the role skill (the documented user-invoked path) rather than leaving it to the
-model — with the matching shim appended as the system prompt, runs from the repo root,
-and validates its input. Useful env overrides:
+Each runner validates its input, runs from the repository root, and starts one
+fresh headless session. The task retains the `/<role>-agent <mode> [number]` line.
+For Claude, the adapter preserves `-p`, `--append-system-prompt-file`, and
+`--permission-mode`, plus optional `--model` and `--effort`. For Codex, the adapter
+passes the role shim, validated canonical contracts, and task directly to
+`codex exec`. The dispatcher, label transitions, worktree isolation, notification
+helper, and verdict formats are unchanged.
 
-- `CLAUDE_PERMISSION_MODE` (default `acceptEdits`) — set `bypassPermissions` for a
-  fully unattended run in a trusted environment.
-- `CLAUDE_MODEL` / `CLAUDE_EFFORT` — pin the model and reasoning effort; default to
-  the CLI session defaults. This repo defaults to `sonnet` at `medium` in
-  `.agents/.env`.
-
-> **Config surface:** `dispatch.sh` sources `.agents/.env` (gitignored) and exports
-> it, so that file is the single place to set any of these knobs — `CLAUDE_MODEL`,
-> `CLAUDE_PERMISSION_MODE`, `SPACORY_MAX_ROUNDS`, `SPACORY_AUTOMERGE`, and the
-> Telegram creds. See `.agents/.env.example` for the documented list.
-
-> **Permissions:** headless runs only execute commands the permission mode/allowlist
-> permit. `.claude/settings.json` already allows `git`, `npm`, `gh pr`, `gh run`,
-> `gh issue` (Product creates issues; Engineer reads/comments on them), and
-> `.agents/notify.sh` (the Telegram helper). Because each role now runs by invoking a
-> **skill**, the allowlist also permits the `Skill(...)` invocations the shims and
-> shared skills rely on (`product-agent`, `engineer-agent`, `spacory-verify`,
-> `spacory-conventions`, `spacory-notify`) — otherwise an
-> `acceptEdits` run could stall on the first skill call. Otherwise run with
-> `CLAUDE_PERMISSION_MODE=bypassPermissions` so a headless run doesn't stall.
+See [Provider setup and configuration](#provider-setup-and-configuration) for
+provider/model precedence.
+[Live CLI compatibility and permissions](#live-cli-compatibility-and-permissions)
+covers the existing permission limitations. Direct invocations inherit exported
+configuration; they do not source `.agents/.env`. The dispatcher already exports
+that file to its children. Keep `CODEX_HOME` account paths in the calling shell or
+service environment, outside repository configuration.
 
 ### In an interactive Claude Code chat: invoke the skill
 
@@ -218,11 +213,166 @@ The shared skills work standalone too — e.g. `/spacory-verify` to run the defi
 of done, or `/spacory-conventions` to load the repo's code conventions. This is the
 same behaviour the headless runs use, so the two never drift.
 
-### Manual: feed the prompt yourself
+### Provider setup and configuration
 
-These prompts are thin **system-prompt shims** — feed the file's contents as the
-agent's system prompt, then give it the run-specific input below. Each shim tells the
-agent to invoke its skill and run the mode the task names. **The task selects the
+The existing shell runners support `claude` (default) and `codex`. This is
+execution plumbing only: configuring a provider does not install a timer, enable
+automation, or run the dispatcher. Existing Claude commands, skill names, mode
+arguments, and verdict formats remain unchanged.
+
+Install the chosen CLI separately and authenticate it using that provider's
+normal setup. For Codex, first select a dedicated account directory by exporting
+`CODEX_HOME` **in the calling shell or service environment**, then authenticate
+Codex in that environment. Keep account paths and credentials outside repository
+configuration, including `.agents/.env`. The adapter requires an explicit,
+absolute, existing `CODEX_HOME`; it never substitutes `~/.codex`, copies credentials,
+or chooses a different account. A directory's existence does not prove that its
+account is authenticated: failed CLI diagnostics are classified after execution.
+Claude continues to use its existing CLI authentication configuration.
+
+Provider/model settings may be exported directly. The dispatcher already exports
+`.agents/.env` to its children; direct runner invocations do **not** source it.
+Provider and model resolve independently, from most specific to least specific:
+
+| Scope | Provider | Model |
+|---|---|---|
+| Role + mode | `SPACORY_<ROLE>_<MODE>_PROVIDER` | `SPACORY_<ROLE>_<MODE>_MODEL` |
+| Role | `SPACORY_<ROLE>_PROVIDER` | `SPACORY_<ROLE>_MODEL` |
+| Global | `SPACORY_AGENT_PROVIDER` | `SPACORY_AGENT_MODEL` |
+| Legacy fallback | `SPACORY_AGENT_ENGINE`, then `claude` | `CLAUDE_MODEL` or `CODEX_MODEL`, then CLI default |
+
+Empty values fall through. Model names are provider-specific: when mixing
+providers, use role/mode models or provider-specific legacy defaults rather than
+sharing a global model name. There is no automatic provider fallback on failure.
+`CLAUDE_EFFORT` remains Claude-only and is passed unchanged.
+
+Roles/modes are `PRODUCT` (`CYCLE`, `ACCEPTANCE`, `CLARIFY`, `TRIAGE`), `ENGINEER`
+(`IMPLEMENT`, `RESOLVE`, `RECONCILE`, `CLARIFY`), and `REVIEWER` (`REVIEW`). Review
+remains `.agents/run-engineer.sh review N` and posts the same **Engineer review**
+comment. Reviewer settings are independent of Engineer settings; when absent,
+they fall through to global/legacy settings.
+
+For example (configuration only; these assignments launch nothing):
+
+```bash
+export SPACORY_PRODUCT_PROVIDER=claude
+export SPACORY_ENGINEER_PROVIDER=codex
+export SPACORY_REVIEWER_PROVIDER=claude
+export SPACORY_PRODUCT_TRIAGE_MODEL=sonnet
+export SPACORY_REVIEWER_MODEL=sonnet
+# Export CODEX_HOME separately in the calling environment before using Codex.
+# Set CODEX_MODEL or SPACORY_ENGINEER_MODEL to a model available to that account.
+```
+
+`CLAUDE_PERMISSION_MODE` retains its existing meaning for Claude. Codex accepts
+only the established mappings: `acceptEdits` → workspace-write, approval policy
+`never`, network enabled; `bypassPermissions` → bypass approvals and sandbox.
+Other mappings fail explicitly. Neither mapping makes an account or model
+available if it is not configured/authenticated.
+
+### Live CLI compatibility and permissions
+
+The tests check arguments, contracts, streaming, configuration, and errors using
+mock processes. They do not validate installed CLI versions, native Claude skill
+expansion, model availability, authentication, or live tool approval behavior.
+Preserving the Claude entry points does not establish identical sandbox or
+permission semantics across providers.
+
+Claude's existing `.claude/settings.json` includes command and named-skill
+allowlist entries. Those entries are not a blanket permission grant: changed
+commands, paths, CLI policy, or host restrictions can still deny an action or
+require approval. The adapter preserves the permission mode rather than expanding
+the allowlist. `bypassPermissions` is an explicit opt-in and is not a guarantee
+that a host/network restriction can be bypassed.
+
+Codex receives the mapped sandbox/approval flags above, not Claude's allowlist.
+Unsupported permission mappings fail before launch. Approval policy `never` does
+not grant operations outside the selected sandbox. Network-enabled workspace-write
+is not domain-scoped, and bypass mode removes the CLI's sandbox/approval checks;
+neither grants model access, authentication, or host-level privileges. CLI-version
+compatibility and real approval behavior require a separately authorized live
+check; this PR does not enable or perform unattended execution.
+
+**Interactive Codex loading.** With the intended `CODEX_HOME` already exported,
+`.agents/codex/install-prompts.sh` links the repo's prompt files into that
+account's `prompts` directory (`--copy` copies them). It requires an existing
+account directory and never falls back to the default home. It does not log in
+or start an agent. Existing matching links/copies are left intact; unrelated files
+or symlinks cause the whole preflight to fail before either prompt is installed.
+Use `--force` (optionally with `--copy`) to explicitly replace those destinations.
+Symlink targets are never overwritten, and directories are never replaced. A
+symlinked `prompts` directory is refused, even with `--force`. The interactive
+prompt files reference the same canonical Markdown contracts.
+
+### Canonical instructions and compatibility
+
+Edit role/shared instructions in `.agents/instructions/`. Product and Engineer
+contracts keep their existing text; `reviewer.md` references the Engineer review
+contract rather than introducing a new stage or duplicating review rules.
+The `.claude/skills/{product-agent,engineer-agent,spacory-*}/SKILL.md` files are
+byte-identical compatibility copies, retaining all existing Claude discovery
+metadata and behavior. Run `npm run agents:sync` after canonical edits;
+`npm run test:agents` checks that copies match. The `ship` skill remains unchanged
+in `.claude/skills/`. Headless shims and Claude slash commands still work.
+Before headless Codex launch, the adapter resolves the exact role/mode against
+its own checkout, validates every required canonical file, and embeds the role
+contract plus all three shared contracts in the prompt. Reviewer includes both
+`reviewer.md` and its referenced Engineer contract. Missing, empty, or unreadable
+contracts fail before any CLI process starts. The legacy three-argument adapter
+API also accepts an explicit `/product-agent <mode>` or `/engineer-agent <mode>`
+first line to select the contract; ambiguous Codex prompts fail instead of guessing.
+Claude's existing prompt/skill loading is unchanged.
+
+### Execution results and local verification
+
+`.agents/engine.sh` retains `require_engine` and
+`launch_agent <prompt> <shim> <permission_mode>`. Runners first call
+`configure_agent <role> <mode>`. Loading the adapter starts no agent process.
+After validation or execution, shell callers can inspect:
+
+- `SPACORY_AGENT_RESULT_PROVIDER`, `MODEL`, `ROLE`, `MODE` (each with the same prefix).
+- `SPACORY_AGENT_RESULT_STATUS`: `success`, `configuration_error`,
+  `authentication_error`, or `execution_error`.
+- `SPACORY_AGENT_RESULT_EXIT_CODE`, `STDOUT`, `STDERR`.
+
+CLI stdout/stderr stream immediately through separate `tee` readers while being
+captured in a private temporary directory. Both readers are drained before results
+are retained in shell variables, including trailing newlines. Stdin is forwarded
+unchanged. The runner waits on a background capture worker and forwards handled
+HUP/INT/TERM signals to it. The worker stops and reaps its CLI/readers before the
+runner removes the capture directory. Original signal handlers run after cleanup;
+explicitly ignored signals remain ignored. Default cancellation exits with
+129/130/143 for HUP/INT/TERM, allowing the caller's EXIT trap to run. Caller traps
+and file descriptors are restored. No post-run replay duplicates
+output. Ordering within each stream is preserved; cross-stream scheduling remains
+subject to the operating system. Bash result strings represent text, not NUL-bearing
+binary output. Uncatchable termination such as SIGKILL cannot run cleanup traps.
+Results are shell state, not exported secrets or persistent logs. Inspect them in
+the same shell, without command substitution or a subshell around `launch_agent`.
+External runner callers continue to receive the original output and exit code.
+
+A CLI's exit code is returned unchanged. Preflight configuration failures return
+1. Known authentication/configuration diagnostics on nonzero exits are classified;
+unknown failures remain `execution_error`. Classification is best effort and never
+interprets successful agent text or PR verdicts. The dispatcher and its nonzero
+retry policy remain unchanged, including retries for configuration/auth errors.
+Product memory cleanup/landing behavior is also unchanged. If the capture
+subprocess itself is interrupted, its shell exit status is returned as an
+`execution_error`; complete captured strings may be unavailable in that case.
+
+Run `npm run test:agents` for deterministic unit tests: CLI executables are mocks
+on a closed PATH, accounts and installer destinations are temporary, and no live
+agent, dispatcher, or external mutation is used. `npm test` runs existing Vitest
+tests followed by these tests. Static checks are `npm run check`, `npx tsc -b`,
+and `bash -n` over the shell files. Live provider execution is intentionally not
+part of these checks.
+
+### Manual Claude prompt input
+
+For manual Claude sessions, these files are thin **system-prompt shims**: supply
+the file contents as additional instructions, then give the run-specific input
+below. Headless Codex uses the validated contract-loading adapter described above.
+Each shim tells the agent to invoke its skill and run the mode the task names. **The task selects the
 mode**, so the task wording matters.
 
 **Product Agent** — the task picks `cycle`, `acceptance`, `clarify`, or `triage`:
@@ -239,13 +389,14 @@ In `cycle` it reads `project-memory.md`, surveys issues, creates new issues, upd
 `project-memory.md`, and posts a Telegram summary. In `acceptance` it judges PR #14
 against the linked issue's acceptance criteria and posts a PR comment (no memory edits).
 
-**Engineer Agent** — the task picks `implement`, `review`, `resolve`, or `clarify`:
+**Engineer Agent** — the task picks `implement`, `review`, `resolve`, `reconcile`, or `clarify`:
 
 ```
 System prompt: contents of .agents/engineer-agent-prompt.md
 Task (implement):  "Implement GitHub issue #42."
 Task (review):     "Review pull request #14."
 Task (resolve):    "Resolve the review comments on pull request #14."
+Task (reconcile):  "Reconcile the merge conflicts on pull request #14."
 Task (clarify):    "Answer the technical questions on pull request #14."
 ```
 
@@ -294,13 +445,11 @@ credentials, sends via the Bot API, and exits cleanly if Telegram isn't configur
 so the prompts never embed a token and headless runs need just one permission rule
 (`Bash(.agents/notify.sh:*)`, already in `.claude/settings.json`).
 
-> **Sandbox & network:** Claude Code's Bash sandbox blocks outbound network by default,
-> *independently of* the permission allowlist — so allowing the command is not enough.
-> `.claude/settings.json` therefore also opens `api.telegram.org` via
-> `sandbox.network.allowedDomains`. Permissions gate *what runs* (the helper); the
-> sandbox gates *what it can reach* (only Telegram). `bypassPermissions` skips prompts
-> but does **not** lift the network sandbox, so the domain allowlist is required either
-> way.
+> **Sandbox & network:** `.claude/settings.json` includes a sandbox network rule
+> for `api.telegram.org`, separate from the command allowlist. The Codex adapter
+> requests network-enabled workspace-write or the explicit bypass mode; it does
+> not consume Claude's domain rules. CLI flags and allowlists do not override
+> host restrictions. See [Live CLI compatibility and permissions](#live-cli-compatibility-and-permissions).
 
 **Credentials are never stored in the committed prompt files** — they live in a
 gitignored env file (or, in CI, repository secrets). To enable notifications:
