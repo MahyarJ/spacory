@@ -22,6 +22,9 @@ connected room structures.
 - 🚪 **Openings** — place doors and windows along a wall by click-click or by
   dragging; toggle a door's hinge edge and swing side. Openings follow their
   wall as it moves and resizes
+- 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and
+  area in the plan’s units. Areas are measured to wall centrelines; doors and
+  windows do not break enclosure
 - 📏 **Dimensions** — every wall shows its length on-canvas; select a wall and
   type an exact length to resize it, or select a single door/window to read its
   current width and type a new one
@@ -47,8 +50,8 @@ connected room structures.
   keyboard — and that bar is where further selection actions will land
 - ⚡ Built with **Vite + React + TypeScript**
 
-Not yet: rooms / enclosed areas, stylus/Apple Pencil specifics, and a
-phone-width layout. See
+Not yet: room names, holes / islands, interior-face areas, stylus/Apple Pencil
+specifics, and a phone-width layout. See
 [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope notes.
 
 ---

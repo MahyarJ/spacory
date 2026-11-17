@@ -117,6 +117,14 @@ mid-span T-split (see below) makes every wall connection a shared endpoint — a
 graph vertex — so the walls now *are* a clean PSLG. The precondition the feature
 needs arrived with that change; this is the moment to answer it.
 
+**Area measurement.** The first rooms layer measures centreline polygons in cm²
+and converts using the square of the display-unit factor. Wall thickness is not
+subtracted, so this is not net usable interior area. Rooms are memoized from the
+current wall array during rendering, including live edits; no room state or history
+entries are created. Labels use the area centroid when it is strictly inside the room, keeping
+placement independent of extra collinear junctions. If a concave room’s centroid
+is outside or on its boundary, a horizontal interior interval supplies the fallback.
+
 **Scope / what's deferred.** Openings don't affect enclosure (a door in a wall
 doesn't open the polygon — enclosure is pure wall topology), and open/partial plans
 simply yield fewer faces. Holes/islands (a free-standing column inside a room, a

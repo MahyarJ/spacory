@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatLength } from "./format";
+import { formatArea, formatLength } from "./format";
 
 describe("formatLength", () => {
   it("formats cm as a whole number with the unit", () => {
@@ -36,5 +36,19 @@ describe("formatLength", () => {
 
   it("does not emit negative zero from rounding", () => {
     expect(formatLength(-0.001, "cm")).toBe("0 cm");
+  });
+});
+
+describe("formatArea", () => {
+  it.each([
+    [120000, "cm", "120000 cm²"],
+    [120000, "m", "12 m²"],
+    [1, "mm", "100 mm²"],
+    [2.54 ** 2, "in", "1 in²"],
+    [30.48 ** 2, "ft", "1 ft²"],
+    [123456, "m", "12.35 m²"],
+    [0, "m", "0 m²"],
+  ] as const)("formats %s cm² as %s", (area, units, expected) => {
+    expect(formatArea(area, units)).toBe(expected);
   });
 });

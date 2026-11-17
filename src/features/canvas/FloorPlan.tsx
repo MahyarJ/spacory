@@ -36,6 +36,7 @@ import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
+import { RoomsLayer } from "./RoomsLayer";
 import { SelectionLayer } from "./SelectionLayer";
 import { WallEndpointsLayer } from "./WallEndpointsLayer";
 import { WallsLayer } from "./WallsLayer";
@@ -816,6 +817,7 @@ export function FloorPlan() {
         <title>Floor plan canvas</title>
         <g transform={viewTransform}>
           <GridLayer width={canvasSize.width} height={canvasSize.height} />
+          <RoomsLayer />
           <WallsLayer />
           <ItemsLayer />
           <DimensionsLayer />

@@ -41,3 +41,10 @@ export function formatLength(lengthCm: number, units: Units): string {
   // `Number(...)` drops trailing zeros; `|| 0` normalises a possible `-0`.
   return `${rounded || 0} ${units}`;
 }
+
+/** Format a centreline area supplied in cm², converting by the squared unit factor. */
+export function formatArea(areaCm2: number, units: Units): string {
+  const value = areaCm2 / CM_PER_UNIT[units] ** 2;
+  const rounded = Number(value.toFixed(DECIMALS[units]));
+  return `${rounded || 0} ${units}²`;
+}
