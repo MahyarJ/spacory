@@ -194,20 +194,14 @@ catch its absence, the change isn't done.
 
 ### Step 5 — Open a PR that references the issue
 
+Write the description using **PR descriptions** in `spacory-conventions`; keep
+`Closes #<ISSUE_NUMBER>` in the body. Save the exact text to a temporary Markdown
+file, then pass it with `--body-file`:
+
 ```bash
 gh pr create --base main \
   --title "<concise imperative title>" \
-  --body "Closes #<ISSUE_NUMBER>
-
-## What
-<what changed, briefly>
-
-## How it satisfies the acceptance criteria
-- [x] <criterion 1> — <how>
-- [x] <criterion 2> — <how>
-
-## Testing
-<commands run and result: npm run check && npx tsc -b && npm test>"
+  --body-file <description-file>
 ```
 
 Constraints:
@@ -497,7 +491,7 @@ decision calls for a non-code PR edit, apply it — e.g. align the title with th
 issue:
 
 ```bash
-gh pr edit <N> --title "<corrected title>"   # or --body for the description
+gh pr edit <N> --title "<corrected title>"   # or --body-file for the description
 ```
 
 Make **no commits**, push nothing, and do not merge. A code change is out of scope

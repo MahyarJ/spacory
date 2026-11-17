@@ -34,6 +34,27 @@ the agents.
   exact README delta; follow it. Skip the README for purely internal work — bug
   fixes with no visible behavior change, refactors, tests, or automation/tooling.
 
+## PR descriptions
+
+Apply this convention when creating or updating a PR description, regardless of
+provider. Always use these four Markdown section headings, in this order, even
+for small changes. Scale the content to the change; each section can be one
+short sentence:
+
+- `## Summary` — the concrete problem and resulting behavior.
+- `## Key decisions` — non-obvious choices and why they were made.
+- `## Acceptance criteria` — concise links between requirements and evidence.
+- `## Validation and limitations` — checks run, results, and material unverified behavior;
+  distinguish automated checks from manual/browser verification.
+
+Explain each fact once. Do not repeat implementation details in the acceptance
+mapping, copy the full issue checklist, or recount conversation history and
+abandoned approaches. Use brief cross-references when needed. Keep the headings
+for predictable navigation; if a section has nothing applicable, say so briefly
+instead of inventing content. There is no word-count or checklist-length target.
+Describe the final change and actual verification, and preserve issue linkage
+such as `Closes #N`.
+
 ## Formatting & style
 
 - **Don't hand-format.** Let Biome do it: `npm run check:fix`. Only
