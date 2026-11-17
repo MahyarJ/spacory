@@ -35,6 +35,56 @@ function signedArea(points: Point[]): number {
   return twice / 2;
 }
 
+/** Area centroid, using local coordinates for precision on translated plans. */
+function centroid(polygon: Point[], area: number): Point {
+  const origin = polygon[0];
+  let x = 0;
+  let y = 0;
+  for (let i = 1; i < polygon.length; i++) {
+    const a = {
+      x: polygon[i - 1].x - origin.x,
+      y: polygon[i - 1].y - origin.y,
+    };
+    const b = { x: polygon[i].x - origin.x, y: polygon[i].y - origin.y };
+    const cross = a.x * b.y - b.x * a.y;
+    x += (a.x + b.x) * cross;
+    y += (a.y + b.y) * cross;
+  }
+  return { x: origin.x + x / (6 * area), y: origin.y + y / (6 * area) };
+}
+
+/** Boundary points are excluded: a label anchor must be strictly inside. */
+function isInterior(point: Point, polygon: Point[]): boolean {
+  let inside = false;
+  for (let i = 1; i < polygon.length; i++) {
+    const a = polygon[i - 1];
+    const b = polygon[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const cross = (point.x - a.x) * dy - (point.y - a.y) * dx;
+    if (
+      Math.abs(cross) <= EPS * Math.hypot(dx, dy) &&
+      point.x >= Math.min(a.x, b.x) - EPS &&
+      point.x <= Math.max(a.x, b.x) + EPS &&
+      point.y >= Math.min(a.y, b.y) - EPS &&
+      point.y <= Math.max(a.y, b.y) + EPS
+    )
+      return false;
+    if (
+      a.y > point.y !== b.y > point.y &&
+      point.x < a.x + ((point.y - a.y) * dx) / dy
+    )
+      inside = !inside;
+  }
+  return inside;
+}
+
+/** Prefer the visual centre; concave faces may need a guaranteed interior fallback. */
+function labelPoint(polygon: Point[], area: number): Point {
+  const centre = centroid(polygon, area);
+  return isInterior(centre, polygon) ? centre : interiorPoint(polygon);
+}
+
 /** Pick the midpoint of an interior horizontal interval; works for concave faces. */
 function interiorPoint(polygon: Point[]): Point {
   const ys = [...new Set(polygon.map((p) => p.y))].sort((a, b) => a - b);
@@ -155,7 +205,7 @@ export function detectRooms(walls: Wall[]): Room[] {
       );
       const area = signedArea(polygon);
       if (area > EPS)
-        rooms.push({ polygon, area, labelPoint: interiorPoint(polygon) });
+        rooms.push({ polygon, area, labelPoint: labelPoint(polygon, area) });
       while (path.length > position + 1) positions.delete(path.pop()!);
     }
   }

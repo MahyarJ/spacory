@@ -46,6 +46,51 @@ describe("detectRooms", () => {
     expect(JSON.stringify(walls)).toBe(original);
   });
 
+  it("centres labels in rectangles even when their sides have extra junctions", () => {
+    const room = detectRooms(
+      boundary([
+        [0, 0],
+        [400, 0],
+        [400, 100],
+        [400, 300],
+        [0, 300],
+      ]),
+    )[0];
+    expect(room.labelPoint).toEqual({ x: 200, y: 150 });
+  });
+
+  it("uses the area centroid of a sloped room", () => {
+    const room = detectRooms(
+      boundary([
+        [0, 0],
+        [600, 0],
+        [0, 300],
+      ]),
+    )[0];
+    expect(room.labelPoint.x).toBeCloseTo(200);
+    expect(room.labelPoint.y).toBeCloseTo(100);
+    expect(inside(room.labelPoint, room.polygon)).toBe(true);
+  });
+
+  it("keeps centering stable when a room is rotated and translated", () => {
+    const room = detectRooms(
+      boundary([
+        [0, 0],
+        [400, 0],
+        [400, 300],
+        [0, 300],
+      ]).map((w) => {
+        const transform = (p: Point) => ({
+          x: 1e8 + (p.x - p.y) / Math.SQRT2,
+          y: 1e8 + (p.x + p.y) / Math.SQRT2,
+        });
+        return { ...w, a: transform(w.a), b: transform(w.b) };
+      }),
+    )[0];
+    expect(room.labelPoint.x).toBeCloseTo(1e8 + 50 / Math.SQRT2);
+    expect(room.labelPoint.y).toBeCloseTo(1e8 + 350 / Math.SQRT2);
+  });
+
   it("does not depend on wall direction or input order", () => {
     const walls = rectangle()
       .reverse()
