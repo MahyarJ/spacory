@@ -34,6 +34,25 @@ the agents.
   exact README delta; follow it. Skip the README for purely internal work — bug
   fixes with no visible behavior change, refactors, tests, or automation/tooling.
 
+## PR descriptions
+
+Apply this convention when creating or updating a PR description, regardless of
+provider. Scale detail to the change: a small change may need only a short
+paragraph plus validation. For substantial changes, use these sections where useful:
+
+- **Summary** — the concrete problem and resulting behavior.
+- **Key decisions** — non-obvious choices and why they were made.
+- **Acceptance criteria** — concise links between requirements and evidence.
+- **Validation and limitations** — checks run, results, and material unverified behavior;
+  distinguish automated checks from manual/browser verification.
+
+Explain each fact once. Do not repeat implementation details in the acceptance
+mapping, copy the full issue checklist, or recount conversation history and
+abandoned approaches. Use brief cross-references when needed. Omit sections that
+add no useful information; this is not a mandatory checklist or length target.
+Describe the final change and actual verification, and preserve issue linkage
+such as `Closes #N`.
+
 ## Formatting & style
 
 - **Don't hand-format.** Let Biome do it: `npm run check:fix`. Only
