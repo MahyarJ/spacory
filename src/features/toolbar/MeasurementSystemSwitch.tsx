@@ -1,6 +1,6 @@
 import { useApp } from "@app/store";
-import styles from "@ui/SegmentedControl.module.css";
 import clsx from "clsx";
+import styles from "./ThemeSwitch.module.css";
 
 export function MeasurementSystemSwitch() {
   const system = useApp((s) => s.plan.meta.measurementSystem);

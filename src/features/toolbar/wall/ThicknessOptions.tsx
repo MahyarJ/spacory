@@ -1,7 +1,7 @@
 import { useApp } from "@app/store";
 import { THICKNESS_PRESETS } from "@app/thickness";
-import segments from "@ui/SegmentedControl.module.css";
 import clsx from "clsx";
+import segments from "../ThemeSwitch.module.css";
 import { LengthField } from "./LengthField";
 import styles from "./WallOptions.module.css";
 

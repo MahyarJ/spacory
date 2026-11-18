@@ -1,6 +1,6 @@
 import { useApp } from "@app/store";
-import styles from "@ui/SegmentedControl.module.css";
 import clsx from "clsx";
+import styles from "./ThemeSwitch.module.css";
 
 const options = [
   { value: "dark", label: "Dark" },
