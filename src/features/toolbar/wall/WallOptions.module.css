@@ -1,14 +1,18 @@
 /* Floating overlay anchored to the top-left of the canvas. Positioned (rather
    than a toolbar row) so it never reflows the canvas when it toggles. */
-.bar {
+.overlay {
   position: absolute;
   max-width: calc(100% - 16px);
   top: 8px;
   left: 8px;
   z-index: 5;
+}
+
+.bar {
+  --wall-toolbar-padding-inline: 10px;
   display: flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 6px var(--wall-toolbar-padding-inline);
   background: var(--sp-panel);
   border: 1px solid var(--sp-grid);
   border-radius: 8px;
@@ -29,25 +33,18 @@
 }
 
 .lengthField {
+  --length-field-gap: 6px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-}
-
-.lengthReference {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  padding-inline-end: 6px;
-  font-size: 13px;
-  white-space: nowrap;
+  gap: var(--length-field-gap);
 }
 
 .lengthInput {
   width: 72px;
+  min-height: var(--sp-toolbar-button-height);
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--sp-toolbar-button-radius);
   border: 1px solid var(--sp-text);
   background: var(--sp-panel);
   color: var(--sp-text);
@@ -58,58 +55,33 @@
   opacity: 0.8;
 }
 
-.resizeHint {
-  font-size: 12px;
-  padding-inline: 4px;
+.moveControls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--length-field-gap);
+  margin-inline-start: calc(
+    var(--wall-toolbar-padding-inline) -
+    var(--length-field-gap)
+  );
+  padding-inline-start: var(--wall-toolbar-padding-inline);
+  border-inline-start: 1px solid var(--sp-grid);
 }
 
 .resizeSummary {
-  flex-basis: 100%;
-  font-size: 12px;
-}
-
-.resizeSummary:empty {
   position: absolute;
-}
-
-.resizeControls {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  margin: 0;
-  border: 0;
-  border-radius: 6px;
-  background: var(--sp-grid);
-}
-
-.resizeOption {
-  position: relative;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  width: max-content;
+  max-width: calc(100vw - 16px);
   font-size: 12px;
+  pointer-events: none;
 }
 
-.resizeOption input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.resizeOption span {
-  display: block;
-  padding: 5px 8px;
-  border-radius: 4px;
-}
-
-.resizeOption input:checked + span {
+.resizeSummary:not(:empty) {
+  padding: 4px 8px;
   background: var(--sp-panel);
-  box-shadow: inset 0 0 0 1px var(--sp-accent);
-}
-
-.resizeOption input:focus-visible + span {
-  outline: 2px solid var(--sp-accent);
+  border: 1px solid var(--sp-grid);
+  border-radius: 6px;
 }
 
 /* On-screen Remove / Hinge / Swing. Shown for every pointer kind: these verbs
@@ -130,7 +102,8 @@
   justify-content: center;
   padding: 7px;
   border: none;
-  border-radius: 6px;
+  min-height: var(--sp-toolbar-button-height);
+  border-radius: var(--sp-toolbar-button-radius);
   background: var(--sp-grid);
   color: var(--sp-text);
   cursor: pointer;

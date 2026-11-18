@@ -551,8 +551,8 @@ majors run on Node 24, clearing the deprecation warnings.
 
 The order in which a wall was drawn must not decide which junction moves.
 Typing a length keeps the only joined end fixed when there is one. With two
-joined ends or none, the edit defaults to the center. With two joined ends the
-user can instead pin a visible end for that edit. The canvas previews each
+joined ends or none, the edit defaults to the center. The user can choose
+which end moves or move both for the current edit. The canvas previews each
 moved junction and the walls that follow it, so any change to neighboring wall
 angles or lengths is visible before the single undoable commit. Openings keep
 their position along the resized wall wherever they still fit. A resize can

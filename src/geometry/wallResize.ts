@@ -6,6 +6,7 @@ import {
 } from "./connectivity";
 import {
   getWallDirection,
+  projectPointToWall,
   resizeWallToLength,
   type WallResizeAnchor,
 } from "./wall";
@@ -13,7 +14,7 @@ import {
 export function getWallResizeContext(
   walls: Wall[],
   wall: Wall,
-  choice: WallResizeAnchor = "center",
+  choice?: WallResizeAnchor,
 ) {
   const atA = findConnectedEndpoints(walls, wall.a).filter(
     (ref) => ref.wallId !== wall.id,
@@ -23,9 +24,22 @@ export function getWallResizeContext(
   );
   const joinedA = atA.length > 0;
   const joinedB = atB.length > 0;
-  const bothJoined = joinedA && joinedB;
-  const anchor = bothJoined ? choice : joinedA ? "a" : joinedB ? "b" : "center";
-  return { atA, atB, bothJoined, anchor };
+  let anchor: WallResizeAnchor =
+    joinedA === joinedB ? "center" : joinedA ? "a" : "b";
+  // Older or imported plans can contain a T-junction whose host is unsplit.
+  // A lone exact contact can serve as the anchor even before the host splits.
+  if (!joinedA && !joinedB) {
+    const touchesHost = (point: Point) =>
+      walls.some((other) => {
+        if (other.id === wall.id) return false;
+        const { t, proj } = projectPointToWall(point, other);
+        return t > 0 && t < 1 && pointsEqual(point, proj);
+      });
+    const touchesA = touchesHost(wall.a);
+    const touchesB = touchesHost(wall.b);
+    if (touchesA !== touchesB) anchor = touchesA ? "a" : "b";
+  }
+  return { atA, atB, anchor: choice ?? anchor };
 }
 
 /** Move the wall and its immediate junctions using membership from before the resize. */

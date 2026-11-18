@@ -21,6 +21,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WallOptions } from "./WallOptions";
+import { WallOptionsBar } from "./WallOptionsBar";
 
 const wall = (
   ax: number,
@@ -71,7 +72,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("New length");
+    const input = screen.getByLabelText("Length");
     input.focus();
     fireEvent.change(input, { target: { value: "320" } });
     // Never blurred, never submitted — the value only survives if the
@@ -99,7 +100,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("New length");
+    const input = screen.getByLabelText("Length");
     input.focus();
     fireEvent.change(input, { target: { value: "320" } });
     fireEvent.pointerDown(input);
@@ -112,7 +113,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("New length");
+    const input = screen.getByLabelText("Length");
     input.focus();
     fireEvent.change(input, { target: { value: "0" } });
     pressCanvas();
@@ -125,7 +126,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("New length");
+    const input = screen.getByLabelText("Length");
     input.focus();
     fireEvent.change(input, { target: { value: "320" } });
     pressCanvas();
@@ -159,11 +160,10 @@ describe("WallOptions — resize preview", () => {
     const { container } = render(
       <>
         <FloorPlan />
-        <WallOptions />
+        <WallOptionsBar />
       </>,
     );
-    const input = screen.getByLabelText("New length");
-    act(() => input.focus());
+    const input = screen.getByLabelText("Length");
     return {
       container,
       input,
@@ -175,26 +175,28 @@ describe("WallOptions — resize preview", () => {
   }
 
   it("previews both neighboring walls, then applies the chosen anchor on click-away", () => {
-    const { container, setDraft, preview } = setup();
+    const { container, input, setDraft, preview } = setup();
     const before = useApp.getState().plan;
     const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
-    const currentLength = screen.getByText("Current length").parentElement;
-    expect(currentLength?.textContent).toContain("400 cm");
-    expect(screen.getByRole("status").textContent).toBe("");
+    const status = screen.getByRole("status");
+    const bar = status.previousElementSibling;
+    expect(bar?.contains(input)).toBe(true);
+    expect(bar?.contains(screen.getByRole("button", { name: "Remove" }))).toBe(
+      true,
+    );
+    expect(bar?.querySelectorAll("input")).toHaveLength(1);
+    expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
+    expect(status.textContent).toBe("");
+    act(() => input.focus());
     expect(preview()?.querySelectorAll("path")).toHaveLength(2);
     expect(preview()?.querySelectorAll("polygon")).toHaveLength(0);
     expect(
-      (
-        screen.getByRole("radio", {
-          name: "Move both ends",
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+      screen.getByRole("button", { name: "Both", pressed: true }),
+    ).toBeTruthy();
 
     setDraft("500");
-    expect(currentLength?.textContent).toContain("400 cm");
-    expect(screen.getByRole("status").textContent).toBe(
-      "Grow 100 cm across both ends",
+    expect(status.textContent).toBe(
+      "Grow by 100 cm across both ends (400 cm → 500 cm)",
     );
     expect(
       Array.from(
@@ -208,15 +210,21 @@ describe("WallOptions — resize preview", () => {
         ?.getAttribute("transform"),
     ).toContain("rotate(180)");
 
-    const moveRight = screen.getByRole("radio", { name: "Move right end" });
+    const moveRight = screen.getByRole("button", { name: "Right" });
     fireEvent.pointerDown(moveRight);
-    act(() => moveRight.focus());
+    fireEvent.mouseDown(moveRight);
+    expect(document.activeElement).toBe(moveRight);
+    expect(fireEvent.keyDown(moveRight, { key: "Enter" })).toBe(true);
+    expect(useApp.getState().plan).toBe(before);
     fireEvent.click(moveRight);
+    act(() => input.focus());
+    expect((input as HTMLInputElement).value).toBe("500");
+    act(() => moveRight.focus());
     expect(useApp.getState().plan).toBe(before);
     expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(saved);
     expect(preview()?.querySelectorAll("path")).toHaveLength(1);
     expect(screen.getByRole("status").textContent).toBe(
-      "Grow 100 cm at the right end",
+      "Grow by 100 cm at the right end (400 cm → 500 cm)",
     );
     expect(preview()?.querySelector('[data-wall-id="left"]')).toBeNull();
     const rightPreview = preview()
@@ -229,7 +237,7 @@ describe("WallOptions — resize preview", () => {
     expect(useApp.getState().plan.walls[0]).toEqual(
       wall(0, 0, 500, 0, "bottom"),
     );
-    expect(currentLength?.textContent).toContain("500 cm");
+    expect(status.textContent).toBe("");
     expect(
       container
         .querySelectorAll('[data-layer="walls"] polygon')[1]
@@ -244,6 +252,7 @@ describe("WallOptions — resize preview", () => {
     const before = useApp.getState().plan;
     const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
 
+    act(() => input.focus());
     setDraft("300");
     expect(preview()?.querySelectorAll("polygon")).toHaveLength(3);
     expect(
@@ -261,11 +270,11 @@ describe("WallOptions — resize preview", () => {
     expect(preview()?.querySelectorAll("polygon")).toHaveLength(0);
     expect(preview()?.querySelectorAll("path")).toHaveLength(2);
     setDraft("350");
-    const moveRight = screen.getByRole("radio", { name: "Move right end" });
+    const moveRight = screen.getByRole("button", { name: "Right" });
     act(() => moveRight.focus());
     fireEvent.click(moveRight);
     expect(screen.getByRole("status").textContent).toBe(
-      "Shrink 50 cm at the right end",
+      "Shrink by 50 cm at the right end (400 cm → 350 cm)",
     );
     fireEvent.keyDown(moveRight, { key: "Escape" });
 
@@ -276,12 +285,8 @@ describe("WallOptions — resize preview", () => {
 
     act(() => input.focus());
     expect(
-      (
-        screen.getByRole("radio", {
-          name: "Move both ends",
-        }) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+      screen.getByRole("button", { name: "Both", pressed: true }),
+    ).toBeTruthy();
     setDraft("300");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(useApp.getState().plan.walls[0]).toEqual(
@@ -291,14 +296,15 @@ describe("WallOptions — resize preview", () => {
   });
 
   it("labels vertical anchors by position and commits when focus leaves the field", () => {
-    const { setDraft, preview } = setup("left");
+    const { input, setDraft, preview } = setup("left");
+    act(() => input.focus());
     setDraft("400");
-    const moveBottom = screen.getByRole("radio", { name: "Move bottom end" });
-    expect(screen.getByRole("radio", { name: "Move top end" })).toBeTruthy();
+    const moveBottom = screen.getByRole("button", { name: "Bottom" });
+    expect(screen.getByRole("button", { name: "Top" })).toBeTruthy();
     act(() => moveBottom.focus());
     fireEvent.click(moveBottom);
     expect(screen.getByRole("status").textContent).toBe(
-      "Grow 100 cm at the bottom end",
+      "Grow by 100 cm at the bottom end (300 cm → 400 cm)",
     );
     act(() => screen.getByRole("button", { name: "Remove" }).focus());
     expect(useApp.getState().plan.walls[3]).toEqual(wall(0, 400, 0, 0, "left"));
@@ -306,24 +312,85 @@ describe("WallOptions — resize preview", () => {
   });
 
   it.each([
-    ["w1", 1, "Joined end stays fixed"],
-    ["detached", 2, "Resize from center"],
-  ])("shows the default rule when %s has fewer than two joins", (id, chevrons, hint) => {
+    false,
+    true,
+  ])("defaults to the free end at a one-ended junction (unsplit host: %s)", (unsplit) => {
     const plan = cornerPlan();
-    plan.walls.push(wall(0, 500, 250, 500, "detached"));
+    if (unsplit) plan.walls[1] = wall(250, -150, 250, 300, "w2");
     useApp.getState().loadPlan(plan);
-    useApp.getState().selectWall(id);
+    useApp.getState().selectWall("w1");
     const { container } = render(
       <>
         <FloorPlan />
         <WallOptions />
       </>,
     );
-    act(() => screen.getByLabelText("New length").focus());
-    expect(screen.getByText(hint)).toBeTruthy();
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
-    expect(container.querySelectorAll("[data-resize-end]")).toHaveLength(
-      chevrons,
+    const input = screen.getByLabelText("Length");
+    act(() => input.focus());
+    const left = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Left",
+      pressed: true,
+    });
+    expect(left.disabled).toBe(false);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Both" }).disabled,
+    ).toBe(false);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Right" }).disabled,
+    ).toBe(false);
+    expect(container.querySelectorAll("[data-resize-end]")).toHaveLength(1);
+    expect(container.querySelector('[data-resize-end="a"]')).toBeTruthy();
+    fireEvent.change(input, { target: { value: "320" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useApp.getState().plan.walls[0]).toEqual(wall(-70, 0, 250, 0, "w1"));
+  });
+
+  it("allows moving the joined end and follows the junction when applied", () => {
+    useApp.getState().loadPlan(cornerPlan());
+    useApp.getState().selectWall("w1");
+    render(<WallOptions />);
+    const input = screen.getByLabelText("Length");
+    act(() => input.focus());
+    fireEvent.change(input, { target: { value: "320" } });
+    fireEvent.click(screen.getByRole("button", { name: "Right" }));
+    expect(
+      screen.getByRole("button", { name: "Right", pressed: true }),
+    ).toBeTruthy();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useApp.getState().plan.walls).toEqual([
+      wall(0, 0, 320, 0, "w1"),
+      wall(320, 0, 250, 300, "w2"),
+    ]);
+    fireEvent.pointerDown(input);
+    expect(
+      screen.getByRole("button", { name: "Left", pressed: true }),
+    ).toBeTruthy();
+  });
+
+  it("defaults to Both for a detached wall and allows either end", () => {
+    const plan = cornerPlan();
+    plan.walls.push(wall(0, 500, 250, 500, "detached"));
+    useApp.getState().loadPlan(plan);
+    useApp.getState().selectWall("detached");
+    const { container } = render(
+      <>
+        <FloorPlan />
+        <WallOptions />
+      </>,
     );
+    act(() => screen.getByLabelText("Length").focus());
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: "Both",
+        pressed: true,
+      }).disabled,
+    ).toBe(false);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Left" }).disabled,
+    ).toBe(false);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Right" }).disabled,
+    ).toBe(false);
+    expect(container.querySelectorAll("[data-resize-end]")).toHaveLength(2);
   });
 });

@@ -56,11 +56,10 @@ export function WallOptions() {
         <LengthField
           key={selectedWall.id}
           id="wall-length-input"
-          label="New length"
+          label="Length"
           lengthCm={getWallLength(selectedWall)}
           minCm={MIN_WALL_LENGTH}
           system={system}
-          showCurrentLength
           onCommit={(length) =>
             setWallLength(length, useApp.getState().wallLengthEdit?.anchor)
           }
@@ -69,7 +68,6 @@ export function WallOptions() {
               wall={selectedWall}
               walls={walls}
               length={length}
-              system={system}
             />
           )}
         />

@@ -1,6 +1,5 @@
 import {
   feetAndInchesToCm,
-  formatSystemLength,
   type LengthUnit,
   lengthToCm,
   toFeetAndInches,
@@ -39,7 +38,6 @@ export function LengthField({
   onCommit,
   singleUnit,
   hideLabel = false,
-  showCurrentLength = false,
   renderControls,
 }: {
   id: string;
@@ -50,7 +48,6 @@ export function LengthField({
   onCommit: (cm: number) => void;
   singleUnit?: LengthUnit;
   hideLabel?: boolean;
-  showCurrentLength?: boolean;
   renderControls?: (draftCm: number | null) => ReactNode;
 }) {
   const [draft, setDraft] = useState(() =>
@@ -100,13 +97,29 @@ export function LengthField({
       ref={fieldRef}
       className={styles.lengthField}
       onFocus={renderControls ? () => setActive(true) : undefined}
+      onMouseDown={
+        renderControls
+          ? (event) => {
+              // Some browsers don't focus buttons on a click. Keep the focus
+              // transition inside the form so that selecting a segment can't blur it.
+              if (
+                event.button === 0 &&
+                event.target instanceof HTMLButtonElement
+              ) {
+                event.preventDefault();
+                event.target.focus();
+              }
+            }
+          : undefined
+      }
       onSubmit={(event) => {
         event.preventDefault();
         commit();
       }}
       onKeyDown={(event) => {
+        if (event.target instanceof HTMLButtonElement) event.stopPropagation();
         // Two numeric inputs have no implicit Enter submission in the browser.
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
           event.preventDefault();
           commit();
         }
@@ -117,16 +130,10 @@ export function LengthField({
         }
       }}
       onBlur={(event) => {
-        // Moving between feet and inches must not commit half of an edit.
+        // Moving between the inputs and resize controls keeps the draft open.
         if (!event.currentTarget.contains(event.relatedTarget)) commit();
       }}
     >
-      {showCurrentLength && (
-        <div className={styles.lengthReference}>
-          <span className={styles.label}>Current length</span>
-          <span>{formatSystemLength(lengthCm, system)}</span>
-        </div>
-      )}
       {!hideLabel && (
         <label className={styles.label} htmlFor={id}>
           {label}
