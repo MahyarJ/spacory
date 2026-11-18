@@ -2,7 +2,7 @@ import type { DoorItem, Plan, Wall } from "@app/schema";
 import { findConnectedEndpoints } from "@geometry/connectivity";
 import { getPointOnWall, getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadPersistedHistory } from "./persistence";
+import { HISTORY_STORAGE_KEY, loadPersistedHistory } from "./persistence";
 import { previewWallResize, useApp } from "./store";
 
 /** Minimal in-memory localStorage stand-in for the node test environment. */
@@ -126,12 +126,12 @@ describe("setSelectedWallLength", () => {
     const stem = wall("stem", 350, 0, 350, 200);
     loadWithSelection([host, stem], ["host"]);
     const before = useApp.getState().plan;
-    const historyBefore = loadPersistedHistory();
+    const historyBefore = localStorage.getItem(HISTORY_STORAGE_KEY);
 
     expect(previewWallResize(before, host, 300, "a")).toBe("blocked-junction");
     useApp.getState().setSelectedWallLength(300, "a");
     expect(useApp.getState().plan).toBe(before);
-    expect(loadPersistedHistory()).toEqual(historyBefore);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(historyBefore);
 
     useApp.getState().setSelectedWallLength(350, "a");
     expect(useApp.getState().plan.walls).toEqual([
@@ -144,12 +144,12 @@ describe("setSelectedWallLength", () => {
     const stem = wall("stem", 0.5, 0, 0.5, 200);
     loadWithSelection([wall("host", 0, 0, 400, 0), stem], ["stem"]);
     const before = useApp.getState().plan;
-    const historyBefore = loadPersistedHistory();
+    const historyBefore = localStorage.getItem(HISTORY_STORAGE_KEY);
 
     expect(previewWallResize(before, stem, 150, "b")).toBe("blocked-junction");
     useApp.getState().setSelectedWallLength(150, "b");
     expect(useApp.getState().plan).toBe(before);
-    expect(loadPersistedHistory()).toEqual(historyBefore);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(historyBefore);
 
     useApp.getState().setSelectedWallLength(150, "a");
     expect(useApp.getState().plan.walls).toEqual([
