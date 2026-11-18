@@ -17,7 +17,7 @@ connected room structures.
   choices share a consistent segmented control.
 
 - 🧱 **Walls** — click-to-chain or drag to draw, with grid snapping and
-  thickness presets (10 / 15 cm or 4½″ / 6½″) and custom overall thickness
+  thickness presets (10 / 15 / 30 cm or 4½″ / 6½″ / 12″) and custom overall thickness
 - 🔵 **Smart junctions** — where walls meet, their geometry is mitered so corners
   and T/X junctions join seamlessly (no overlap patches, no gaps); very acute
   angles fall back to a clean bevel. A wall ending part-way along another splits

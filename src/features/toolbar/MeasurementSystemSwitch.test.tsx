@@ -302,3 +302,31 @@ it("keeps Custom selected even when its value happens to equal a preset", () => 
     screen.getByRole("button", { name: "10 cm" }).getAttribute("aria-pressed"),
   ).toBe("true");
 });
+
+it("keeps the thick-wall preset selected across system switches and undo without resizing walls", () => {
+  useApp.setState({ tool: "wall" });
+  mount();
+  const walls = useApp.getState().plan.walls;
+  fireEvent.click(screen.getByRole("button", { name: "30 cm" }));
+  expect(useApp.getState().currentWallThickness).toBe(30);
+  switchTo("Imperial");
+  expect(
+    screen.getByRole("button", { name: "12″" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().currentWallThickness).toBeCloseTo(30.48);
+  expect(screen.queryByLabelText("Custom thickness")).toBeNull();
+  act(() => useApp.getState().undo());
+  expect(
+    screen.getByRole("button", { name: "30 cm" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().currentWallThickness).toBe(30);
+  act(() => useApp.getState().redo());
+  expect(
+    screen.getByRole("button", { name: "12″" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  switchTo("Metric");
+  expect(
+    screen.getByRole("button", { name: "30 cm" }).getAttribute("aria-pressed"),
+  ).toBe("true");
+  expect(useApp.getState().plan.walls).toEqual(walls);
+});

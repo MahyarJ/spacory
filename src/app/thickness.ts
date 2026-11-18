@@ -1,16 +1,18 @@
 import { lengthToCm } from "./format";
 import type { MeasurementSystem } from "./schema";
 
-export type ThicknessPreset = "standard" | "thick";
+export type ThicknessPreset = "standard" | "thick" | "heavy";
 
 export const THICKNESS_PRESETS = {
   metric: [
     { id: "standard", cm: 10, label: "10 cm" },
     { id: "thick", cm: 15, label: "15 cm" },
+    { id: "heavy", cm: 30, label: "30 cm" },
   ],
   imperial: [
     { id: "standard", cm: lengthToCm(4.5, "in"), label: "4½″" },
     { id: "thick", cm: lengthToCm(6.5, "in"), label: "6½″" },
+    { id: "heavy", cm: lengthToCm(12, "in"), label: "12″" },
   ],
 } as const;
 

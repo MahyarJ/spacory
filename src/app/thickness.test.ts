@@ -5,8 +5,10 @@ describe("drawing thickness", () => {
   it.each([
     ["metric", "standard", 10],
     ["metric", "thick", 15],
+    ["metric", "heavy", 30],
     ["imperial", "standard", 11.43],
     ["imperial", "thick", 16.51],
+    ["imperial", "heavy", 30.48],
   ] as const)("maps %s %s to its construction preset", (system, preset, cm) => {
     expect(drawingThickness(system, preset, 99)).toBeCloseTo(cm);
   });
