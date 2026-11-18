@@ -140,13 +140,8 @@ export function coercePlan(raw: unknown): Plan {
 
   const defaults = createInitialPlan();
   const meta = isObject(raw.meta) ? raw.meta : {};
-  // Older exports only specified a display unit; coordinates have always been cm.
   const measurementSystem =
-    meta.measurementSystem === "metric" || meta.measurementSystem === "imperial"
-      ? meta.measurementSystem
-      : meta.units === "in" || meta.units === "ft"
-        ? "imperial"
-        : "metric";
+    meta.measurementSystem === "imperial" ? "imperial" : "metric";
 
   return {
     version: PLAN_VERSION,

@@ -90,7 +90,7 @@ describe("parsePlan normalization", () => {
   it("normalizes an unknown version but keeps the geometry", () => {
     const text = JSON.stringify({
       version: "0.0.1-legacy",
-      meta: { name: "Old", units: "cm", gridSize: 20 },
+      meta: { name: "Old", gridSize: 20 },
       walls: [{ id: "w", a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, thickness: 8 }],
       items: [],
     });
@@ -102,7 +102,7 @@ describe("parsePlan normalization", () => {
   it("falls back to defaults for missing/invalid meta fields", () => {
     const defaults = createInitialPlan();
     const text = JSON.stringify({
-      meta: { units: "lightyears", gridSize: -5 },
+      meta: { measurementSystem: "invalid", gridSize: -5 },
       walls: [],
       items: [],
     });
@@ -199,28 +199,25 @@ describe("measurement system metadata", () => {
   });
 
   it.each([
-    ["mm", "metric"],
-    ["cm", "metric"],
-    ["m", "metric"],
-    ["in", "imperial"],
-    ["ft", "imperial"],
-    [undefined, "metric"],
-    ["invalid", "metric"],
-  ])("migrates legacy units %s without converting coordinates", (units, expected) => {
-    const parsed = parsePlan(JSON.stringify({ ...plan, meta: { units } }));
-    expect(parsed.meta.measurementSystem).toBe(expected);
-    expect(parsed.walls).toEqual(plan.walls);
-    expect(parsed.items).toEqual(plan.items);
-    expect(parsed.meta).not.toHaveProperty("units");
-  });
-
-  it("prefers an explicit system over legacy units", () => {
+    undefined,
+    null,
+    "invalid",
+    false,
+    42,
+  ])("defaults a missing or invalid system (%s) to Metric without changing geometry", (measurementSystem) => {
     const parsed = parsePlan(
-      JSON.stringify({
-        ...plan,
-        meta: { measurementSystem: "metric", units: "ft" },
-      }),
+      JSON.stringify({ ...plan, meta: { measurementSystem } }),
     );
     expect(parsed.meta.measurementSystem).toBe("metric");
+    expect(parsed.walls).toEqual(plan.walls);
+    expect(parsed.items).toEqual(plan.items);
+  });
+
+  it("ignores unrelated units metadata instead of inferring the system", () => {
+    const parsed = parsePlan(
+      JSON.stringify({ ...plan, meta: { units: "ft" } }),
+    );
+    expect(parsed.meta.measurementSystem).toBe("metric");
+    expect(parsed.meta).not.toHaveProperty("units");
   });
 });

@@ -844,9 +844,9 @@ Store `meta.measurementSystem` (`metric` or `imperial`) with the plan. Metric
 uses cm for lengths and m² for areas; Imperial uses feet/inches and ft².
 Coordinates, thicknesses, and snap spacing remain in cm. JSON and autosaved
 history preserve the setting; SVG/PNG measurement labels use the same formatters
-as the canvas. Legacy `meta.units` maps mm/cm/m to Metric and in/ft to Imperial,
-without rescaling geometry. Persisted legacy history is re-diffed after
-normalization so undo/redo also addresses the new metadata field.
+as the canvas. Imports read only `meta.measurementSystem`: Imperial is explicit,
+and missing or invalid values default to Metric. No `meta.units` compatibility
+mapping or legacy undo-history migration is maintained.
 
 Imperial lengths display tenths of an inch, with carry into feet. Editors use
 separate ft/in fields and validate the combined cm value. An unchanged rounded
@@ -871,5 +871,4 @@ the system choice, and releasing records the drag as its own undo step.
 
 The schema exposes only `MeasurementSystem`; it no longer advertises individually
 selectable display units. Formatting accepts the system directly, while numeric
-editors share a `LengthUnit` type limited to cm/in. Legacy mm/m/ft metadata is
-still recognized during import and mapped to its measurement system.
+editors share a `LengthUnit` type limited to cm/in.

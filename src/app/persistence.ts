@@ -1,4 +1,4 @@
-import { applyPatch, compare, type Operation } from "fast-json-patch";
+import type { Operation } from "fast-json-patch";
 import type { History } from "./history";
 import { coercePlan } from "./io";
 
@@ -44,38 +44,11 @@ export function loadPersistedHistory(): History | null {
   try {
     const raw = JSON.parse(text);
     if (raw?.format !== HISTORY_FORMAT) return null;
-    const present = coercePlan(raw.present);
-    const past = asPatchList(raw.past);
-    const future = asPatchList(raw.future);
-    if (raw.present?.meta?.measurementSystem === undefined) {
-      // Legacy patches address meta.units. Re-diff normalized snapshots so undo
-      // and redo use measurementSystem too, including whole-meta replacements.
-      const migrate = (steps: Operation[][]): Operation[][] => {
-        try {
-          let previousRaw = raw.present;
-          let previous = present;
-          const result: Operation[][] = [];
-          for (const step of [...steps].reverse()) {
-            const nextRaw = applyPatch(
-              previousRaw,
-              step,
-              true,
-              false,
-            ).newDocument;
-            const next = coercePlan(nextRaw);
-            next.meta.updatedAt = present.meta.updatedAt;
-            result.unshift(compare(previous, next));
-            previousRaw = nextRaw;
-            previous = next;
-          }
-          return result;
-        } catch {
-          return [];
-        }
-      };
-      return { present, past: migrate(past), future: migrate(future) };
-    }
-    return { past, present, future };
+    return {
+      present: coercePlan(raw.present),
+      past: asPatchList(raw.past),
+      future: asPatchList(raw.future),
+    };
   } catch {
     return null;
   }
