@@ -88,11 +88,11 @@ it("switches lengths and room areas together, persists the plan, and supports un
   expect(container.querySelector('[data-layer="rooms"]')?.textContent).toBe(
     "129.17 ft²",
   );
-  expect((screen.getByLabelText("Length feet") as HTMLInputElement).value).toBe(
-    "13",
-  );
   expect(
-    (screen.getByLabelText("Length inches") as HTMLInputElement).value,
+    (screen.getByLabelText("New length feet") as HTMLInputElement).value,
+  ).toBe("13");
+  expect(
+    (screen.getByLabelText("New length inches") as HTMLInputElement).value,
   ).toBe("1.5");
   expect(useApp.getState().plan.walls).toEqual(before.walls);
   expect(useApp.getState().plan.items).toEqual(before.items);
@@ -108,17 +108,17 @@ it("switches lengths and room areas together, persists the plan, and supports un
   switchTo("Imperial");
   expect(loadPersistedHistory()?.past).toHaveLength(1);
   act(() => useApp.getState().undo());
-  expect(screen.getByLabelText("Length")).toBeTruthy();
+  expect(screen.getByLabelText("New length")).toBeTruthy();
   expect(container.querySelector('[data-layer="rooms"]')?.textContent).toBe(
     "12 m²",
   );
   act(() => useApp.getState().redo());
-  expect(screen.getByLabelText("Length feet")).toBeTruthy();
+  expect(screen.getByLabelText("New length feet")).toBeTruthy();
 });
 
 it("commits a pending metric edit before switching, as a separate undo step", () => {
   mount();
-  const input = screen.getByLabelText("Length");
+  const input = screen.getByLabelText("New length");
   input.focus();
   fireEvent.change(input, { target: { value: "350" } });
   switchTo("Imperial");
@@ -134,8 +134,8 @@ it("commits a pending metric edit before switching, as a separate undo step", ()
 it("edits feet and inches together and commits in the original system before switching", () => {
   mount();
   switchTo("Imperial");
-  const feet = screen.getByLabelText("Length feet");
-  const inches = screen.getByLabelText("Length inches");
+  const feet = screen.getByLabelText("New length feet");
+  const inches = screen.getByLabelText("New length inches");
   feet.focus();
   fireEvent.change(feet, { target: { value: "8" } });
   fireEvent.blur(feet, { relatedTarget: inches });
@@ -150,7 +150,7 @@ it("does not resize an untouched rounded length or add history on blur", () => {
   mount();
   switchTo("Imperial");
   const before = useApp.getState().plan;
-  const input = screen.getByLabelText("Length inches");
+  const input = screen.getByLabelText("New length inches");
   input.focus();
   fireEvent.blur(input);
   expect(useApp.getState().plan).toBe(before);
@@ -161,12 +161,12 @@ it("does not resize an untouched rounded length or add history on blur", () => {
 it("rejects invalid imperial drafts before switching", () => {
   mount();
   switchTo("Imperial");
-  const feet = screen.getByLabelText("Length feet");
+  const feet = screen.getByLabelText("New length feet");
   feet.focus();
   fireEvent.change(feet, { target: { value: "-1" } });
   switchTo("Metric");
   expect(getWallLength(useApp.getState().plan.walls[0])).toBe(400);
-  expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe(
+  expect((screen.getByLabelText("New length") as HTMLInputElement).value).toBe(
     "400",
   );
 });
@@ -174,8 +174,8 @@ it("rejects invalid imperial drafts before switching", () => {
 it("validates imperial lengths against the centimetre minimum", () => {
   mount();
   switchTo("Imperial");
-  const feet = screen.getByLabelText("Length feet");
-  const inches = screen.getByLabelText("Length inches");
+  const feet = screen.getByLabelText("New length feet");
+  const inches = screen.getByLabelText("New length inches");
   fireEvent.change(feet, { target: { value: "0" } });
   fireEvent.change(inches, {
     target: { value: String(MIN_WALL_LENGTH / 2.54 / 2) },
@@ -208,10 +208,10 @@ it("converts opening width entries and thickness preset labels", () => {
 it("commits both imperial inputs on Enter without waiting for blur", () => {
   mount();
   switchTo("Imperial");
-  fireEvent.change(screen.getByLabelText("Length feet"), {
+  fireEvent.change(screen.getByLabelText("New length feet"), {
     target: { value: "8" },
   });
-  const inches = screen.getByLabelText("Length inches");
+  const inches = screen.getByLabelText("New length inches");
   fireEvent.change(inches, { target: { value: "6" } });
   fireEvent.keyDown(inches, { key: "Enter" });
   expect(getWallLength(useApp.getState().plan.walls[0])).toBeCloseTo(259.08);

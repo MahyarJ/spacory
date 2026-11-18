@@ -71,7 +71,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("Length");
+    const input = screen.getByLabelText("New length");
     input.focus();
     fireEvent.change(input, { target: { value: "320" } });
     // Never blurred, never submitted — the value only survives if the
@@ -99,7 +99,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("Length");
+    const input = screen.getByLabelText("New length");
     input.focus();
     fireEvent.change(input, { target: { value: "320" } });
     fireEvent.pointerDown(input);
@@ -112,7 +112,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("Length");
+    const input = screen.getByLabelText("New length");
     input.focus();
     fireEvent.change(input, { target: { value: "0" } });
     pressCanvas();
@@ -125,7 +125,7 @@ describe("WallOptions — click-away commits the typed value", () => {
     useApp.setState({ selectedWalls: new Set(["w1"]) });
     render(<WallOptions />);
 
-    const input = screen.getByLabelText("Length");
+    const input = screen.getByLabelText("New length");
     input.focus();
     fireEvent.change(input, { target: { value: "320" } });
     pressCanvas();
@@ -162,7 +162,7 @@ describe("WallOptions — resize preview", () => {
         <WallOptions />
       </>,
     );
-    const input = screen.getByLabelText("Length");
+    const input = screen.getByLabelText("New length");
     act(() => input.focus());
     return {
       container,
@@ -178,14 +178,24 @@ describe("WallOptions — resize preview", () => {
     const { container, setDraft, preview } = setup();
     const before = useApp.getState().plan;
     const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+    const currentLength = screen.getByText("Current length").parentElement;
+    expect(currentLength?.textContent).toContain("400 cm");
+    expect(screen.getByRole("status").textContent).toBe("");
     expect(preview()?.querySelectorAll("path")).toHaveLength(2);
     expect(preview()?.querySelectorAll("polygon")).toHaveLength(0);
     expect(
-      (screen.getByRole("radio", { name: "Center" }) as HTMLInputElement)
-        .checked,
+      (
+        screen.getByRole("radio", {
+          name: "Move both ends",
+        }) as HTMLInputElement
+      ).checked,
     ).toBe(true);
 
     setDraft("500");
+    expect(currentLength?.textContent).toContain("400 cm");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Grow 100 cm across both ends",
+    );
     expect(
       Array.from(
         preview()!.querySelectorAll("polygon"),
@@ -198,29 +208,33 @@ describe("WallOptions — resize preview", () => {
         ?.getAttribute("transform"),
     ).toContain("rotate(180)");
 
-    const keepRight = screen.getByRole("radio", { name: "Keep right fixed" });
-    fireEvent.pointerDown(keepRight);
-    act(() => keepRight.focus());
-    fireEvent.click(keepRight);
+    const moveRight = screen.getByRole("radio", { name: "Move right end" });
+    fireEvent.pointerDown(moveRight);
+    act(() => moveRight.focus());
+    fireEvent.click(moveRight);
     expect(useApp.getState().plan).toBe(before);
     expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(saved);
     expect(preview()?.querySelectorAll("path")).toHaveLength(1);
-    expect(preview()?.querySelector('[data-wall-id="right"]')).toBeNull();
-    const leftPreview = preview()
-      ?.querySelector('[data-wall-id="left"]')
+    expect(screen.getByRole("status").textContent).toBe(
+      "Grow 100 cm at the right end",
+    );
+    expect(preview()?.querySelector('[data-wall-id="left"]')).toBeNull();
+    const rightPreview = preview()
+      ?.querySelector('[data-wall-id="right"]')
       ?.getAttribute("points");
-    expect(leftPreview).toBeTruthy();
+    expect(rightPreview).toBeTruthy();
 
     pressCanvas();
     expect(preview()).toBeNull();
     expect(useApp.getState().plan.walls[0]).toEqual(
-      wall(-100, 0, 400, 0, "bottom"),
+      wall(0, 0, 500, 0, "bottom"),
     );
+    expect(currentLength?.textContent).toContain("500 cm");
     expect(
       container
-        .querySelectorAll('[data-layer="walls"] polygon')[3]
+        .querySelectorAll('[data-layer="walls"] polygon')[1]
         .getAttribute("points"),
-    ).toBe(leftPreview);
+    ).toBe(rightPreview);
     act(() => useApp.getState().undo());
     expect(useApp.getState().plan).toEqual(before);
   });
@@ -243,13 +257,17 @@ describe("WallOptions — resize preview", () => {
         ?.getAttribute("transform"),
     ).toContain("rotate(180)");
     setDraft("0");
+    expect(screen.getByRole("status").textContent).toBe("");
     expect(preview()?.querySelectorAll("polygon")).toHaveLength(0);
     expect(preview()?.querySelectorAll("path")).toHaveLength(2);
-    setDraft("300");
-    const keepLeft = screen.getByRole("radio", { name: "Keep left fixed" });
-    act(() => keepLeft.focus());
-    fireEvent.click(keepLeft);
-    fireEvent.keyDown(keepLeft, { key: "Escape" });
+    setDraft("350");
+    const moveRight = screen.getByRole("radio", { name: "Move right end" });
+    act(() => moveRight.focus());
+    fireEvent.click(moveRight);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Shrink 50 cm at the right end",
+    );
+    fireEvent.keyDown(moveRight, { key: "Escape" });
 
     expect(preview()).toBeNull();
     expect((input as HTMLInputElement).value).toBe("400");
@@ -258,8 +276,11 @@ describe("WallOptions — resize preview", () => {
 
     act(() => input.focus());
     expect(
-      (screen.getByRole("radio", { name: "Center" }) as HTMLInputElement)
-        .checked,
+      (
+        screen.getByRole("radio", {
+          name: "Move both ends",
+        }) as HTMLInputElement
+      ).checked,
     ).toBe(true);
     setDraft("300");
     fireEvent.keyDown(input, { key: "Enter" });
@@ -272,12 +293,13 @@ describe("WallOptions — resize preview", () => {
   it("labels vertical anchors by position and commits when focus leaves the field", () => {
     const { setDraft, preview } = setup("left");
     setDraft("400");
-    const keepTop = screen.getByRole("radio", { name: "Keep top fixed" });
-    expect(
-      screen.getByRole("radio", { name: "Keep bottom fixed" }),
-    ).toBeTruthy();
-    act(() => keepTop.focus());
-    fireEvent.click(keepTop);
+    const moveBottom = screen.getByRole("radio", { name: "Move bottom end" });
+    expect(screen.getByRole("radio", { name: "Move top end" })).toBeTruthy();
+    act(() => moveBottom.focus());
+    fireEvent.click(moveBottom);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Grow 100 cm at the bottom end",
+    );
     act(() => screen.getByRole("button", { name: "Remove" }).focus());
     expect(useApp.getState().plan.walls[3]).toEqual(wall(0, 400, 0, 0, "left"));
     expect(preview()).toBeNull();
@@ -297,7 +319,7 @@ describe("WallOptions — resize preview", () => {
         <WallOptions />
       </>,
     );
-    act(() => screen.getByLabelText("Length").focus());
+    act(() => screen.getByLabelText("New length").focus());
     expect(screen.getByText(hint)).toBeTruthy();
     expect(screen.queryAllByRole("radio")).toHaveLength(0);
     expect(container.querySelectorAll("[data-resize-end]")).toHaveLength(

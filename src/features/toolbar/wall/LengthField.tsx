@@ -1,5 +1,6 @@
 import {
   feetAndInchesToCm,
+  formatSystemLength,
   type LengthUnit,
   lengthToCm,
   toFeetAndInches,
@@ -38,6 +39,7 @@ export function LengthField({
   onCommit,
   singleUnit,
   hideLabel = false,
+  showCurrentLength = false,
   renderControls,
 }: {
   id: string;
@@ -48,6 +50,7 @@ export function LengthField({
   onCommit: (cm: number) => void;
   singleUnit?: LengthUnit;
   hideLabel?: boolean;
+  showCurrentLength?: boolean;
   renderControls?: (draftCm: number | null) => ReactNode;
 }) {
   const [draft, setDraft] = useState(() =>
@@ -118,6 +121,12 @@ export function LengthField({
         if (!event.currentTarget.contains(event.relatedTarget)) commit();
       }}
     >
+      {showCurrentLength && (
+        <div className={styles.lengthReference}>
+          <span className={styles.label}>Current length</span>
+          <span>{formatSystemLength(lengthCm, system)}</span>
+        </div>
+      )}
       {!hideLabel && (
         <label className={styles.label} htmlFor={id}>
           {label}

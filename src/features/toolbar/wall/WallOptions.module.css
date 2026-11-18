@@ -35,6 +35,15 @@
   gap: 6px;
 }
 
+.lengthReference {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding-inline-end: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .lengthInput {
   width: 72px;
   padding: 4px 8px;
@@ -52,6 +61,15 @@
 .resizeHint {
   font-size: 12px;
   padding-inline: 4px;
+}
+
+.resizeSummary {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+.resizeSummary:empty {
+  position: absolute;
 }
 
 .resizeControls {
