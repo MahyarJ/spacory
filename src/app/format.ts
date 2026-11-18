@@ -1,56 +1,14 @@
-import type { MeasurementSystem, Units } from "@app/schema";
+import type { MeasurementSystem } from "@app/schema";
 
-/**
- * Pure, unit-aware formatting of measured lengths.
- *
- * Internal coordinates are always plain cm numbers (see schema). This module
- * converts a cm length into the plan's configured display unit and renders it
- * as a short, human-readable string. It does not touch coordinates — callers
- * keep cm everywhere and only format at the point of display.
- */
+/** Units accepted by the numeric length and thickness editors. */
+export type LengthUnit = "cm" | "in";
 
-/** How many centimetres make up one of each unit. */
-const CM_PER_UNIT: Record<Units, number> = {
-  mm: 0.1,
-  cm: 1,
-  m: 100,
-  in: 2.54,
-  ft: 30.48,
-};
+const CM_PER_INCH = 2.54;
+const CM_PER_UNIT: Record<LengthUnit, number> = { cm: 1, in: CM_PER_INCH };
 
-/** Decimal places to round to per unit, chosen for readable plan-scale values. */
-const DECIMALS: Record<Units, number> = {
-  mm: 0,
-  cm: 0,
-  m: 2,
-  in: 1,
-  ft: 2,
-};
-
-/**
- * Format a length given in centimetres for display in the given unit.
- *
- * The value is converted to `units`, rounded to a sensible precision for that
- * unit, and suffixed with the unit symbol (e.g. `250` cm → `"250 cm"`,
- * `"2.5 m"`). Trailing zeros from rounding are dropped so `100 cm` reads as
- * `"1 m"`, not `"1.00 m"`.
- */
-export function formatLength(lengthCm: number, units: Units): string {
-  const value = lengthCm / CM_PER_UNIT[units];
-  const rounded = Number(value.toFixed(DECIMALS[units]));
-  // `Number(...)` drops trailing zeros; `|| 0` normalises a possible `-0`.
-  return `${rounded || 0} ${units}`;
-}
-
-/** Format a centreline area supplied in cm², converting by the squared unit factor. */
-export function formatArea(areaCm2: number, units: Units): string {
-  const value = areaCm2 / CM_PER_UNIT[units] ** 2;
-  const rounded = Number(value.toFixed(DECIMALS[units]));
-  return `${rounded || 0} ${units}²`;
-}
-
+/** Coordinates always stay in cm; formatting follows the plan's measurement system. */
 /** Convert a numeric length to internal centimetres. */
-export function lengthToCm(value: number, units: Units): number {
+export function lengthToCm(value: number, units: LengthUnit): number {
   return value * CM_PER_UNIT[units];
 }
 
@@ -59,7 +17,7 @@ export function toFeetAndInches(lengthCm: number): {
   feet: number;
   inches: number;
 } {
-  const tenths = Math.round((lengthCm / CM_PER_UNIT.in) * 10);
+  const tenths = Math.round((lengthCm / CM_PER_INCH) * 10);
   return { feet: Math.floor(tenths / 120), inches: (tenths % 120) / 10 };
 }
 
@@ -71,7 +29,7 @@ export function formatSystemLength(
   lengthCm: number,
   system: MeasurementSystem,
 ): string {
-  if (system === "metric") return formatLength(lengthCm, "cm");
+  if (system === "metric") return `${Number(lengthCm.toFixed(0)) || 0} cm`;
   const { feet, inches } = toFeetAndInches(lengthCm);
   return `${feet}′ ${inches}″`;
 }
@@ -80,5 +38,8 @@ export function formatSystemArea(
   areaCm2: number,
   system: MeasurementSystem,
 ): string {
-  return formatArea(areaCm2, system === "metric" ? "m" : "ft");
+  const metric = system === "metric";
+  const cmPerUnit = metric ? 100 : CM_PER_INCH * 12;
+  const rounded = Number((areaCm2 / cmPerUnit ** 2).toFixed(2)) || 0;
+  return `${rounded} ${metric ? "m²" : "ft²"}`;
 }

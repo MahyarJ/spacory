@@ -868,3 +868,8 @@ while copying that metadata into any live preview. Metadata-only commits skip
 geometry normalization and selection reconciliation. This preserves the drag's
 original item/selection snapshots: cancelling discards the preview while keeping
 the system choice, and releasing records the drag as its own undo step.
+
+The schema exposes only `MeasurementSystem`; it no longer advertises individually
+selectable display units. Formatting accepts the system directly, while numeric
+editors share a `LengthUnit` type limited to cm/in. Legacy mm/m/ft metadata is
+still recognized during import and mapped to its measurement system.

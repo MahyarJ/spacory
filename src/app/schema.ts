@@ -1,7 +1,5 @@
 export type MeasurementSystem = "metric" | "imperial";
 
-export type Units = "cm" | "m" | "mm" | "in" | "ft";
-
 export interface Point {
   x: number;
   y: number;

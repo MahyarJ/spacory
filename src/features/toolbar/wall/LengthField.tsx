@@ -1,4 +1,9 @@
-import { feetAndInchesToCm, lengthToCm, toFeetAndInches } from "@app/format";
+import {
+  feetAndInchesToCm,
+  type LengthUnit,
+  lengthToCm,
+  toFeetAndInches,
+} from "@app/format";
 import type { MeasurementSystem } from "@app/schema";
 import { useEffect, useRef, useState } from "react";
 import { parseDraft } from "./draftField";
@@ -8,7 +13,7 @@ import styles from "./WallOptions.module.css";
 function displayValues(
   lengthCm: number,
   system: MeasurementSystem,
-  singleUnit?: "cm" | "in",
+  singleUnit?: LengthUnit,
 ) {
   if (singleUnit)
     return {
@@ -40,7 +45,7 @@ export function LengthField({
   minCm: number;
   system: MeasurementSystem;
   onCommit: (cm: number) => void;
-  singleUnit?: "cm" | "in";
+  singleUnit?: LengthUnit;
   hideLabel?: boolean;
 }) {
   const [draft, setDraft] = useState(() =>
