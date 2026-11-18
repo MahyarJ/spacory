@@ -30,6 +30,7 @@
 
 .lengthField {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
@@ -46,6 +47,51 @@
 .unit {
   font-size: 12px;
   opacity: 0.8;
+}
+
+.resizeHint {
+  font-size: 12px;
+  padding-inline: 4px;
+}
+
+.resizeControls {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--sp-grid);
+}
+
+.resizeOption {
+  position: relative;
+  font-size: 12px;
+}
+
+.resizeOption input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.resizeOption span {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+
+.resizeOption input:checked + span {
+  background: var(--sp-panel);
+  box-shadow: inset 0 0 0 1px var(--sp-accent);
+}
+
+.resizeOption input:focus-visible + span {
+  outline: 2px solid var(--sp-accent);
 }
 
 /* On-screen Remove / Hinge / Swing. Shown for every pointer kind: these verbs

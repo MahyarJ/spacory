@@ -4,7 +4,6 @@ import {
   getConnectionPoints,
   pointsEqual,
   translateEndpoints,
-  translateEndpointsAt,
   translateWallEndpoint,
   type WallEndpointRef,
 } from "@geometry/connectivity";
@@ -13,9 +12,10 @@ import { MIN_OPENING_WIDTH, resizeOpeningWidth } from "@geometry/opening";
 import {
   getWallLength,
   MIN_WALL_LENGTH,
-  resizeWallToLength,
+  type WallResizeAnchor,
 } from "@geometry/wall";
 import { mergeWallsAtVacatedSeams } from "@geometry/wallMerge";
+import { resizeWallInPlan } from "@geometry/wallResize";
 import {
   resolveWeldedPoint,
   splitWallsAtTouchingEndpoints,
@@ -56,6 +56,12 @@ import {
 } from "./viewport";
 
 export type Tool = "select" | "wall" | "window" | "door" | "pan";
+
+type WallLengthEdit = {
+  wallId: string;
+  length: number | null;
+  anchor: WallResizeAnchor;
+};
 
 interface AppState {
   plan: Plan;
@@ -99,12 +105,10 @@ interface AppState {
   selectConnectionPoint: (point: Point) => void;
   deleteSelected: () => void;
   nudgeSelectedWallThickness: (delta: number) => void;
-  /**
-   * Resize the single selected wall to an exact length (cm), anchoring `a` and
-   * moving `b` along the wall's direction. No-ops unless exactly one wall is
-   * selected and `length` is a finite value ≥ MIN_WALL_LENGTH.
-   */
-  setSelectedWallLength: (length: number) => void;
+  /** Transient editor input for canvas feedback. */
+  wallLengthEdit: WallLengthEdit | null;
+  setWallLengthEdit: (edit: WallLengthEdit | null) => void;
+  setSelectedWallLength: (length: number, anchor?: WallResizeAnchor) => void;
   setSelectedOpeningWidth: (width: number) => void;
   toggleSelectedDoorHingeEdge: () => void;
   toggleSelectedDoorSwingSide: () => void;
@@ -182,6 +186,49 @@ function persist() {
   savePersistedHistory(history);
 }
 
+function normalizeWallEdit(
+  before: Wall[],
+  next: Pick<Plan, "walls" | "items">,
+  nextWallId: () => string,
+  fixedPoints?: Point[],
+) {
+  // A vacated seam can still lie inside its host's body. Merge before splitting
+  // so the endpoint can be welded back onto a single, continuous wall.
+  const merged = mergeWallsAtVacatedSeams(before, next.walls, next.items);
+  return splitWallsAtTouchingEndpoints(
+    merged.walls,
+    merged.items,
+    nextWallId,
+    fixedPoints,
+  );
+}
+
+export function previewWallResize(
+  plan: Plan,
+  wall: Wall,
+  length: number,
+  anchor: WallResizeAnchor,
+): Wall[] | null {
+  const resize = resizeWallInPlan(plan.walls, plan.items, wall, length, anchor);
+  if (!resize) return null;
+
+  // Splits need distinct IDs even during a preview. They are local to this
+  // calculation and never enter the committed plan.
+  const existingIds = new Set(plan.walls.map((w) => w.id));
+  let index = 0;
+  const nextWallId = () => {
+    let id: string;
+    do {
+      id = `preview-wall-${++index}`;
+    } while (existingIds.has(id));
+    return id;
+  };
+  return normalizeWallEdit(plan.walls, resize, nextWallId, [
+    resize.resized.a,
+    resize.resized.b,
+  ]).walls;
+}
+
 /**
  * Commit `next` as one history entry and return the state patch every action
  * that edits the plan applies: the committed plan, plus the selection brought
@@ -190,8 +237,8 @@ function persist() {
  * membership re-derived from the committed walls, and any selected wall/item the
  * commit removed pruned out.
  *
- * `heldPoint` defaults to the caller's `selectedConnectionPoint`; only the nudge
- * path overrides it, with its post-nudge coordinate. Commit and selection are
+ * `heldPoint` defaults to the caller's `selectedConnectionPoint`; actions that
+ * move it can supply its new coordinate. Commit and selection are
  * one step on purpose: the split can pull a selected junction onto a host wall's
  * centreline, and the merge can make its coordinate vanish altogether. Either
  * way a stale selection is *invisible but still live* —
@@ -210,6 +257,7 @@ function commit(
     | "selectedItems"
   >,
   heldPoint: Point | null = selection.selectedConnectionPoint,
+  fixedPoints?: Point[],
 ): Pick<
   AppState,
   | "plan"
@@ -235,27 +283,13 @@ function commit(
       selectedItems: selection.selectedItems,
     };
   }
-  // Merge back the two collinear segments of a host this edit just made a
-  // meaningless seam of — the T-wall that split it was deleted, or its endpoint
-  // dragged out of the junction (see wallMerge.ts). Judged against the
-  // *previous* committed plan, since "which coordinates did this edit vacate"
-  // needs both, and run before the split so the two can't fight: an endpoint
-  // moved off a host but still inside its body merges the seam and is then
-  // re-split onto it, which is where #96 says it belongs — and a fixed point.
-  const merged = mergeWallsAtVacatedSeams(
+  // Merge seams vacated by this edit before splitting any new mid-span joins.
+  // Both changes ride in the same history entry as the edit.
+  const split = normalizeWallEdit(
     history.present.walls,
-    next.walls,
-    next.items,
-  );
-  // Split any wall another wall's endpoint now ends on, so a mid-span T becomes
-  // a real shared-coordinate junction (see wallSplit.ts). Done here, before the
-  // item reconcile below, so every edit path — draw, move, endpoint drag,
-  // type-to-resize — is covered from one place and the split rides inside the
-  // same history entry as the edit that caused it (a single undo restores both).
-  // Live drag previews deliberately bypass commit(), so nothing splits
-  // mid-gesture; the split lands when the gesture is released.
-  const split = splitWallsAtTouchingEndpoints(merged.walls, merged.items, () =>
-    uid("wall"),
+    next,
+    () => uid("wall"),
+    fixedPoints,
   );
   // Reconcile door/window openings against their wall's current length here so
   // every wall-resize path (type-to-length, connection-point drag, auto-follow)
@@ -503,26 +537,37 @@ export const useApp = create<AppState>((set, get) => ({
     };
     set(commit(next, get()));
   },
-  setSelectedWallLength: (length) => {
-    const { selectedWalls, plan } = get();
+  wallLengthEdit: null,
+  setWallLengthEdit: (wallLengthEdit) => set({ wallLengthEdit }),
+  setSelectedWallLength: (length, anchor) => {
+    const state = get();
+    const { selectedWalls, plan, selectedConnectionPoint } = state;
     if (selectedWalls.size !== 1) return;
-    if (!Number.isFinite(length) || length < MIN_WALL_LENGTH) return;
     const [id] = selectedWalls;
     const wall = plan.walls.find((w) => w.id === id);
     if (!wall) return;
-    const resized = resizeWallToLength(wall, length);
-    // Skip a no-op resize so we don't push an empty undo step.
-    if (resized.b.x === wall.b.x && resized.b.y === wall.b.y) return;
-    const dx = resized.b.x - wall.b.x;
-    const dy = resized.b.y - wall.b.y;
-    const resizedWalls = plan.walls.map((w) => (w.id === id ? resized : w));
-    // `a` stays put on a resize; only `b` moved, so only walls joined there follow.
+    const resize = resizeWallInPlan(
+      plan.walls,
+      plan.items,
+      wall,
+      length,
+      anchor,
+    );
+    if (!resize) return;
     const next: Plan = {
       ...plan,
-      walls: translateEndpointsAt(resizedWalls, wall.b, dx, dy),
+      walls: resize.walls,
+      items: resize.items,
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
-    set(commit(next, get()));
+    // A nearby wall can split at an exact touch, but snapping to its
+    // centreline must not change the entered length or the wall's angle.
+    set(
+      commit(next, state, resize.followPoint(selectedConnectionPoint), [
+        resize.resized.a,
+        resize.resized.b,
+      ]),
+    );
   },
   setSelectedOpeningWidth: (width) => {
     const { selectedItems, plan } = get();

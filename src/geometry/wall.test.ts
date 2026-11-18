@@ -9,6 +9,7 @@ import {
   projectPointToWall,
   resizeWallToLength,
 } from "./wall";
+import { resizeWallInPlan } from "./wallResize";
 
 const wall = (
   ax: number,
@@ -51,15 +52,15 @@ describe("getWallDirection", () => {
 });
 
 describe("resizeWallToLength", () => {
-  it("resizes a horizontal wall, keeping a fixed and angle unchanged", () => {
+  it("resizes a horizontal wall from the center", () => {
     const r = resizeWallToLength(wall(10, 5, 60, 5), 200);
-    expect(r.a).toEqual({ x: 10, y: 5 });
-    expect(r.b).toEqual({ x: 210, y: 5 });
+    expect(r.a).toEqual({ x: -65, y: 5 });
+    expect(r.b).toEqual({ x: 135, y: 5 });
     expect(getWallLength(r)).toBeCloseTo(200);
   });
 
   it("resizes a vertical wall, keeping a fixed and angle unchanged", () => {
-    const r = resizeWallToLength(wall(5, 10, 5, 60), 200);
+    const r = resizeWallToLength(wall(5, 10, 5, 60), 200, "a");
     expect(r.a).toEqual({ x: 5, y: 10 });
     expect(r.b).toEqual({ x: 5, y: 210 });
     expect(getWallLength(r)).toBeCloseTo(200);
@@ -70,8 +71,8 @@ describe("resizeWallToLength", () => {
     const r = resizeWallToLength(original, 10);
     expect(getWallLength(r)).toBeCloseTo(10);
     expect(getWallAngle(r)).toBeCloseTo(getWallAngle(original));
-    expect(r.b.x).toBeCloseTo(6);
-    expect(r.b.y).toBeCloseTo(8);
+    expect(r.b.x).toBeCloseTo(4.5);
+    expect(r.b.y).toBeCloseTo(6);
   });
 
   it("preserves other wall fields (id, thickness)", () => {
@@ -84,6 +85,84 @@ describe("resizeWallToLength", () => {
     const degenerate = wall(7, 7, 7, 7);
     const r = resizeWallToLength(degenerate, 100);
     expect(r).toEqual(degenerate);
+  });
+});
+
+describe("resizeWallInPlan", () => {
+  const original = wall(0, 0, 400, 0);
+  const left = wall(0, 300, 0, 0, 10, "left");
+  const right = wall(400, 0, 400, 300, 10, "right");
+
+  it.each([
+    {
+      neighbors: [],
+      choice: undefined,
+      reversedChoice: undefined,
+      ends: [-50, 450],
+    },
+    {
+      neighbors: [left],
+      choice: undefined,
+      reversedChoice: undefined,
+      ends: [0, 500],
+    },
+    {
+      neighbors: [right],
+      choice: undefined,
+      reversedChoice: undefined,
+      ends: [-100, 400],
+    },
+    {
+      neighbors: [left, right],
+      choice: undefined,
+      reversedChoice: undefined,
+      ends: [-50, 450],
+    },
+    {
+      neighbors: [left, right],
+      choice: "center",
+      reversedChoice: "center",
+      ends: [-50, 450],
+    },
+    {
+      neighbors: [left, right],
+      choice: "a",
+      reversedChoice: "b",
+      ends: [0, 500],
+    },
+    {
+      neighbors: [left, right],
+      choice: "b",
+      reversedChoice: "a",
+      ends: [-100, 400],
+    },
+  ] as const)("has the same physical endpoints in either draw direction ($ends)", ({
+    neighbors,
+    choice,
+    reversedChoice,
+    ends,
+  }) => {
+    const reversed = { ...original, a: original.b, b: original.a };
+    const forwardResult = resizeWallInPlan(
+      [original, ...neighbors],
+      [],
+      original,
+      500,
+      choice,
+    )!;
+    const reversedResult = resizeWallInPlan(
+      [reversed, ...neighbors],
+      [],
+      reversed,
+      500,
+      reversedChoice,
+    )!;
+    const [newWall, ...newNeighbors] = forwardResult.walls;
+    const [reversedWall, ...reversedNeighbors] = reversedResult.walls;
+    expect(newWall.a).toEqual({ x: ends[0], y: 0 });
+    expect(newWall.b).toEqual({ x: ends[1], y: 0 });
+    expect([reversedWall.b, reversedWall.a]).toEqual([newWall.a, newWall.b]);
+    expect(reversedNeighbors).toEqual(newNeighbors);
   });
 });
 

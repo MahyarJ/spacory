@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 //
-// Covers the one link `draftField.test.ts` can't reach: that `WallOptions`
-// actually *wires* the click-away commit up. These mount the real component and
-// press the real document, so deleting `ref={fieldRef}` or the
-// `useCommitOnClickAway(commit)` call fails them.
+// Exercise the real editor and canvas because the pure draft helpers cannot
+// verify focus, resize controls, or preview rendering.
+import { HISTORY_STORAGE_KEY } from "@app/persistence";
 import {
   createInitialPlan,
   type DoorItem,
@@ -11,8 +10,15 @@ import {
   type Wall,
 } from "@app/schema";
 import { useApp } from "@app/store";
+import { FloorPlan } from "@features/canvas/FloorPlan";
 import { getWallLength } from "@geometry/wall";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WallOptions } from "./WallOptions";
 
@@ -134,5 +140,168 @@ describe("WallOptions — click-away commits the typed value", () => {
     // second undo stepping back to 320.
     useApp.getState().undo();
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(250);
+  });
+});
+
+describe("WallOptions — resize preview", () => {
+  function setup(id = "bottom") {
+    const plan = {
+      ...cornerPlan(),
+      walls: [
+        wall(0, 0, 400, 0, "bottom"),
+        wall(400, 0, 400, 300, "right"),
+        wall(400, 300, 0, 300, "top"),
+        wall(0, 300, 0, 0, "left"),
+      ],
+    };
+    useApp.getState().loadPlan(plan);
+    useApp.getState().selectWall(id);
+    const { container } = render(
+      <>
+        <FloorPlan />
+        <WallOptions />
+      </>,
+    );
+    const input = screen.getByLabelText("Length");
+    act(() => input.focus());
+    return {
+      container,
+      input,
+      setDraft: (value: string) =>
+        fireEvent.change(input, { target: { value } }),
+      preview: () =>
+        container.querySelector('[data-layer="wall-resize-preview"]'),
+    };
+  }
+
+  it("previews both neighboring walls, then applies the chosen anchor on click-away", () => {
+    const { container, setDraft, preview } = setup();
+    const before = useApp.getState().plan;
+    const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+    expect(preview()?.querySelectorAll("path")).toHaveLength(2);
+    expect(preview()?.querySelectorAll("polygon")).toHaveLength(0);
+    expect(
+      (screen.getByRole("radio", { name: "Center" }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+
+    setDraft("500");
+    expect(
+      Array.from(
+        preview()!.querySelectorAll("polygon"),
+        (polygon) => polygon.dataset.wallId,
+      ),
+    ).toEqual(["bottom", "right", "left"]);
+    expect(
+      preview()
+        ?.querySelector('[data-resize-end="a"]')
+        ?.getAttribute("transform"),
+    ).toContain("rotate(180)");
+
+    const keepRight = screen.getByRole("radio", { name: "Keep right fixed" });
+    fireEvent.pointerDown(keepRight);
+    act(() => keepRight.focus());
+    fireEvent.click(keepRight);
+    expect(useApp.getState().plan).toBe(before);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(saved);
+    expect(preview()?.querySelectorAll("path")).toHaveLength(1);
+    expect(preview()?.querySelector('[data-wall-id="right"]')).toBeNull();
+    const leftPreview = preview()
+      ?.querySelector('[data-wall-id="left"]')
+      ?.getAttribute("points");
+    expect(leftPreview).toBeTruthy();
+
+    pressCanvas();
+    expect(preview()).toBeNull();
+    expect(useApp.getState().plan.walls[0]).toEqual(
+      wall(-100, 0, 400, 0, "bottom"),
+    );
+    expect(
+      container
+        .querySelectorAll('[data-layer="walls"] polygon')[3]
+        .getAttribute("points"),
+    ).toBe(leftPreview);
+    act(() => useApp.getState().undo());
+    expect(useApp.getState().plan).toEqual(before);
+  });
+
+  it("points inward for a shrink, clears invalid geometry, and cancels with Escape", () => {
+    const { input, setDraft, preview } = setup();
+    const before = useApp.getState().plan;
+    const saved = localStorage.getItem(HISTORY_STORAGE_KEY);
+
+    setDraft("300");
+    expect(preview()?.querySelectorAll("polygon")).toHaveLength(3);
+    expect(
+      preview()
+        ?.querySelector('[data-resize-end="a"]')
+        ?.getAttribute("transform"),
+    ).toContain("rotate(0)");
+    expect(
+      preview()
+        ?.querySelector('[data-resize-end="b"]')
+        ?.getAttribute("transform"),
+    ).toContain("rotate(180)");
+    setDraft("0");
+    expect(preview()?.querySelectorAll("polygon")).toHaveLength(0);
+    expect(preview()?.querySelectorAll("path")).toHaveLength(2);
+    setDraft("300");
+    const keepLeft = screen.getByRole("radio", { name: "Keep left fixed" });
+    act(() => keepLeft.focus());
+    fireEvent.click(keepLeft);
+    fireEvent.keyDown(keepLeft, { key: "Escape" });
+
+    expect(preview()).toBeNull();
+    expect((input as HTMLInputElement).value).toBe("400");
+    expect(useApp.getState().plan).toBe(before);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(saved);
+
+    act(() => input.focus());
+    expect(
+      (screen.getByRole("radio", { name: "Center" }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
+    setDraft("300");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useApp.getState().plan.walls[0]).toEqual(
+      wall(50, 0, 350, 0, "bottom"),
+    );
+    expect(preview()).toBeNull();
+  });
+
+  it("labels vertical anchors by position and commits when focus leaves the field", () => {
+    const { setDraft, preview } = setup("left");
+    setDraft("400");
+    const keepTop = screen.getByRole("radio", { name: "Keep top fixed" });
+    expect(
+      screen.getByRole("radio", { name: "Keep bottom fixed" }),
+    ).toBeTruthy();
+    act(() => keepTop.focus());
+    fireEvent.click(keepTop);
+    act(() => screen.getByRole("button", { name: "Remove" }).focus());
+    expect(useApp.getState().plan.walls[3]).toEqual(wall(0, 400, 0, 0, "left"));
+    expect(preview()).toBeNull();
+  });
+
+  it.each([
+    ["w1", 1, "Joined end stays fixed"],
+    ["detached", 2, "Resize from center"],
+  ])("shows the default rule when %s has fewer than two joins", (id, chevrons, hint) => {
+    const plan = cornerPlan();
+    plan.walls.push(wall(0, 500, 250, 500, "detached"));
+    useApp.getState().loadPlan(plan);
+    useApp.getState().selectWall(id);
+    const { container } = render(
+      <>
+        <FloorPlan />
+        <WallOptions />
+      </>,
+    );
+    act(() => screen.getByLabelText("Length").focus());
+    expect(screen.getByText(hint)).toBeTruthy();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    expect(container.querySelectorAll("[data-resize-end]")).toHaveLength(
+      chevrons,
+    );
   });
 });

@@ -11,6 +11,7 @@ import {
 import { LengthField } from "./LengthField";
 import { ThicknessOptions } from "./ThicknessOptions";
 import styles from "./WallOptions.module.css";
+import { WallResizeControls } from "./WallResizeControls";
 
 export function WallOptions() {
   const tool = useApp((s) => s.tool);
@@ -59,7 +60,16 @@ export function WallOptions() {
           lengthCm={getWallLength(selectedWall)}
           minCm={MIN_WALL_LENGTH}
           system={system}
-          onCommit={setWallLength}
+          onCommit={(length) =>
+            setWallLength(length, useApp.getState().wallLengthEdit?.anchor)
+          }
+          renderControls={(length) => (
+            <WallResizeControls
+              wall={selectedWall}
+              walls={walls}
+              length={length}
+            />
+          )}
         />
       )}
 
