@@ -258,7 +258,8 @@ it("edits custom overall thickness in cm or inches, rejects invalid entries, and
   useApp.setState({ tool: "wall", currentWallThickness: 10 });
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Custom" }));
-  let input = screen.getByLabelText("Custom thickness");
+  let input = screen.getByRole("spinbutton", { name: "Custom thickness" });
+  expect(screen.queryByText("Custom thickness")).toBeNull();
   fireEvent.change(input, { target: { value: "12.5" } });
   fireEvent.keyDown(input, { key: "Enter" });
   expect(useApp.getState().currentWallThickness).toBe(12.5);

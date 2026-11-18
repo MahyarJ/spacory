@@ -49,6 +49,7 @@ export function ThicknessOptions() {
         <LengthField
           id="wall-thickness-input"
           label="Custom thickness"
+          hideLabel
           lengthCm={thickness}
           minCm={1}
           system={system}

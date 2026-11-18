@@ -32,6 +32,7 @@ export function LengthField({
   system,
   onCommit,
   singleUnit,
+  hideLabel = false,
 }: {
   id: string;
   label: string;
@@ -40,6 +41,7 @@ export function LengthField({
   system: MeasurementSystem;
   onCommit: (cm: number) => void;
   singleUnit?: "cm" | "in";
+  hideLabel?: boolean;
 }) {
   const [draft, setDraft] = useState(() =>
     displayValues(lengthCm, system, singleUnit),
@@ -93,9 +95,11 @@ export function LengthField({
         if (!event.currentTarget.contains(event.relatedTarget)) commit();
       }}
     >
-      <label className={styles.label} htmlFor={id}>
-        {label}
-      </label>
+      {!hideLabel && (
+        <label className={styles.label} htmlFor={id}>
+          {label}
+        </label>
+      )}
       <input
         id={id}
         aria-label={imperial ? `${label} feet` : label}
