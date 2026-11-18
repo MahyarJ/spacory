@@ -121,6 +121,54 @@ describe("translateSelectedWalls", () => {
 });
 
 describe("setSelectedWallLength", () => {
+  it("defaults to a centered resize when an endpoint junction and an unsplit T share the same wall", () => {
+    loadWithSelection(
+      [
+        wall("host", 0, 0, 400, 0),
+        wall("stem", 200, 0, 200, 200),
+        wall("neighbor", 200, 200, 400, 200),
+      ],
+      ["stem"],
+    );
+
+    useApp.getState().setSelectedWallLength(150);
+
+    const { walls } = useApp.getState().plan;
+    expect(walls.find((w) => w.id === "stem")).toEqual(
+      wall("stem", 200, 25, 200, 175),
+    );
+    expect(findConnectedEndpoints(walls, { x: 200, y: 25 })).toHaveLength(3);
+    expect(walls.find((w) => w.id === "neighbor")).toEqual(
+      wall("neighbor", 200, 175, 400, 200),
+    );
+  });
+
+  it.each([
+    false,
+    true,
+  ])("moves both host legs with a short T stem (already split: %s)", (split) => {
+    const host = split
+      ? [wall("host", 0, 0, 200, 0), wall("host-right", 200, 0, 400, 0)]
+      : [wall("host", 0, 0, 400, 0)];
+    const stem = wall("stem", 200, 0, 200, 200);
+    loadWithSelection([...host, stem], ["stem"]);
+    const before = useApp.getState().plan;
+    const preview = previewWallResize(before, stem, 150, "b");
+    const endpoints = (walls: Wall[]) => walls.map(({ a, b }) => [a, b]);
+    const expected = endpoints([
+      wall("host", 0, 0, 200, 50),
+      wall("host-right", 200, 50, 400, 0),
+      wall("stem", 200, 50, 200, 200),
+    ]);
+    expect(preview && endpoints(preview)).toEqual(expected);
+    expect(useApp.getState().plan).toBe(before);
+
+    useApp.getState().setSelectedWallLength(150, "b");
+    expect(endpoints(useApp.getState().plan.walls)).toEqual(expected);
+    useApp.getState().undo();
+    expect(useApp.getState().plan).toEqual(before);
+  });
+
   it("restores a 500 × 300 rectangle after resizing two opposite walls", () => {
     loadWithSelection(
       [

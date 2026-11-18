@@ -80,20 +80,34 @@ const shareAJunction = (w: Wall, other: Wall) =>
  *
  * Pure — `nextWallId` is injected so the caller owns id generation and tests
  * stay deterministic. Fixed points can form a junction on the host centreline
- * but cannot be snapped there from inside the wall body. Returns the input
- * arrays unchanged (same identity) when
- * nothing qualifies, which is the common case on most commits.
+ * but cannot be snapped there from inside the wall body. Pass `onlyTouchesAt`
+ * to materialize specific contacts without touching the rest of the plan.
+ * Returns the input arrays unchanged when nothing qualifies.
  */
 export function splitWallsAtTouchingEndpoints(
   walls: Wall[],
   items: Item[],
   nextWallId: () => string,
-  fixedPoints: Point[] = [],
+  {
+    fixedPoints = [],
+    onlyTouchesAt,
+  }: {
+    fixedPoints?: Point[];
+    onlyTouchesAt?: Point[];
+  } = {},
 ): WallSplitResult {
   const isFixed = (point: Point) =>
     fixedPoints.some((fixed) => pointsEqual(fixed, point));
+  const findTouches = (walls: Wall[]) => {
+    const touches = detectTouches(walls, isFixed);
+    return onlyTouchesAt
+      ? touches.filter(({ from }) =>
+          onlyTouchesAt.some((point) => pointsEqual(point, from)),
+        )
+      : touches;
+  };
   let result: WallSplitResult = { walls, items, welds: [] };
-  let touches = detectTouches(walls, isFixed);
+  let touches = findTouches(walls);
   for (let pass = 0; pass < MAX_PASSES && touches.length > 0; pass++) {
     const applied = applyTouches(result, touches, nextWallId, isFixed);
     // A pass that deferred everything (see `applyTouches`) would only repeat
@@ -105,7 +119,7 @@ export function splitWallsAtTouchingEndpoints(
       break;
     }
     result = { ...applied, welds: composeWelds(result.welds, applied.welds) };
-    touches = detectTouches(result.walls, isFixed);
+    touches = findTouches(result.walls);
   }
   // All or nothing: keep the run's result only if the plan settled and the
   // split left behind neither a sub-minimum wall nor a coincident pair. A weld

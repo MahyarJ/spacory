@@ -558,6 +558,8 @@ angles or lengths is visible before the single undoable commit. Openings keep
 their position along the resized wall wherever they still fit. A resize can
 form a new mid-span junction at an exact touch. The entered length and wall
 angle take precedence over snapping the resized endpoints to a nearby wall.
+When moving the stem of a T whose host is still one segment, preview and commit
+split the host at the original junction so both legs can follow the stem.
 
 ## Wall length labels: counter-scaled text, short-wall threshold
 

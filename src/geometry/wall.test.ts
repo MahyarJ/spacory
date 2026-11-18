@@ -148,6 +148,7 @@ describe("resizeWallInPlan", () => {
       [],
       original,
       500,
+      () => "split",
       choice,
     )!;
     const reversedResult = resizeWallInPlan(
@@ -155,6 +156,7 @@ describe("resizeWallInPlan", () => {
       [],
       reversed,
       500,
+      () => "split",
       reversedChoice,
     )!;
     const [newWall, ...newNeighbors] = forwardResult.walls;

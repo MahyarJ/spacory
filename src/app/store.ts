@@ -195,12 +195,9 @@ function normalizeWallEdit(
   // A vacated seam can still lie inside its host's body. Merge before splitting
   // so the endpoint can be welded back onto a single, continuous wall.
   const merged = mergeWallsAtVacatedSeams(before, next.walls, next.items);
-  return splitWallsAtTouchingEndpoints(
-    merged.walls,
-    merged.items,
-    nextWallId,
+  return splitWallsAtTouchingEndpoints(merged.walls, merged.items, nextWallId, {
     fixedPoints,
-  );
+  });
 }
 
 export function previewWallResize(
@@ -209,9 +206,6 @@ export function previewWallResize(
   length: number,
   anchor: WallResizeAnchor,
 ): Wall[] | null {
-  const resize = resizeWallInPlan(plan.walls, plan.items, wall, length, anchor);
-  if (!resize) return null;
-
   // Splits need distinct IDs even during a preview. They are local to this
   // calculation and never enter the committed plan.
   const existingIds = new Set(plan.walls.map((w) => w.id));
@@ -223,6 +217,15 @@ export function previewWallResize(
     } while (existingIds.has(id));
     return id;
   };
+  const resize = resizeWallInPlan(
+    plan.walls,
+    plan.items,
+    wall,
+    length,
+    nextWallId,
+    anchor,
+  );
+  if (!resize) return null;
   return normalizeWallEdit(plan.walls, resize, nextWallId, [
     resize.resized.a,
     resize.resized.b,
@@ -551,6 +554,7 @@ export const useApp = create<AppState>((set, get) => ({
       plan.items,
       wall,
       length,
+      () => uid("wall"),
       anchor,
     );
     if (!resize) return;
