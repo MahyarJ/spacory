@@ -121,6 +121,25 @@ describe("translateSelectedWalls", () => {
 });
 
 describe("setSelectedWallLength", () => {
+  it("blocks shortening an unsplit host past an existing T contact", () => {
+    const host = wall("host", 0, 0, 400, 0);
+    const stem = wall("stem", 350, 0, 350, 200);
+    loadWithSelection([host, stem], ["host"]);
+    const before = useApp.getState().plan;
+    const historyBefore = loadPersistedHistory();
+
+    expect(previewWallResize(before, host, 300, "a")).toBe("blocked-junction");
+    useApp.getState().setSelectedWallLength(300, "a");
+    expect(useApp.getState().plan).toBe(before);
+    expect(loadPersistedHistory()).toEqual(historyBefore);
+
+    useApp.getState().setSelectedWallLength(350, "a");
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 350, 0),
+      stem,
+    ]);
+  });
+
   it("preserves a T-junction when splitting its host would create a wall under 1 cm", () => {
     const stem = wall("stem", 0.5, 0, 0.5, 200);
     loadWithSelection([wall("host", 0, 0, 400, 0), stem], ["stem"]);

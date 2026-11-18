@@ -6,6 +6,7 @@ import {
 } from "./connectivity";
 import {
   getWallDirection,
+  getWallLength,
   projectPointToWall,
   resizeWallToLength,
   type WallResizeAnchor,
@@ -13,11 +14,14 @@ import {
 import { splitWallsAtTouchingEndpoints } from "./wallSplit";
 
 function touchesHost(walls: Wall[], wall: Wall, point: Point): boolean {
-  return walls.some((other) => {
-    if (other.id === wall.id) return false;
-    const { t, proj } = projectPointToWall(point, other);
-    return t > 0 && t < 1 && pointsEqual(point, proj);
-  });
+  return walls.some(
+    (other) => other.id !== wall.id && touchesWallSpan(point, other),
+  );
+}
+
+function touchesWallSpan(point: Point, wall: Wall): boolean {
+  const { t, proj } = projectPointToWall(point, wall);
+  return t > 0 && t < 1 && pointsEqual(point, proj);
 }
 
 export function getWallResizeContext(
@@ -56,6 +60,22 @@ export function resizeWallInPlan(
   const dxB = resized.b.x - wall.b.x;
   const dyB = resized.b.y - wall.b.y;
   if (dxA === 0 && dyA === 0 && dxB === 0 && dyB === 0) return null;
+
+  // A stem can join the span of an unsplit host without appearing in either
+  // endpoint's follow list. Preserve the contact even when it becomes a corner.
+  if (
+    length < getWallLength(wall) &&
+    walls.some((other) => {
+      if (other.id === wall.id) return false;
+      return [other.a, other.b].some(
+        (point) =>
+          touchesWallSpan(point, wall) &&
+          !pointsEqual(point, projectPointToWall(point, resized).proj),
+      );
+    })
+  ) {
+    return "blocked-junction" as const;
+  }
 
   // Materialize any unsplit host at the original contact so its two legs
   // have endpoints to follow, even if the resize pulls the stem off that line.

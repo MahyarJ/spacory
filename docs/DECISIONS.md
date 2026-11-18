@@ -561,7 +561,8 @@ angle take precedence over snapping the resized endpoints to a nearby wall.
 When moving the stem of a T whose host is still one segment, preview and commit
 split the host at the original junction so both legs can follow the stem.
 If a host cannot split safely, the resize is blocked and the status explains
-that the selected move would disconnect a junction.
+that the selected move would disconnect a junction. Shortening an unsplit
+host past an existing T contact is blocked for the same reason.
 
 ## Wall length labels: counter-scaled text, short-wall threshold
 
