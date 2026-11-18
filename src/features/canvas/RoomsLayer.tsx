@@ -1,4 +1,4 @@
-import { formatArea } from "@app/format";
+import { formatSystemArea } from "@app/format";
 import { useApp } from "@app/store";
 import { detectRooms } from "@geometry/rooms";
 import { useMemo } from "react";
@@ -6,7 +6,7 @@ import { useMemo } from "react";
 /** Derived visual geometry only: never persisted or included in undo history. */
 export function RoomsLayer() {
   const walls = useApp((s) => s.plan.walls);
-  const units = useApp((s) => s.plan.meta.units);
+  const system = useApp((s) => s.plan.meta.measurementSystem);
   const scale = useApp((s) => s.view.scale);
   const rooms = useMemo(() => detectRooms(walls), [walls]);
 
@@ -30,7 +30,7 @@ export function RoomsLayer() {
             strokeWidth={3}
             paintOrder="stroke"
           >
-            {formatArea(room.area, units)}
+            {formatSystemArea(room.area, system)}
           </text>
         </g>
       ))}

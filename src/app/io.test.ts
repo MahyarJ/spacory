@@ -24,7 +24,12 @@ const win: WindowItem = {
 };
 const plan: Plan = {
   ...base,
-  meta: { ...base.meta, name: "My Plan", gridSize: 25, units: "m" },
+  meta: {
+    ...base.meta,
+    name: "My Plan",
+    gridSize: 25,
+    measurementSystem: "imperial",
+  },
   walls: [
     { id: "wall_1", a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thickness: 10 },
     { id: "wall_2", a: { x: 300, y: 0 }, b: { x: 300, y: 200 }, thickness: 15 },
@@ -40,7 +45,7 @@ describe("serializePlan / parsePlan round-trip", () => {
     expect(parsed.walls).toEqual(plan.walls);
     expect(parsed.items).toEqual(plan.items);
     expect(parsed.meta.name).toBe(plan.meta.name);
-    expect(parsed.meta.units).toBe(plan.meta.units);
+    expect(parsed.meta.measurementSystem).toBe(plan.meta.measurementSystem);
     expect(parsed.meta.gridSize).toBe(plan.meta.gridSize);
     expect(parsed.meta.createdAt).toBe(plan.meta.createdAt);
   });
@@ -85,7 +90,7 @@ describe("parsePlan normalization", () => {
   it("normalizes an unknown version but keeps the geometry", () => {
     const text = JSON.stringify({
       version: "0.0.1-legacy",
-      meta: { name: "Old", units: "cm", gridSize: 20 },
+      meta: { name: "Old", gridSize: 20 },
       walls: [{ id: "w", a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, thickness: 8 }],
       items: [],
     });
@@ -97,12 +102,12 @@ describe("parsePlan normalization", () => {
   it("falls back to defaults for missing/invalid meta fields", () => {
     const defaults = createInitialPlan();
     const text = JSON.stringify({
-      meta: { units: "lightyears", gridSize: -5 },
+      meta: { measurementSystem: "invalid", gridSize: -5 },
       walls: [],
       items: [],
     });
     const parsed = parsePlan(text);
-    expect(parsed.meta.units).toBe(defaults.meta.units);
+    expect(parsed.meta.measurementSystem).toBe(defaults.meta.measurementSystem);
     expect(parsed.meta.gridSize).toBe(defaults.meta.gridSize);
     expect(parsed.meta.name).toBe(defaults.meta.name);
   });
@@ -178,5 +183,41 @@ describe("parsePlan validation errors", () => {
       ],
     });
     expectError(text, /must be "door" or "window"/i);
+  });
+});
+
+describe("measurement system metadata", () => {
+  it.each([
+    "metric",
+    "imperial",
+  ] as const)("round-trips %s with unchanged geometry", (measurementSystem) => {
+    const source = { ...plan, meta: { ...plan.meta, measurementSystem } };
+    const parsed = parsePlan(serializePlan(source));
+    expect(parsed.meta.measurementSystem).toBe(measurementSystem);
+    expect(parsed.walls).toEqual(source.walls);
+    expect(parsed.items).toEqual(source.items);
+  });
+
+  it.each([
+    undefined,
+    null,
+    "invalid",
+    false,
+    42,
+  ])("defaults a missing or invalid system (%s) to Metric without changing geometry", (measurementSystem) => {
+    const parsed = parsePlan(
+      JSON.stringify({ ...plan, meta: { measurementSystem } }),
+    );
+    expect(parsed.meta.measurementSystem).toBe("metric");
+    expect(parsed.walls).toEqual(plan.walls);
+    expect(parsed.items).toEqual(plan.items);
+  });
+
+  it("ignores unrelated units metadata instead of inferring the system", () => {
+    const parsed = parsePlan(
+      JSON.stringify({ ...plan, meta: { units: "ft" } }),
+    );
+    expect(parsed.meta.measurementSystem).toBe("metric");
+    expect(parsed.meta).not.toHaveProperty("units");
   });
 });

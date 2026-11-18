@@ -836,3 +836,39 @@ drifting while retaining provider-specific sandbox and skill configuration.
 Codex rules require a trusted project configuration and a new session. Preserve
 the existing prefixes, including their option-order limitations, rather than
 silently broadening interpreter permissions. See [Agent command permissions](AGENT-PERMISSIONS.md).
+
+
+## Plan measurement systems (#63)
+
+Store `meta.measurementSystem` (`metric` or `imperial`) with the plan. Metric
+uses cm for lengths and m² for areas; Imperial uses feet/inches and ft².
+Coordinates, thicknesses, and snap spacing remain in cm. JSON and autosaved
+history preserve the setting; SVG/PNG measurement labels use the same formatters
+as the canvas. Imports read only `meta.measurementSystem`: Imperial is explicit,
+and missing or invalid values default to Metric. No `meta.units` compatibility
+mapping or legacy undo-history migration is maintained.
+
+Imperial lengths display tenths of an inch, with carry into feet. Editors use
+separate ft/in fields and validate the combined cm value. An unchanged rounded
+display never resizes geometry; moving focus between the two fields does not
+commit, and leaving the editor commits before a measurement-system change.
+Thickness presets are specific to each system: 10/15/30 cm in Metric and
+4½″/6½″/12″ in Imperial, with custom overall thickness entered in cm or decimal
+inches. Preset identity stays selected when switching systems: 10 cm maps to
+4½″, 15 cm to 6½″, and 30 cm to 12″ for newly drawn walls. Custom retains its
+exact cm value, even when it happens to equal a preset. Existing walls are never
+resized. Drawing thickness and preset identity are session tool settings,
+separate from the plan. The smaller presets are based on framed partition
+assemblies; the 30 cm/12″ option is a convenient thick-wall drawing preset.
+These are not nominal stud/block dimensions or guarantees about construction
+suitability.
+
+Measurement-system changes commit metadata against the last committed geometry,
+while copying that metadata into any live preview. Metadata-only commits skip
+geometry normalization and selection reconciliation. This preserves the drag's
+original item/selection snapshots: cancelling discards the preview while keeping
+the system choice, and releasing records the drag as its own undo step.
+
+The schema exposes only `MeasurementSystem`; it no longer advertises individually
+selectable display units. Formatting accepts the system directly, while numeric
+editors share a `LengthUnit` type limited to cm/in.

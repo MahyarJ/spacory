@@ -2,6 +2,7 @@ import type { DoorItem, Plan, Wall } from "@app/schema";
 import { findConnectedEndpoints } from "@geometry/connectivity";
 import { getPointOnWall, getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadPersistedHistory } from "./persistence";
 import { useApp } from "./store";
 
 /** Minimal in-memory localStorage stand-in for the node test environment. */
@@ -34,12 +35,12 @@ function wall(
 
 function planWith(walls: Wall[], items: Plan["items"] = []): Plan {
   return {
-    version: "1.2.0",
+    version: "1.3.0",
     meta: {
       name: "test",
       createdAt: new Date(0).toISOString(),
       updatedAt: new Date(0).toISOString(),
-      units: "cm",
+      measurementSystem: "metric",
       gridSize: 20,
     },
     walls,
@@ -1064,5 +1065,95 @@ describe("merging a split host back into one wall on commit", () => {
       wall("host", 0, 0, 400, 0),
       wall("far", 0, 500, 200, 500),
     ]);
+  });
+});
+
+describe("measurement system changes during a live drag", () => {
+  function startDrag(kind: "wall" | "junction" | "endpoint") {
+    const original = planWith(
+      [wall("w1", 0, 0, 100, 0), wall("w2", 100, 0, 100, 100)],
+      [
+        {
+          id: "door",
+          type: "door",
+          thickness: 10,
+          wallAttach: { wallId: "w1", offset: 0, length: 40 },
+          props: { hingeEdge: "start", swingSide: "inside" },
+        },
+      ],
+    );
+    useApp.getState().loadPlan(original);
+    if (kind === "wall") useApp.getState().selectWall("w1");
+    else useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
+    useApp.getState().beginLiveDrag();
+    if (kind === "wall") useApp.getState().translateSelectedWallsLive(20, 20);
+    else if (kind === "junction")
+      useApp.getState().translateSelectedConnectionPointLive(-70, 0);
+    else
+      useApp
+        .getState()
+        .moveWallEndpointLive({ wallId: "w1", end: "b" }, { x: 30, y: 0 });
+    expect(useApp.getState().plan.walls).not.toEqual(original.walls);
+    return original;
+  }
+
+  it.each([
+    "wall",
+    "junction",
+    "endpoint",
+  ] as const)("keeps a %s preview cancellable while saving only the system", (kind) => {
+    const original = startDrag(kind);
+    const preview = useApp.getState().plan;
+    const snapshot = useApp.getState().liveDragItems;
+    const point = useApp.getState().selectedConnectionPoint;
+    useApp.getState().setMeasurementSystem("imperial");
+    expect(useApp.getState().plan.walls).toBe(preview.walls);
+    expect(useApp.getState().plan.items).toBe(preview.items);
+    expect(useApp.getState().selectedConnectionPoint).toEqual(point);
+    expect(useApp.getState().liveDragItems).toBe(snapshot);
+    const saved = loadPersistedHistory()!;
+    expect(saved.present.walls).toEqual(original.walls);
+    expect(saved.present.items).toEqual(original.items);
+    expect(saved.present.meta.measurementSystem).toBe("imperial");
+    expect(saved.past).toHaveLength(1);
+
+    useApp.getState().cancelLiveDrag();
+    expect(useApp.getState().plan.walls).toEqual(original.walls);
+    expect(useApp.getState().plan.items).toEqual(original.items);
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("imperial");
+    if (kind !== "wall")
+      expect(useApp.getState().selectedConnectionPoint).toEqual({
+        x: 100,
+        y: 0,
+      });
+    useApp.getState().undo();
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("metric");
+    expect(useApp.getState().plan.walls).toEqual(original.walls);
+    useApp.getState().redo();
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("imperial");
+    expect(useApp.getState().plan.walls).toEqual(original.walls);
+  });
+
+  it.each([
+    "wall",
+    "junction",
+    "endpoint",
+  ] as const)("keeps a released %s drag separate from the system's undo entry", (kind) => {
+    const original = startDrag(kind);
+    useApp.getState().setMeasurementSystem("imperial");
+    useApp.getState().commitPlan();
+    const finished = useApp.getState().plan;
+    expect(finished.walls).not.toEqual(original.walls);
+    expect(loadPersistedHistory()?.past).toHaveLength(2);
+    useApp.getState().undo();
+    expect(useApp.getState().plan.walls).toEqual(original.walls);
+    expect(useApp.getState().plan.items).toEqual(original.items);
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("imperial");
+    useApp.getState().undo();
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("metric");
+    useApp.getState().redo();
+    useApp.getState().redo();
+    expect(useApp.getState().plan.walls).toEqual(finished.walls);
+    expect(useApp.getState().plan.items).toEqual(finished.items);
   });
 });

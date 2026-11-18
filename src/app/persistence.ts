@@ -45,8 +45,8 @@ export function loadPersistedHistory(): History | null {
     const raw = JSON.parse(text);
     if (raw?.format !== HISTORY_FORMAT) return null;
     return {
-      past: asPatchList(raw.past),
       present: coercePlan(raw.present),
+      past: asPatchList(raw.past),
       future: asPatchList(raw.future),
     };
   } catch {

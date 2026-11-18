@@ -11,8 +11,13 @@ connected room structures.
 
 ## ✨ Features
 
+- 📐 **Metric / Imperial** — switch between cm and m² or feet/inches and ft².
+  Measurement inputs, thickness labels, and SVG/PNG exports follow the plan’s
+  system; JSON files and autosave preserve it. Unit, theme, and thickness
+  choices share a consistent segmented control.
+
 - 🧱 **Walls** — click-to-chain or drag to draw, with grid snapping and
-  selectable thickness presets
+  thickness presets (10 / 15 / 30 cm or 4½″ / 6½″ / 12″) and custom overall thickness
 - 🔵 **Smart junctions** — where walls meet, their geometry is mitered so corners
   and T/X junctions join seamlessly (no overlap patches, no gaps); very acute
   angles fall back to a clean bevel. A wall ending part-way along another splits

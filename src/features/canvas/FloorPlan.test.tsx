@@ -3,7 +3,14 @@ import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
 import { DEFAULT_VIEW } from "@app/viewport";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwitch";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FloorPlan } from "./FloorPlan";
 
@@ -115,6 +122,27 @@ describe("FloorPlan touch gestures", () => {
       Reflect.deleteProperty(Element.prototype, name);
     }
     localStorage.clear();
+  });
+
+  it("can cancel a wall drag after another contact switches the toolbar's units", () => {
+    setup({ tool: "select", plan: cornerPlan() });
+    render(<MeasurementSystemSwitch />);
+    const original = walls();
+    down(1, 200, 0);
+    move(1, 240, 40);
+    const preview = walls();
+    expect(preview).not.toEqual(original);
+    const imperial = screen.getByRole("button", { name: "Imperial" });
+    fireEvent(imperial, pointerEvent("pointerdown", 2, 0, 0));
+    fireEvent(imperial, pointerEvent("pointerup", 2, 0, 0));
+    fireEvent.click(imperial);
+    expect(walls()).toEqual(preview);
+    cancel(1, 240, 40);
+    expect(walls()).toEqual(original);
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("imperial");
+    act(() => useApp.getState().undo());
+    expect(walls()).toEqual(original);
+    expect(useApp.getState().plan.meta.measurementSystem).toBe("metric");
   });
 
   describe("one finger runs the active tool's gesture", () => {

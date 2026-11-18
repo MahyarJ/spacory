@@ -1,6 +1,6 @@
 import type { Operation } from "fast-json-patch";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { History } from "./history";
+import { commit, createHistory, type History, redo, undo } from "./history";
 import {
   clearPersistedHistory,
   HISTORY_STORAGE_KEY,
@@ -149,4 +149,20 @@ describe("graceful degradation", () => {
     expect(loaded?.past).toEqual([]); // undo/redo stacks dropped
     expect(loaded?.future).toEqual([]);
   });
+});
+
+it("keeps the measurement-system timeline usable after a refresh", () => {
+  vi.stubGlobal("localStorage", makeStorage());
+  const metric = planNamed("systems", 250.123);
+  const imperial: Plan = {
+    ...metric,
+    meta: { ...metric.meta, measurementSystem: "imperial" },
+  };
+  savePersistedHistory(commit(createHistory(metric), imperial));
+  const refreshed = loadPersistedHistory()!;
+  expect(refreshed.present.meta.measurementSystem).toBe("imperial");
+  const undone = undo(refreshed);
+  expect(undone.present.meta.measurementSystem).toBe("metric");
+  expect(undone.present.walls).toEqual(metric.walls);
+  expect(redo(undone).present.meta.measurementSystem).toBe("imperial");
 });

@@ -1,3 +1,4 @@
+import { formatSystemArea, formatSystemLength } from "@app/format";
 import { isDoor, type Plan } from "@app/schema";
 import { getPlanBounds } from "./bounds";
 import {
@@ -6,6 +7,8 @@ import {
   getWindowGeometry,
 } from "./itemGeometry";
 import { computeWallGeometry, polygonToPoints } from "./junction";
+import { detectRooms } from "./rooms";
+import { getPointOnWall, getWallAngle, getWallLength } from "./wall";
 
 /** Margin (cm) left around the plan's content on every side of the export. */
 export const EXPORT_MARGIN = 40;
@@ -28,7 +31,7 @@ export interface ExportSvgResult {
 /**
  * Build a standalone SVG document of a plan's content — walls (mitered, with
  * junction fills) and items — independent of the live canvas's pan/zoom, grid,
- * and selection overlays. Framed to the plan's content bounding box
+ * and selection overlays. Lengths and room areas use the plan’s system. Framed to the plan's content bounding box
  * (`getPlanBounds`) plus `EXPORT_MARGIN`; an empty plan falls back to a small
  * placeholder square centered on the origin so the result is always a valid,
  * non-crashing image.
@@ -98,11 +101,33 @@ export function buildExportSvg(
     })
     .join("");
 
+  const textStyle = `font-family="sans-serif" font-size="12" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
+  const dimensions = plan.walls
+    .map((wall) => {
+      const length = getWallLength(wall);
+      const label = formatSystemLength(length, plan.meta.measurementSystem);
+      // Keep long imperial labels from spilling past short walls or the frame.
+      if (length < label.length * 7) return "";
+      const mid = getPointOnWall(wall, length / 2);
+      let angle = (getWallAngle(wall) * 180) / Math.PI;
+      if (angle > 90 || angle < -90) angle += 180;
+      return `<text transform="translate(${mid.x} ${mid.y}) rotate(${angle})" y="${-wall.thickness / 2 - 8}" ${textStyle}>${label}</text>`;
+    })
+    .join("");
+  const areas = detectRooms(plan.walls)
+    .map(
+      (room) =>
+        `<text x="${room.labelPoint.x}" y="${room.labelPoint.y}" dominant-baseline="central" ${textStyle}>${formatSystemArea(room.area, plan.meta.measurementSystem)}</text>`,
+    )
+    .join("");
+
   const markup =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}">` +
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${EXPORT_BACKGROUND}" />` +
     `<g data-layer="walls">${wallShapes}${junctionShapes}</g>` +
     `<g data-layer="items">${itemShapes}</g>` +
+    `<g data-layer="dimensions">${dimensions}</g>` +
+    `<g data-layer="room-areas">${areas}</g>` +
     "</svg>";
 
   return { markup, width, height };

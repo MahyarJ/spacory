@@ -150,12 +150,12 @@ function wall(id: string, bx: number): Wall {
 
 function planWith(walls: Wall[], items: Plan["items"] = []): Plan {
   return {
-    version: "1.2.0",
+    version: "1.3.0",
     meta: {
       name: "test",
       createdAt: new Date(0).toISOString(),
       updatedAt: new Date(0).toISOString(),
-      units: "cm",
+      measurementSystem: "metric",
       gridSize: 20,
     },
     walls,

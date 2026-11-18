@@ -1,4 +1,4 @@
-export type Units = "cm" | "m" | "mm" | "in" | "ft";
+export type MeasurementSystem = "metric" | "imperial";
 
 export interface Point {
   x: number;
@@ -51,12 +51,12 @@ export interface WindowItem extends ItemBase {
 export type Item = DoorItem | WindowItem;
 
 export interface Plan {
-  version: "1.2.0";
+  version: "1.3.0";
   meta: {
     name: string;
     createdAt: string;
     updatedAt: string;
-    units: Units;
+    measurementSystem: MeasurementSystem;
     gridSize: number;
   };
   walls: Wall[];
@@ -64,12 +64,12 @@ export interface Plan {
 }
 
 export const createInitialPlan = (): Plan => ({
-  version: "1.2.0",
+  version: "1.3.0",
   meta: {
     name: "Untitled",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    units: "cm",
+    measurementSystem: "metric",
     gridSize: 20,
   },
   walls: [],

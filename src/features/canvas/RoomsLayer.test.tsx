@@ -14,7 +14,7 @@ function roomPlan(): Plan {
   ];
   return {
     ...createInitialPlan(),
-    meta: { ...createInitialPlan().meta, units: "m" },
+    meta: { ...createInitialPlan().meta, measurementSystem: "metric" },
     walls: points.map((a, i) => ({
       id: `w${i}`,
       a,
@@ -85,7 +85,9 @@ it("updates area from live wall arrays, converts units, and counter-scales label
   );
   act(() => {
     const plan = useApp.getState().plan;
-    useApp.setState({ plan: { ...plan, meta: { ...plan.meta, units: "ft" } } });
+    useApp.setState({
+      plan: { ...plan, meta: { ...plan.meta, measurementSystem: "imperial" } },
+    });
   });
   expect(layer.textContent).toBe("258.33 ft²");
 });

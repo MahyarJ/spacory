@@ -3,15 +3,12 @@ import {
   type Item,
   type Plan,
   type Point,
-  type Units,
   type Wall,
   type WallAttachment,
 } from "./schema";
 
 /** Current schema version written by exports. */
-export const PLAN_VERSION = "1.2.0" as const;
-
-const VALID_UNITS: Units[] = ["cm", "m", "mm", "in", "ft"];
+export const PLAN_VERSION = "1.3.0" as const;
 
 /** Serialize a plan to a pretty-printed JSON string suitable for download. */
 export function serializePlan(plan: Plan): string {
@@ -143,10 +140,8 @@ export function coercePlan(raw: unknown): Plan {
 
   const defaults = createInitialPlan();
   const meta = isObject(raw.meta) ? raw.meta : {};
-  const units =
-    typeof meta.units === "string" && VALID_UNITS.includes(meta.units as Units)
-      ? (meta.units as Units)
-      : defaults.meta.units;
+  const measurementSystem =
+    meta.measurementSystem === "imperial" ? "imperial" : "metric";
 
   return {
     version: PLAN_VERSION,
@@ -157,7 +152,7 @@ export function coercePlan(raw: unknown): Plan {
           ? meta.createdAt
           : defaults.meta.createdAt,
       updatedAt: new Date().toISOString(),
-      units,
+      measurementSystem,
       gridSize:
         isFiniteNumber(meta.gridSize) && meta.gridSize > 0
           ? meta.gridSize

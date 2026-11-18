@@ -2,6 +2,7 @@
    than a toolbar row) so it never reflows the canvas when it toggles. */
 .bar {
   position: absolute;
+  max-width: calc(100% - 16px);
   top: 8px;
   left: 8px;
   z-index: 5;
@@ -16,6 +17,7 @@
 
 .wallOptions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -24,24 +26,6 @@
   font-size: 12px;
   opacity: 0.8;
   margin-right: 2px;
-}
-
-.presets {
-  display: flex;
-  gap: 6px;
-}
-
-.pill {
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: none;
-  background: var(--sp-panel);
-  color: var(--sp-text);
-  cursor: pointer;
-}
-
-.active {
-  outline: 2px solid var(--sp-accent);
 }
 
 .lengthField {

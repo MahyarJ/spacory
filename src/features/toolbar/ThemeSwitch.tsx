@@ -13,14 +13,14 @@ export function ThemeSwitch() {
   const setMode = useApp((s) => s.setThemeMode);
 
   return (
-    <div className={styles.themeSwitch} role="tablist" aria-label="Theme">
+    <div className={styles.group} role="tablist" aria-label="Theme">
       {options.map(({ value, label }) => (
         <button
           key={value}
           type="button"
           role="tab"
           aria-selected={mode === value}
-          className={clsx(styles.btn, mode === value && styles.active)}
+          className={clsx(styles.segment, mode === value && styles.active)}
           onClick={() => setMode(value)}
         >
           {label}

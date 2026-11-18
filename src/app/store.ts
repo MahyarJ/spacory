@@ -35,6 +35,7 @@ import {
   createInitialPlan,
   type Item,
   isDoor,
+  type MeasurementSystem,
   type Plan,
   type Point,
   type Wall,
@@ -45,6 +46,7 @@ import {
   THEME_KEY,
   type ThemeMode,
 } from "./theming";
+import { drawingThickness, type ThicknessPreset } from "./thickness";
 import {
   computeFitView,
   DEFAULT_VIEW,
@@ -63,6 +65,7 @@ interface AppState {
   canvasSize: { width: number; height: number };
   isPanning: boolean;
   setTool: (t: Tool) => void;
+  setMeasurementSystem: (system: MeasurementSystem) => void;
   addWall: (w: Wall) => void;
   addItem: (i: Item) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
@@ -75,6 +78,8 @@ interface AppState {
   fitView: () => void;
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
+  wallThicknessPreset: ThicknessPreset | null;
+  setWallThicknessPreset: (preset: ThicknessPreset) => void;
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
@@ -199,7 +204,10 @@ function commit(
   next: Plan,
   selection: Pick<
     AppState,
-    "selectedConnectionPoint" | "selectedWalls" | "selectedItems"
+    | "selectedConnectionPoint"
+    | "selectedConnectionPointEndpoints"
+    | "selectedWalls"
+    | "selectedItems"
   >,
   heldPoint: Point | null = selection.selectedConnectionPoint,
 ): Pick<
@@ -210,6 +218,23 @@ function commit(
   | "selectedWalls"
   | "selectedItems"
 > {
+  // Metadata-only changes must not normalize geometry or disturb a live
+  // selection. Their geometry is the exact committed snapshot, not a preview.
+  if (
+    next.walls === history.present.walls &&
+    next.items === history.present.items
+  ) {
+    history = commitHistory(history, next);
+    persist();
+    return {
+      plan: history.present,
+      selectedConnectionPoint: selection.selectedConnectionPoint,
+      selectedConnectionPointEndpoints:
+        selection.selectedConnectionPointEndpoints,
+      selectedWalls: selection.selectedWalls,
+      selectedItems: selection.selectedItems,
+    };
+  }
   // Merge back the two collinear segments of a host this edit just made a
   // meaningless seam of — the T-wall that split it was deleted, or its endpoint
   // dragged out of the junction (see wallMerge.ts). Judged against the
@@ -318,8 +343,51 @@ export const useApp = create<AppState>((set, get) => ({
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
   setTool: (t) => set({ tool: t }),
-  currentWallThickness: 10, // cm default
-  setCurrentWallThickness: (t) => set({ currentWallThickness: Math.max(1, t) }),
+  setMeasurementSystem: (measurementSystem) => {
+    const state = get();
+    if (state.plan.meta.measurementSystem === measurementSystem) return;
+    const committed = commit(
+      {
+        ...history.present,
+        meta: {
+          ...history.present.meta,
+          measurementSystem,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      state,
+    );
+    set({
+      ...committed,
+      // Keep the in-flight preview and drag snapshots intact. Only metadata is
+      // shared with history, so either cancel or release still owns the drag.
+      plan: { ...state.plan, meta: committed.plan.meta },
+      currentWallThickness: drawingThickness(
+        measurementSystem,
+        state.wallThicknessPreset,
+        state.currentWallThickness,
+      ),
+    });
+  },
+  wallThicknessPreset: "standard",
+  currentWallThickness: drawingThickness(
+    history.present.meta.measurementSystem,
+    "standard",
+    10,
+  ),
+  setWallThicknessPreset: (wallThicknessPreset) =>
+    set({
+      wallThicknessPreset,
+      currentWallThickness: drawingThickness(
+        get().plan.meta.measurementSystem,
+        wallThicknessPreset,
+        get().currentWallThickness,
+      ),
+    }),
+  setCurrentWallThickness: (t) => {
+    if (!Number.isFinite(t)) return;
+    set({ currentWallThickness: Math.max(1, t), wallThicknessPreset: null });
+  },
   selectedWalls: new Set(),
   selectedItems: new Set(),
   selectedConnectionPoint: null,
@@ -544,6 +612,11 @@ export const useApp = create<AppState>((set, get) => ({
     // risk a following nudge dragging the wrong walls.
     set({
       plan: history.present,
+      currentWallThickness: drawingThickness(
+        history.present.meta.measurementSystem,
+        get().wallThicknessPreset,
+        get().currentWallThickness,
+      ),
       selectedConnectionPoint: null,
       selectedConnectionPointEndpoints: [],
     });
@@ -554,6 +627,11 @@ export const useApp = create<AppState>((set, get) => ({
     persist();
     set({
       plan: history.present,
+      currentWallThickness: drawingThickness(
+        history.present.meta.measurementSystem,
+        get().wallThicknessPreset,
+        get().currentWallThickness,
+      ),
       selectedConnectionPoint: null,
       selectedConnectionPointEndpoints: [],
     });
@@ -566,6 +644,11 @@ export const useApp = create<AppState>((set, get) => ({
     persist();
     set({
       plan: history.present,
+      currentWallThickness: drawingThickness(
+        history.present.meta.measurementSystem,
+        get().wallThicknessPreset,
+        get().currentWallThickness,
+      ),
       selectedWalls: new Set(),
       selectedItems: new Set(),
       marquee: null,
