@@ -204,7 +204,10 @@ function commit(
   next: Plan,
   selection: Pick<
     AppState,
-    "selectedConnectionPoint" | "selectedWalls" | "selectedItems"
+    | "selectedConnectionPoint"
+    | "selectedConnectionPointEndpoints"
+    | "selectedWalls"
+    | "selectedItems"
   >,
   heldPoint: Point | null = selection.selectedConnectionPoint,
 ): Pick<
@@ -215,6 +218,23 @@ function commit(
   | "selectedWalls"
   | "selectedItems"
 > {
+  // Metadata-only changes must not normalize geometry or disturb a live
+  // selection. Their geometry is the exact committed snapshot, not a preview.
+  if (
+    next.walls === history.present.walls &&
+    next.items === history.present.items
+  ) {
+    history = commitHistory(history, next);
+    persist();
+    return {
+      plan: history.present,
+      selectedConnectionPoint: selection.selectedConnectionPoint,
+      selectedConnectionPointEndpoints:
+        selection.selectedConnectionPointEndpoints,
+      selectedWalls: selection.selectedWalls,
+      selectedItems: selection.selectedItems,
+    };
+  }
   // Merge back the two collinear segments of a host this edit just made a
   // meaningless seam of — the T-wall that split it was deleted, or its endpoint
   // dragged out of the junction (see wallMerge.ts). Judged against the
@@ -326,18 +346,22 @@ export const useApp = create<AppState>((set, get) => ({
   setMeasurementSystem: (measurementSystem) => {
     const state = get();
     if (state.plan.meta.measurementSystem === measurementSystem) return;
-    set({
-      ...commit(
-        {
-          ...state.plan,
-          meta: {
-            ...state.plan.meta,
-            measurementSystem,
-            updatedAt: new Date().toISOString(),
-          },
+    const committed = commit(
+      {
+        ...history.present,
+        meta: {
+          ...history.present.meta,
+          measurementSystem,
+          updatedAt: new Date().toISOString(),
         },
-        state,
-      ),
+      },
+      state,
+    );
+    set({
+      ...committed,
+      // Keep the in-flight preview and drag snapshots intact. Only metadata is
+      // shared with history, so either cancel or release still owns the drag.
+      plan: { ...state.plan, meta: committed.plan.meta },
       currentWallThickness: drawingThickness(
         measurementSystem,
         state.wallThicknessPreset,

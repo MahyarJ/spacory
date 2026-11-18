@@ -862,3 +862,9 @@ separate from the plan. The smaller presets are based on framed partition
 assemblies; the 30 cm/12″ option is a convenient thick-wall drawing preset.
 These are not nominal stud/block dimensions or guarantees about construction
 suitability.
+
+Measurement-system changes commit metadata against the last committed geometry,
+while copying that metadata into any live preview. Metadata-only commits skip
+geometry normalization and selection reconciliation. This preserves the drag's
+original item/selection snapshots: cancelling discards the preview while keeping
+the system choice, and releasing records the drag as its own undo step.
