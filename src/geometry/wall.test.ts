@@ -159,6 +159,12 @@ describe("resizeWallInPlan", () => {
       () => "split",
       reversedChoice,
     )!;
+    if (
+      forwardResult === "blocked-junction" ||
+      reversedResult === "blocked-junction"
+    ) {
+      throw new Error("Expected both resize directions to succeed");
+    }
     const [newWall, ...newNeighbors] = forwardResult.walls;
     const [reversedWall, ...reversedNeighbors] = reversedResult.walls;
     expect(newWall.a).toEqual({ x: ends[0], y: 0 });

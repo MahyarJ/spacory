@@ -61,6 +61,7 @@ type WallLengthEdit = {
   wallId: string;
   length: number | null;
   anchor: WallResizeAnchor;
+  preview: ReturnType<typeof previewWallResize>;
 };
 
 interface AppState {
@@ -205,7 +206,7 @@ export function previewWallResize(
   wall: Wall,
   length: number,
   anchor: WallResizeAnchor,
-): Wall[] | null {
+): Wall[] | "blocked-junction" | null {
   // Splits need distinct IDs even during a preview. They are local to this
   // calculation and never enter the committed plan.
   const existingIds = new Set(plan.walls.map((w) => w.id));
@@ -225,7 +226,7 @@ export function previewWallResize(
     nextWallId,
     anchor,
   );
-  if (!resize) return null;
+  if (!resize || resize === "blocked-junction") return resize;
   return normalizeWallEdit(plan.walls, resize, nextWallId, [
     resize.resized.a,
     resize.resized.b,
@@ -557,7 +558,7 @@ export const useApp = create<AppState>((set, get) => ({
       () => uid("wall"),
       anchor,
     );
-    if (!resize) return;
+    if (!resize || resize === "blocked-junction") return;
     const next: Plan = {
       ...plan,
       walls: resize.walls,

@@ -145,6 +145,38 @@ describe("WallOptions — click-away commits the typed value", () => {
 });
 
 describe("WallOptions — resize preview", () => {
+  it("explains a blocked junction and previews a resize when the free end is chosen", () => {
+    useApp.getState().loadPlan({
+      ...cornerPlan(),
+      walls: [wall(0, 0, 400, 0, "host"), wall(0.5, 0, 0.5, 200, "stem")],
+    });
+    useApp.getState().selectWall("stem");
+    const { container } = render(
+      <>
+        <FloorPlan />
+        <WallOptionsBar />
+      </>,
+    );
+    const input = screen.getByLabelText("Length");
+    act(() => input.focus());
+    fireEvent.change(input, { target: { value: "150" } });
+    fireEvent.click(screen.getByRole("button", { name: "Top" }));
+    expect(screen.getByRole("status").textContent).toBe(
+      "This resize would disconnect a junction.",
+    );
+    expect(
+      container.querySelector('[data-layer="wall-resize-preview"]'),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Bottom" }));
+    expect(screen.getByRole("status").textContent).toBe(
+      "Shrink by 50 cm at the bottom end (200 cm → 150 cm)",
+    );
+    expect(
+      container.querySelector('[data-layer="wall-resize-preview"] polygon'),
+    ).toBeTruthy();
+  });
+
   function setup(id = "bottom") {
     const plan = {
       ...cornerPlan(),

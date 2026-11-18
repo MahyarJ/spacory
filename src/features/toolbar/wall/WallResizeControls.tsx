@@ -1,6 +1,6 @@
 import { formatSystemLength, lengthToCm } from "@app/format";
 import type { Wall } from "@app/schema";
-import { useApp } from "@app/store";
+import { previewWallResize, useApp } from "@app/store";
 import { SegmentedControl } from "@features/toolbar/SegmentedControl";
 import { getWallLength, type WallResizeAnchor } from "@geometry/wall";
 import { getWallResizeContext } from "@geometry/wallResize";
@@ -22,19 +22,20 @@ function wallEndPositions(wall: Wall) {
 
 export function WallResizeControls({
   wall,
-  walls,
   length,
 }: {
   wall: Wall;
-  walls: Wall[];
   length: number | null;
 }) {
   const [choice, setChoice] = useState<WallResizeAnchor>();
-  const { anchor } = getWallResizeContext(walls, wall, choice);
+  const plan = useApp((s) => s.plan);
+  const { anchor } = getWallResizeContext(plan.walls, wall, choice);
   const setEdit = useApp((s) => s.setWallLengthEdit);
   useLayoutEffect(() => {
-    setEdit({ wallId: wall.id, length, anchor });
-  }, [setEdit, wall.id, length, anchor]);
+    const preview =
+      length === null ? null : previewWallResize(plan, wall, length, anchor);
+    setEdit({ wallId: wall.id, length, anchor, preview });
+  }, [setEdit, wall, length, anchor, plan]);
   useLayoutEffect(() => () => setEdit(null), [setEdit]);
 
   const { first, firstName, lastName } = wallEndPositions(wall);
@@ -64,7 +65,9 @@ export function WallResizeStatus() {
   const plan = useApp((s) => s.plan);
   const wall = edit && plan.walls.find((w) => w.id === edit.wallId);
   let summary = "";
-  if (wall && edit.length !== null) {
+  if (edit?.preview === "blocked-junction") {
+    summary = "This resize would disconnect a junction.";
+  } else if (wall && edit.length !== null) {
     const current = getWallLength(wall);
     const delta = edit.length - current;
     const { measurementSystem: system } = plan.meta;

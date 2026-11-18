@@ -64,11 +64,7 @@ export function WallOptions() {
             setWallLength(length, useApp.getState().wallLengthEdit?.anchor)
           }
           renderControls={(length) => (
-            <WallResizeControls
-              wall={selectedWall}
-              walls={walls}
-              length={length}
-            />
+            <WallResizeControls wall={selectedWall} length={length} />
           )}
         />
       )}

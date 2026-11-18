@@ -71,6 +71,10 @@ export function resizeWallInPlan(
         onlyTouchesAt: contacts,
       })
     : { walls, items };
+  // A partial split still leaves a host without an endpoint to follow.
+  if (contacts.some((point) => touchesHost(before.walls, wall, point))) {
+    return "blocked-junction" as const;
+  }
   const { atA, atB } =
     before.walls === walls
       ? context

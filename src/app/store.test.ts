@@ -121,6 +121,24 @@ describe("translateSelectedWalls", () => {
 });
 
 describe("setSelectedWallLength", () => {
+  it("preserves a T-junction when splitting its host would create a wall under 1 cm", () => {
+    const stem = wall("stem", 0.5, 0, 0.5, 200);
+    loadWithSelection([wall("host", 0, 0, 400, 0), stem], ["stem"]);
+    const before = useApp.getState().plan;
+    const historyBefore = loadPersistedHistory();
+
+    expect(previewWallResize(before, stem, 150, "b")).toBe("blocked-junction");
+    useApp.getState().setSelectedWallLength(150, "b");
+    expect(useApp.getState().plan).toBe(before);
+    expect(loadPersistedHistory()).toEqual(historyBefore);
+
+    useApp.getState().setSelectedWallLength(150, "a");
+    expect(useApp.getState().plan.walls).toEqual([
+      before.walls[0],
+      wall("stem", 0.5, 0, 0.5, 150),
+    ]);
+  });
+
   it("defaults to a centered resize when an endpoint junction and an unsplit T share the same wall", () => {
     loadWithSelection(
       [
@@ -160,7 +178,7 @@ describe("setSelectedWallLength", () => {
       wall("host-right", 200, 50, 400, 0),
       wall("stem", 200, 50, 200, 200),
     ]);
-    expect(preview && endpoints(preview)).toEqual(expected);
+    expect(Array.isArray(preview) && endpoints(preview)).toEqual(expected);
     expect(useApp.getState().plan).toBe(before);
 
     useApp.getState().setSelectedWallLength(150, "b");
@@ -323,7 +341,9 @@ describe("setSelectedWallLength", () => {
     const committed = useApp.getState().plan.walls;
     expect(committed[0]).toEqual(wall("w1", 0, 0, 200, 0));
     const endpoints = (w: Wall) => [w.a, w.b];
-    expect(preview?.map(endpoints)).toEqual(committed.map(endpoints));
+    expect(Array.isArray(preview) && preview.map(endpoints)).toEqual(
+      committed.map(endpoints),
+    );
   });
 });
 

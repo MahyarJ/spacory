@@ -1,4 +1,4 @@
-import { previewWallResize, useApp } from "@app/store";
+import { useApp } from "@app/store";
 import { computeWallGeometry, polygonToPoints } from "@geometry/junction";
 import { getWallAngle, getWallLength } from "@geometry/wall";
 
@@ -21,10 +21,8 @@ export function WallResizePreview() {
   const length = getWallLength(wall);
   if (length === 0) return null;
 
-  const preview =
-    edit.length === null
-      ? null
-      : previewWallResize(plan, wall, edit.length, edit.anchor);
+  if (edit.preview === "blocked-junction") return null;
+  const preview = edit.preview;
   const polygons = preview && computeWallGeometry(preview).walls;
   const unchanged = new Set(plan.walls);
   const shrinking = preview && edit.length !== null && edit.length < length;
