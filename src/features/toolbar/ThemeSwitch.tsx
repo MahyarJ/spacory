@@ -1,6 +1,5 @@
 import { useApp } from "@app/store";
-import clsx from "clsx";
-import styles from "./ThemeSwitch.module.css";
+import { SegmentedControl } from "./SegmentedControl";
 
 const options = [
   { value: "dark", label: "Dark" },
@@ -13,19 +12,11 @@ export function ThemeSwitch() {
   const setMode = useApp((s) => s.setThemeMode);
 
   return (
-    <div className={styles.group} role="tablist" aria-label="Theme">
-      {options.map(({ value, label }) => (
-        <button
-          key={value}
-          type="button"
-          role="tab"
-          aria-selected={mode === value}
-          className={clsx(styles.segment, mode === value && styles.active)}
-          onClick={() => setMode(value)}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <SegmentedControl
+      label="Theme"
+      options={options}
+      value={mode}
+      onChange={setMode}
+    />
   );
 }

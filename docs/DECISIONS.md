@@ -547,6 +547,23 @@ on Node 24.
 **Why.** The previous v4 actions ran on Node 20, which GitHub deprecated. The v6
 majors run on Node 24, clearing the deprecation warnings.
 
+## Typed wall lengths follow visible anchors
+
+The order in which a wall was drawn must not decide which junction moves.
+Typing a length keeps the only joined end fixed when there is one. With two
+joined ends or none, the edit defaults to the center. The user can choose
+which end moves or move both for the current edit. The canvas previews each
+moved junction and the walls that follow it, so any change to neighboring wall
+angles or lengths is visible before the single undoable commit. Openings keep
+their position along the resized wall wherever they still fit. A resize can
+form a new mid-span junction at an exact touch. The entered length and wall
+angle take precedence over snapping the resized endpoints to a nearby wall.
+When moving the stem of a T whose host is still one segment, preview and commit
+split the host at the original junction so both legs can follow the stem.
+If a host cannot split safely, the resize is blocked and the status explains
+that the selected move would disconnect a junction. Shortening an unsplit
+host past an existing T contact is blocked for the same reason.
+
 ## Wall length labels: counter-scaled text, short-wall threshold
 
 **Decision.** `DimensionsLayer` draws each wall's length near its midpoint. The

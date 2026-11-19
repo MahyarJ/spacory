@@ -79,18 +79,37 @@ const shareAJunction = (w: Wall, other: Wall) =>
  * whichever segment now holds them.
  *
  * Pure — `nextWallId` is injected so the caller owns id generation and tests
- * stay deterministic. Returns the input arrays unchanged (same identity) when
- * nothing qualifies, which is the common case on most commits.
+ * stay deterministic. Fixed points can form a junction on the host centreline
+ * but cannot be snapped there from inside the wall body. Pass `onlyTouchesAt`
+ * to materialize specific contacts without touching the rest of the plan.
+ * Returns the input arrays unchanged when nothing qualifies.
  */
 export function splitWallsAtTouchingEndpoints(
   walls: Wall[],
   items: Item[],
   nextWallId: () => string,
+  {
+    fixedPoints = [],
+    onlyTouchesAt,
+  }: {
+    fixedPoints?: Point[];
+    onlyTouchesAt?: Point[];
+  } = {},
 ): WallSplitResult {
+  const isFixed = (point: Point) =>
+    fixedPoints.some((fixed) => pointsEqual(fixed, point));
+  const findTouches = (walls: Wall[]) => {
+    const touches = detectTouches(walls, isFixed);
+    return onlyTouchesAt
+      ? touches.filter(({ from }) =>
+          onlyTouchesAt.some((point) => pointsEqual(point, from)),
+        )
+      : touches;
+  };
   let result: WallSplitResult = { walls, items, welds: [] };
-  let touches = detectTouches(walls);
+  let touches = findTouches(walls);
   for (let pass = 0; pass < MAX_PASSES && touches.length > 0; pass++) {
-    const applied = applyTouches(result, touches, nextWallId);
+    const applied = applyTouches(result, touches, nextWallId, isFixed);
     // A pass that deferred everything (see `applyTouches`) would only repeat
     // itself, since the next detect runs on identical geometry.
     if (
@@ -100,7 +119,7 @@ export function splitWallsAtTouchingEndpoints(
       break;
     }
     result = { ...applied, welds: composeWelds(result.welds, applied.welds) };
-    touches = detectTouches(result.walls);
+    touches = findTouches(result.walls);
   }
   // All or nothing: keep the run's result only if the plan settled and the
   // split left behind neither a sub-minimum wall nor a coincident pair. A weld
@@ -172,11 +191,15 @@ function composeWelds(acc: PointWeld[], passWelds: PointWeld[]): PointWeld[] {
  * separate concern). At most one touch per endpoint: if it sits inside two
  * walls at once, the nearer host wins and the next pass reconsiders the other.
  */
-function detectTouches(walls: Wall[]): Touch[] {
+function detectTouches(
+  walls: Wall[],
+  isFixed: (point: Point) => boolean,
+): Touch[] {
   const touches: Touch[] = [];
   for (const w of walls) {
     const ends: Touch[] = [];
     for (const end of ENDS) {
+      const fixed = isFixed(w[end]);
       let best: Touch | null = null;
       for (const host of walls) {
         if (host.id === w.id) continue;
@@ -186,6 +209,7 @@ function detectTouches(walls: Wall[]): Touch[] {
         if (shareAJunction(w, host)) continue;
         const { distance, offset, proj } = projectPointToWall(w[end], host);
         if (distance > host.thickness / 2) continue;
+        if (fixed && !pointsEqual(w[end], proj)) continue;
         const hostLength = getWallLength(host);
         if (offset < MIN_WALL_LENGTH) continue;
         if (hostLength - offset < MIN_WALL_LENGTH) continue;
@@ -235,6 +259,7 @@ function applyTouches(
   { walls, items }: WallSplitResult,
   touches: Touch[],
   nextWallId: () => string,
+  isFixed: (point: Point) => boolean,
 ): WallSplitResult {
   const byHost = new Map<string, Touch[]>();
   for (const t of touches) {
@@ -265,6 +290,8 @@ function applyTouches(
       // segment between them, so the second joins the first's junction instead.
       const merged =
         last !== undefined && t.offset - last.offset < MIN_WALL_LENGTH;
+      if (merged && isFixed(t.from) && !pointsEqual(t.from, last.point))
+        continue;
       if (!merged) accepted.push({ offset: t.offset, point: t.point });
       // A coordinate can only move to one place, so where two ends sharing one
       // were detected against different hosts, the first decides; the other's

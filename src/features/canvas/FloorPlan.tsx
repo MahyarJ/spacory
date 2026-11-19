@@ -39,6 +39,7 @@ import { MarqueeLayer } from "./MarqueeLayer";
 import { RoomsLayer } from "./RoomsLayer";
 import { SelectionLayer } from "./SelectionLayer";
 import { WallEndpointsLayer } from "./WallEndpointsLayer";
+import { WallResizePreview } from "./WallResizePreview";
 import { WallsLayer } from "./WallsLayer";
 
 type Opening = {
@@ -824,6 +825,7 @@ export function FloorPlan() {
           <SelectionLayer />
           <ConnectionPointsLayer />
           <WallEndpointsLayer />
+          <WallResizePreview />
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}

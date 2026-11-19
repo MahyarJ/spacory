@@ -5,7 +5,7 @@ import {
   toFeetAndInches,
 } from "@app/format";
 import type { MeasurementSystem } from "@app/schema";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { parseDraft } from "./draftField";
 import { useCommitOnClickAway } from "./useCommitOnClickAway";
 import styles from "./WallOptions.module.css";
@@ -38,6 +38,7 @@ export function LengthField({
   onCommit,
   singleUnit,
   hideLabel = false,
+  renderControls,
 }: {
   id: string;
   label: string;
@@ -47,23 +48,23 @@ export function LengthField({
   onCommit: (cm: number) => void;
   singleUnit?: LengthUnit;
   hideLabel?: boolean;
+  renderControls?: (draftCm: number | null) => ReactNode;
 }) {
   const [draft, setDraft] = useState(() =>
     displayValues(lengthCm, system, singleUnit),
   );
   const dirty = useRef(false);
+  const [active, setActive] = useState(false);
   useEffect(() => {
     setDraft(displayValues(lengthCm, system, singleUnit));
     dirty.current = false;
   }, [lengthCm, system, singleUnit]);
 
-  const commit = () => {
-    // Blur can follow click-away. More importantly, rounded text is never an edit.
-    if (!dirty.current) return;
-    dirty.current = false;
-    const current = displayValues(lengthCm, system, singleUnit);
+  const current = displayValues(lengthCm, system, singleUnit);
+  const draftLength = () => {
+    // Rounded display text is never an edit.
     if (draft.primary === current.primary && draft.inches === current.inches)
-      return;
+      return null;
     const primary = parseDraft(draft.primary, 0);
     const inches = parseDraft(draft.inches, 0);
     const cm =
@@ -72,9 +73,20 @@ export function LengthField({
         : singleUnit || system === "metric"
           ? lengthToCm(primary, singleUnit ?? "cm")
           : feetAndInchesToCm(primary, inches);
-    if (cm !== null && Number.isFinite(cm) && cm >= minCm) onCommit(cm);
+    return cm !== null && Number.isFinite(cm) && cm >= minCm ? cm : null;
+  };
+  const finishEdit = () => {
+    dirty.current = false;
+    setActive(false);
     // Also reset invalid or clamped drafts when the stored length doesn't change.
     setDraft(current);
+  };
+  const commit = () => {
+    // Blur can follow click-away. Apply the draft only once.
+    const cm = dirty.current ? draftLength() : null;
+    dirty.current = false;
+    if (cm !== null) onCommit(cm);
+    finishEdit();
   };
   const fieldRef = useCommitOnClickAway(commit);
   const imperial = system === "imperial" && !singleUnit;
@@ -84,19 +96,41 @@ export function LengthField({
       noValidate
       ref={fieldRef}
       className={styles.lengthField}
+      onFocus={renderControls ? () => setActive(true) : undefined}
+      onMouseDown={
+        renderControls
+          ? (event) => {
+              // Some browsers don't focus buttons on a click. Keep the focus
+              // transition inside the form so that selecting a segment can't blur it.
+              if (
+                event.button === 0 &&
+                event.target instanceof HTMLButtonElement
+              ) {
+                event.preventDefault();
+                event.target.focus();
+              }
+            }
+          : undefined
+      }
       onSubmit={(event) => {
         event.preventDefault();
         commit();
       }}
       onKeyDown={(event) => {
+        if (event.target instanceof HTMLButtonElement) event.stopPropagation();
         // Two numeric inputs have no implicit Enter submission in the browser.
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
           event.preventDefault();
           commit();
         }
+        if (event.key === "Escape" && active && renderControls) {
+          event.preventDefault();
+          event.stopPropagation();
+          finishEdit();
+        }
       }}
       onBlur={(event) => {
-        // Moving between feet and inches must not commit half of an edit.
+        // Moving between the inputs and resize controls keeps the draft open.
         if (!event.currentTarget.contains(event.relatedTarget)) commit();
       }}
     >
@@ -114,8 +148,10 @@ export function LengthField({
         step={imperial ? 1 : "any"}
         className={styles.lengthInput}
         value={draft.primary}
+        onPointerDown={renderControls ? () => setActive(true) : undefined}
         onChange={(event) => {
           dirty.current = true;
+          setActive(true);
           setDraft({ ...draft, primary: event.target.value });
         }}
       />
@@ -132,14 +168,17 @@ export function LengthField({
             step="any"
             className={styles.lengthInput}
             value={draft.inches}
+            onPointerDown={renderControls ? () => setActive(true) : undefined}
             onChange={(event) => {
               dirty.current = true;
+              setActive(true);
               setDraft({ ...draft, inches: event.target.value });
             }}
           />
           <span className={styles.unit}>in</span>
         </>
       )}
+      {active && renderControls?.(draftLength())}
     </form>
   );
 }

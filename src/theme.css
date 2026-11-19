@@ -14,6 +14,8 @@
      explicitly so controls don't fall back to the UA's form-control font,
      which differs per browser/platform and can't be matched by hand. */
   --sp-control-font-size: 13px;
+  --sp-toolbar-button-height: 32px;
+  --sp-toolbar-button-radius: 6px;
 
   /* --- Responsive primitives -------------------------------------------
      Breakpoints are named here, and the rules that vary by width are the

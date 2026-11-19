@@ -2,6 +2,7 @@ import { anySelection } from "@app/selection";
 import { useApp } from "@app/store";
 import { WallOptions } from "./WallOptions";
 import styles from "./WallOptions.module.css";
+import { WallResizeStatus } from "./WallResizeControls";
 
 /**
  * Floating contextual bar holding the wall thickness presets (wall tool) and,
@@ -27,8 +28,11 @@ export function WallOptionsBar() {
   if (!show) return null;
 
   return (
-    <div className={styles.bar}>
-      <WallOptions />
+    <div className={styles.overlay}>
+      <div className={styles.bar}>
+        <WallOptions />
+      </div>
+      <WallResizeStatus />
     </div>
   );
 }

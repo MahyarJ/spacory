@@ -1,14 +1,18 @@
 /* Floating overlay anchored to the top-left of the canvas. Positioned (rather
    than a toolbar row) so it never reflows the canvas when it toggles. */
-.bar {
+.overlay {
   position: absolute;
   max-width: calc(100% - 16px);
   top: 8px;
   left: 8px;
   z-index: 5;
+}
+
+.bar {
+  --wall-toolbar-padding-inline: 10px;
   display: flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 6px var(--wall-toolbar-padding-inline);
   background: var(--sp-panel);
   border: 1px solid var(--sp-grid);
   border-radius: 8px;
@@ -29,15 +33,18 @@
 }
 
 .lengthField {
+  --length-field-gap: 6px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--length-field-gap);
 }
 
 .lengthInput {
   width: 72px;
+  min-height: var(--sp-toolbar-button-height);
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--sp-toolbar-button-radius);
   border: 1px solid var(--sp-text);
   background: var(--sp-panel);
   color: var(--sp-text);
@@ -46,6 +53,35 @@
 .unit {
   font-size: 12px;
   opacity: 0.8;
+}
+
+.moveControls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--length-field-gap);
+  margin-inline-start: calc(
+    var(--wall-toolbar-padding-inline) -
+    var(--length-field-gap)
+  );
+  padding-inline-start: var(--wall-toolbar-padding-inline);
+  border-inline-start: 1px solid var(--sp-grid);
+}
+
+.resizeSummary {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.resizeSummary:not(:empty) {
+  padding: 4px 8px;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-grid);
+  border-radius: 6px;
 }
 
 /* On-screen Remove / Hinge / Swing. Shown for every pointer kind: these verbs
@@ -66,7 +102,8 @@
   justify-content: center;
   padding: 7px;
   border: none;
-  border-radius: 6px;
+  min-height: var(--sp-toolbar-button-height);
+  border-radius: var(--sp-toolbar-button-radius);
   background: var(--sp-grid);
   color: var(--sp-text);
   cursor: pointer;

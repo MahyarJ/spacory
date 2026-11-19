@@ -25,7 +25,8 @@
     color: var(--sp-text);
     border: none;
     padding: 6px 10px;
-    border-radius: 6px;
+    min-height: var(--sp-toolbar-button-height);
+    border-radius: var(--sp-toolbar-button-radius);
     font-family: inherit;
     font-size: var(--sp-control-font-size);
     cursor: pointer;
@@ -43,8 +44,8 @@
     flex: 1;
   }
 
-  /* Touch: a 13px label with 6px of padding is a ~28px tall target, too small
-     to hit reliably with a finger. Grow the *target*, not the button: an
+  /* Touch: the 32px visual button is too small to hit reliably with a finger.
+     Grow the *target*, not the button: an
      invisible overlay extends the hit area to --sp-touch-target vertically
      while the button keeps its desktop height, padding, radius and font, so a
      touch device renders the same toolbar a mouse does. (Horizontally the floor

@@ -18,21 +18,31 @@ export function getWallDirection(w: Wall): Point {
 /** Smallest length (cm) a wall may be resized to. */
 export const MIN_WALL_LENGTH = 1;
 
-/**
- * Resize a wall to an exact length, keeping endpoint `a` fixed and moving `b`
- * along the wall's current direction so that `|a→b|` equals `targetLength`. The
- * wall's angle is preserved. A degenerate zero-length wall (`a === b`) has no
- * direction, so it is returned unchanged.
- */
-export function resizeWallToLength(w: Wall, targetLength: number): Wall {
-  if (getWallLength(w) === 0) return w;
+export type WallResizeAnchor = "a" | "b" | "center";
+
+/** Resize along the original wall line, keeping the given anchor fixed. */
+export function resizeWallToLength(
+  w: Wall,
+  targetLength: number,
+  anchor: WallResizeAnchor = "center",
+): Wall {
+  const length = getWallLength(w);
+  if (
+    !Number.isFinite(targetLength) ||
+    targetLength < MIN_WALL_LENGTH ||
+    length === 0 ||
+    length === targetLength
+  )
+    return w;
+
+  const delta = targetLength - length;
   const dir = getWallDirection(w);
+  const moveA = anchor === "a" ? 0 : anchor === "b" ? -delta : -delta / 2;
+  const moveB = anchor === "b" ? 0 : anchor === "a" ? delta : delta / 2;
   return {
     ...w,
-    b: {
-      x: w.a.x + dir.x * targetLength,
-      y: w.a.y + dir.y * targetLength,
-    },
+    a: moveA ? { x: w.a.x + dir.x * moveA, y: w.a.y + dir.y * moveA } : w.a,
+    b: moveB ? { x: w.b.x + dir.x * moveB, y: w.b.y + dir.y * moveB } : w.b,
   };
 }
 

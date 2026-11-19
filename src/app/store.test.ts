@@ -2,8 +2,8 @@ import type { DoorItem, Plan, Wall } from "@app/schema";
 import { findConnectedEndpoints } from "@geometry/connectivity";
 import { getPointOnWall, getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadPersistedHistory } from "./persistence";
-import { useApp } from "./store";
+import { HISTORY_STORAGE_KEY, loadPersistedHistory } from "./persistence";
+import { previewWallResize, useApp } from "./store";
 
 /** Minimal in-memory localStorage stand-in for the node test environment. */
 function makeStorage(): Storage {
@@ -121,52 +121,248 @@ describe("translateSelectedWalls", () => {
 });
 
 describe("setSelectedWallLength", () => {
-  it("moves the connected wall joined at the resized endpoint", () => {
-    // w1 endpoint b at (100,0) is joined to w2's endpoint a.
-    loadWithSelection(
-      [wall("w1", 0, 0, 100, 0), wall("w2", 100, 0, 100, 100)],
-      ["w1"],
-    );
+  it("blocks shortening an unsplit host past an existing T contact", () => {
+    const host = wall("host", 0, 0, 400, 0);
+    const stem = wall("stem", 350, 0, 350, 200);
+    loadWithSelection([host, stem], ["host"]);
+    const before = useApp.getState().plan;
+    const historyBefore = localStorage.getItem(HISTORY_STORAGE_KEY);
 
-    useApp.getState().setSelectedWallLength(200);
+    expect(previewWallResize(before, host, 300, "a")).toBe("blocked-junction");
+    useApp.getState().setSelectedWallLength(300, "a");
+    expect(useApp.getState().plan).toBe(before);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(historyBefore);
 
-    const walls = useApp.getState().plan.walls;
-    const w1 = walls.find((w) => w.id === "w1");
-    const w2 = walls.find((w) => w.id === "w2");
-    expect(w1?.a).toEqual({ x: 0, y: 0 });
-    expect(w1?.b).toEqual({ x: 200, y: 0 });
-    expect(w2?.a).toEqual({ x: 200, y: 0 });
-    expect(w2?.b).toEqual({ x: 100, y: 100 });
+    useApp.getState().setSelectedWallLength(350, "a");
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("host", 0, 0, 350, 0),
+      stem,
+    ]);
   });
 
-  it("does not move the fixed `a` endpoint's connections", () => {
-    // w0 is joined to w1's `a` endpoint (0,0), which never moves on a resize.
+  it("preserves a T-junction when splitting its host would create a wall under 1 cm", () => {
+    const stem = wall("stem", 0.5, 0, 0.5, 200);
+    loadWithSelection([wall("host", 0, 0, 400, 0), stem], ["stem"]);
+    const before = useApp.getState().plan;
+    const historyBefore = localStorage.getItem(HISTORY_STORAGE_KEY);
+
+    expect(previewWallResize(before, stem, 150, "b")).toBe("blocked-junction");
+    useApp.getState().setSelectedWallLength(150, "b");
+    expect(useApp.getState().plan).toBe(before);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(historyBefore);
+
+    useApp.getState().setSelectedWallLength(150, "a");
+    expect(useApp.getState().plan.walls).toEqual([
+      before.walls[0],
+      wall("stem", 0.5, 0, 0.5, 150),
+    ]);
+  });
+
+  it("defaults to a centered resize when an endpoint junction and an unsplit T share the same wall", () => {
     loadWithSelection(
-      [wall("w0", -100, 0, 0, 0), wall("w1", 0, 0, 100, 0)],
-      ["w1"],
+      [
+        wall("host", 0, 0, 400, 0),
+        wall("stem", 200, 0, 200, 200),
+        wall("neighbor", 200, 200, 400, 200),
+      ],
+      ["stem"],
     );
 
-    useApp.getState().setSelectedWallLength(200);
+    useApp.getState().setSelectedWallLength(150);
 
-    expect(useApp.getState().plan.walls.find((w) => w.id === "w0")).toEqual(
-      wall("w0", -100, 0, 0, 0),
+    const { walls } = useApp.getState().plan;
+    expect(walls.find((w) => w.id === "stem")).toEqual(
+      wall("stem", 200, 25, 200, 175),
+    );
+    expect(findConnectedEndpoints(walls, { x: 200, y: 25 })).toHaveLength(3);
+    expect(walls.find((w) => w.id === "neighbor")).toEqual(
+      wall("neighbor", 200, 175, 400, 200),
     );
   });
 
-  it("preserves an attached item's offset along the resized wall", () => {
+  it.each([
+    false,
+    true,
+  ])("moves both host legs with a short T stem (already split: %s)", (split) => {
+    const host = split
+      ? [wall("host", 0, 0, 200, 0), wall("host-right", 200, 0, 400, 0)]
+      : [wall("host", 0, 0, 400, 0)];
+    const stem = wall("stem", 200, 0, 200, 200);
+    loadWithSelection([...host, stem], ["stem"]);
+    const before = useApp.getState().plan;
+    const preview = previewWallResize(before, stem, 150, "b");
+    const endpoints = (walls: Wall[]) => walls.map(({ a, b }) => [a, b]);
+    const expected = endpoints([
+      wall("host", 0, 0, 200, 50),
+      wall("host-right", 200, 50, 400, 0),
+      wall("stem", 200, 50, 200, 200),
+    ]);
+    expect(Array.isArray(preview) && endpoints(preview)).toEqual(expected);
+    expect(useApp.getState().plan).toBe(before);
+
+    useApp.getState().setSelectedWallLength(150, "b");
+    expect(endpoints(useApp.getState().plan.walls)).toEqual(expected);
+    useApp.getState().undo();
+    expect(useApp.getState().plan).toEqual(before);
+  });
+
+  it("restores a 500 × 300 rectangle after resizing two opposite walls", () => {
+    loadWithSelection(
+      [
+        wall("bottom", 0, 0, 400, 0),
+        wall("right", 400, 0, 400, 300),
+        wall("top", 400, 300, 0, 300),
+        wall("left", 0, 300, 0, 0),
+      ],
+      ["bottom"],
+    );
+    const before = useApp.getState().plan;
+
+    useApp.getState().setSelectedWallLength(500);
+    const afterFirst = useApp.getState().plan;
+    useApp.getState().selectWall("top");
+    useApp.getState().setSelectedWallLength(500);
+
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("bottom", -50, 0, 450, 0),
+      wall("right", 450, 0, 450, 300),
+      wall("top", 450, 300, -50, 300),
+      wall("left", -50, 300, -50, 0),
+    ]);
+    useApp.getState().undo();
+    expect(useApp.getState().plan).toEqual(afterFirst);
+    useApp.getState().undo();
+    expect(useApp.getState().plan).toEqual(before);
+  });
+
+  it.each([
+    ["a", 0, 200],
+    ["b", 200, 0],
+  ] as const)("keeps the only joined endpoint %s fixed", (joined, ax, bx) => {
+    const selected =
+      joined === "a" ? wall("w1", 0, 0, 100, 0) : wall("w1", 100, 0, 0, 0);
+    const neighbor = wall("w2", 0, 0, 0, 100);
+    loadWithSelection([selected, neighbor], ["w1"]);
+    useApp.getState().setSelectedWallLength(200);
+    expect(useApp.getState().plan.walls).toEqual([
+      wall("w1", ax, 0, bx, 0),
+      neighbor,
+    ]);
+  });
+
+  it.each([
+    "center",
+    "a",
+    "b",
+  ] as const)("preserves an opening's plan position with %s anchored", (anchor) => {
     const door: DoorItem = {
       id: "d1",
       type: "door",
       thickness: 10,
-      wallAttach: { wallId: "w1", offset: 40, length: 80 },
+      wallAttach: { wallId: "w1", offset: 160, length: 80 },
       props: { hingeEdge: "start", swingSide: "outside" },
     };
-    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 100, 0)], [door]));
+    useApp
+      .getState()
+      .loadPlan(
+        planWith(
+          [
+            wall("w1", 0, 0, 400, 0),
+            wall("left", 0, 0, 0, 300),
+            wall("right", 400, 0, 400, 300),
+          ],
+          [door],
+        ),
+      );
     useApp.setState({ selectedWalls: new Set(["w1"]) });
 
-    useApp.getState().setSelectedWallLength(200);
+    useApp.getState().setSelectedWallLength(500, anchor);
 
-    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(40);
+    const { walls, items } = useApp.getState().plan;
+    const { offset, length } = items[0].wallAttach;
+    expect(getPointOnWall(walls[0], offset + length / 2)).toEqual({
+      x: 200,
+      y: 0,
+    });
+    expect(walls[0].a.x).toBe({ center: -50, a: 0, b: -100 }[anchor]);
+  });
+
+  it("clamps an opening after shrink and removes it only when it cannot fit", () => {
+    const door: DoorItem = {
+      id: "d1",
+      type: "door",
+      thickness: 10,
+      wallAttach: { wallId: "w1", offset: 15, length: 80 },
+      props: { hingeEdge: "start", swingSide: "outside" },
+    };
+    useApp.getState().loadPlan(planWith([wall("w1", 0, 0, 400, 0)], [door]));
+    useApp.setState({ selectedWalls: new Set(["w1"]) });
+    useApp.getState().setSelectedWallLength(200);
+    expect(useApp.getState().plan.items[0].wallAttach.offset).toBe(0);
+    useApp.getState().setSelectedWallLength(79);
+    expect(useApp.getState().plan.items).toEqual([]);
+  });
+
+  it.each([
+    ["a", 0, -50, 1],
+    ["b", 400, 450, 2],
+  ] as const)("follows a held junction at %s and nudges the same endpoints", (end, oldX, x, neighbor) => {
+    loadWithSelection(
+      [
+        wall("w1", 0, 0, 400, 0),
+        wall("left", 0, 0, 0, 300),
+        wall("right", 400, 0, 400, 300),
+      ],
+      ["w1"],
+    );
+    useApp.getState().selectConnectionPoint({ x: oldX, y: 0 });
+    useApp.setState({ selectedWalls: new Set(["w1"]) });
+
+    useApp.getState().setSelectedWallLength(500);
+    expect(useApp.getState().selectedConnectionPoint).toEqual({ x, y: 0 });
+    useApp.getState().translateSelectedConnectionPoint(0, 20);
+    const { walls } = useApp.getState().plan;
+    expect(walls[0][end]).toEqual({ x, y: 20 });
+    expect(walls[neighbor].a).toEqual({ x, y: 20 });
+  });
+
+  it("skips history for invalid, unchanged, or directionless resizes", () => {
+    loadWithSelection(
+      [wall("w1", 0, 0, 400, 0), wall("zero", 500, 500, 500, 500)],
+      ["w1"],
+    );
+    const before = useApp.getState().plan;
+    useApp.getState().setSelectedWallLength(MIN_WALL_LENGTH - 0.5);
+    useApp.getState().setSelectedWallLength(Number.POSITIVE_INFINITY);
+    useApp.getState().setSelectedWallLength(400);
+    useApp.getState().selectWall("zero");
+    useApp.getState().setSelectedWallLength(500);
+    expect(useApp.getState().plan).toBe(before);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+  });
+
+  it.each([
+    [200, 4],
+    [203, 3],
+  ])("previews the exact resize when a host wall is at x=%i", (hostX, wallCount) => {
+    loadWithSelection(
+      [
+        wall("w1", 0, 0, 100, 0),
+        wall("anchor", 0, -100, 0, 0),
+        wall("host", hostX, -100, hostX, 100),
+      ],
+      ["w1"],
+    );
+    const plan = useApp.getState().plan;
+    const preview = previewWallResize(plan, plan.walls[0], 200, "a");
+    expect(preview).toHaveLength(wallCount);
+    useApp.getState().setSelectedWallLength(200);
+    const committed = useApp.getState().plan.walls;
+    expect(committed[0]).toEqual(wall("w1", 0, 0, 200, 0));
+    const endpoints = (w: Wall) => [w.a, w.b];
+    expect(Array.isArray(preview) && preview.map(endpoints)).toEqual(
+      committed.map(endpoints),
+    );
   });
 });
 
