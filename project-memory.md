@@ -42,8 +42,8 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   (`src/app/viewport.ts`).
 - **Dimensions** — each wall shows its length as an on-canvas label
   (`src/features/canvas/DimensionsLayer.tsx`); display-only.
-- **Editable wall lengths** — select a wall and type an exact length to resize it
-  (anchor endpoint `a`, move endpoint `b`; angle preserved) (#11, merged).
+- **Editable wall lengths** — enter an exact length and preview the resize with
+  visible start, center, and end anchors (#11, refined by #102 / PR #114).
 - **Fit to content** — toolbar "Fit" button frames the whole plan in one click,
   using `computeFitView` in `src/app/viewport.ts` and `getPlanBounds` in
   `src/geometry/bounds.ts` (#9, merged).
@@ -54,10 +54,8 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
 - **PNG image export** — "Export PNG" toolbar button rasters the plan via
   `buildExportSvg` (`src/geometry/exportSvg.ts`) → `<canvas>` → PNG blob (#4,
   merged).
-- **Export menu** — Import stays a top-level toolbar button; the export formats
-  (JSON, PNG) live behind one **Export** menu button (`src/ui/Menu.tsx`,
-  `ProjectActions.tsx`), which SVG export (#33) will extend with a third entry
-  (#66, merged as PR #69).
+- **SVG image export** — saves the same `buildExportSvg` markup that the PNG path
+  rasterizes (#33 / PR #82). Fit and exports include door swing bounds (#99 / PR #101).
 - **Connection points selectable/draggable** — drag a corner/junction handle and
   every co-located wall endpoint moves together in one commit (#22, merged as
   #27; `src/geometry/connectivity.ts`).
@@ -81,8 +79,8 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
 - **Resize a door/window opening & show its width** — a single selected opening gets
   a width field in the floating options bar, mirroring the wall-length field; the
   pure clamp/keep-on-wall helper lives in `src/geometry/opening.ts` (#60, merged as
-  PR #65). **Not yet in the README** — see #78.
-- **Export menu** — the toolbar's export formats (JSON plan, PNG image) are grouped
+  PR #65) and the README documents it (#78).
+- **Export menu** — JSON, PNG, and SVG are grouped
   under one **Export** dropdown built on a shared, keyboard/ARIA-correct `Menu`
   (`src/ui/Menu.tsx` + pure `src/ui/menuNavigation.ts`); Import stays a separate
   top-level button (#66, merged as PR #69).
@@ -103,6 +101,16 @@ Built and working today (entry point `src/main.tsx` → `src/App.tsx`):
   runs the active tool, two fingers pan and pinch-zoom whatever the tool (pure
   multi-touch math in `src/app/viewport.ts`), and `pointercancel` aborts a gesture
   without committing, restoring both plan and selection (#84, merged as PR #91).
+- **Mid-span wall junctions** — a wall ending on another splits the host (#96 / PR
+  #97). Deleting or detaching the branch reunites the former host segments when
+  eligible (#100 / PR #103).
+- **Detected rooms and areas** — enclosed wall faces display a fill and centerline
+  area in canvas and their calculated areas appear in image exports. See #104 / PR
+  #109 and the derived-room decision in `docs/DECISIONS.md`.
+- **Metric and Imperial** — switch the plan's display system without rescaling
+  geometry. The setting carries through editor inputs, area labels, JSON, and
+  image exports (#63 / PR #113). Floating measurement inputs now have larger touch
+  targets (#94 / PR #115).
 
 State lives in one Zustand store (`src/app/store.ts`); `plan` is the single source
 of truth and all edits flow through one `commit()` chokepoint. Pure logic
@@ -113,16 +121,26 @@ of truth and all edits flow through one `commit()` chokepoint. Pure logic
 
 From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
 
+- **Single-floor plan milestone** — room names (#117), free labels (#118), image
+  export visibility (#119), fixtures (#120), outdoor outlines (#121), straight
+  stairs (#122), and return-flight stairs (#123) are ticketed. The original
+  dimensioned sample and full draw/edit/undo/reopen/export walkthrough are in #124.
+- **Reference image and precision tools** — calibrated tracing (#125), opening
+  position (#126), open passages (#127), sliding doors (#128), grid controls
+  (#129), placed dimensions (#130), inside-face room areas (#131), and scale print
+  (#132) are follow-ups.
+- **Multi-storey** — named levels and an alignment overlay (#133) precede linking
+  stair counterparts (#134).
 - **PNG image export — done (#4, merged).** Raster export of the plan; SVG
   (vector) export deliberately deferred to a follow-up.
-- **No SVG/vector image export — in flight (#33).** Thin wiring follow-up to #4:
+- **SVG/vector image export — done (#33 / PR #82).** Thin wiring follow-up to #4:
   save `buildExportSvg`'s existing markup as a `.svg` file; no new rendering logic.
   **Respecced 2026-07-29** (clarify run, at the human's prompting) now that the
   Export menu has shipped: #33 adds a **third entry ("SVG") inside the existing
   Export menu**, appended after "JSON" and "PNG" — *not* a fourth flat toolbar
   button, which would undo #66. Menu structure/styling and the existing entries
   stay out of scope; the icon glyph is the engineer's choice.
-- **Exports clip door swing arcs near the plan's edge — in flight (#99, scoped
+- **Door swing arc bounds — done (#99 / PR #101, scoped
   2026-08-04; found 2026-07-30 on PR #82).** `getPlanBounds` (`src/geometry/bounds.ts`) pads each
   item only by `item.thickness / 2` around its wall centerline, but a door's swing arc
   has `radius = opening length` (`getDoorGeometry`, `src/geometry/itemGeometry.ts`) and
@@ -566,7 +584,8 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   remounts with a fresh draft. #76 covers **both** fields on one shared path and
   requires a test that would fail if the fix were reverted; the *mechanism* is left
   to the Engineer Agent.
-- **No furniture / fixtures** — only doors and windows; no other placeable objects.
+- **Fixtures — ticketed in #120.** Start with a toilet, sink, cooktop, shower, and
+  washer with a shared set of editing operations. Stairs have their own issues.
 - **Openings can't be resized, and their width isn't shown — done (#60, merged as
   PR #65; triaged from a human-submitted idea 2026-07-26).** An opening's width
   (`wallAttach.length`) is fixed at creation; the only way to change it is
@@ -664,9 +683,8 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   the pre-drag item snapshot against the live walls via `reconcileItemsToWalls`
   (no history entry). #38 is fully done and closed.
 
-Open questions for the human (confirm before generating issues that depend on
-these): target users' top unmet need, whether to prioritize export vs. rooms vs.
-measurements, any accessibility/i18n requirements, **should a whole-wall move
+Open questions beyond the single-floor milestone (confirm before generating
+issues that depend on these): any accessibility/i18n requirements, **should a whole-wall move
 cascade through a connected chain as one rigid body, or stay "hinge" behavior as it
 is today** (see "Cascading connected-wall follow" above), and — new this run —
 **should on-screen `[`/`]` wall-thickness editing retarget the current selection,
@@ -700,61 +718,25 @@ see the #93 bullet under "Known gaps")?
 
 ## What the Product Agent should focus on next
 
-Current open issues (as of 2026-08-04, read during the fifteenth cycle run): #10
-(prune stale selection), #20 (fit shortcut/zoom to selection), #21 (error boundary),
-#52 (custom door swing glyph, follow-up to #51), #63 (switch display units
-cm/m/mm/in/ft), #77 (ignore canvas shortcuts while a toolbar control has focus),
-#94 (44px touch targets for the options bar's existing controls), **#96**
-(split a wall where another ends on it — **implemented by PR #97**, product-accepted
-on `82d8348`, CI green and mergeable, still labelled `agent:reviewing`; awaiting the
-PR-description fix and a merge), plus the two written this run: **#99** (include a
-door's swing arc in the plan bounds) and **#100** (merge the segments back when the
-splitting wall is deleted — **depends on #96 landing first**). **#93** (on-screen
-Remove/Hinge/Swing controls) merged 2026-08-02 as PR #95. Closed since: **#84**
-(touch canvas, merged as PR #91), **#85** (tablet chrome, merged as PR #89), **#76**
-(commit typed length/width on click-away), **#33** (SVG export, PR #82), **#61**
-(Cmd/Ctrl+drag detach, PR #75), **#78** (README opening-width docs, PR #81); #60 and
-#66 merged before that. Do **not** re-propose any of these. Two more are open that this
-list predates: **#104** (detect enclosed rooms and show each one's area, opened
-2026-08-04) and **#102** (typed wall length resizes from a hidden end — triaged and
-enriched 2026-08-05 from a human bug report, awaiting a human's `agent:ready`); don't
-re-propose either, and note #102's out-of-scope list points room-level wall editing at
-#104. One follow-up #93
-deliberately left out is still unticketed: on-screen **wall-thickness** editing for
-a selection (the `[`/`]` verb — needs a product call on the preset pills first,
-since it's genuinely ambiguous whether the existing preset row should retarget the
-current selection or keep setting the next-wall default). The other previously queued
-follow-up, **un-splitting after a mid-span split**, is now #100; the **stub near a
-corner** half of it was deliberately *not* ticketed — it resolves into the
-still-unscheduled "weld near-miss corners" feature (see that bullet under "Known
-gaps").
+The agreed priority is [Draw, edit, and share a single-floor home plan](https://github.com/MahyarJ/spacory/milestone/1).
+Start with named rooms, free labels, and image export visibility (#117–#119).
+Add fixtures, outdoor outlines, straight stairs, and return flights (#120–#123).
+Begin the original sample layout early, then use #124 to verify the shipped flow.
+The public listing served as a reference for typical scenarios and symbol needs.
 
-The next high-value, well-scoped follow-ups once the current batch is clear (in
-rough priority order) are:
+Calibrated image tracing (#125) is the next workflow branch for redrawing an
+existing plan. Opening, grid, dimension, area, and print follow-ups are #126–#132.
+Scaled print builds on export visibility and placed dimensions. Multi-storey
+work starts with levels and alignment (#133), followed by stair links (#134).
+New issues await human prioritization for implementation.
 
-1. **Rooms / enclosed areas** — bigger feature (area calc, labels). Still needs
-   human product input before scoping (see open questions); defer until answered.
-   Note the dependency discovered during #96's triage: **mid-span wall splitting
-   (#96) is a prerequisite** — without it a plan's walls don't form a connected
-   graph, so no enclosure can be derived. Sequence #96 first.
-2. **Cascading connected-wall follow** — genuinely needs a human UX call before
-   it can be scoped as an issue (rigid-chain vs. hinge behavior); see "Known
-   gaps" and the open question above. Do not write this issue until answered.
-
-The backlog is **ten** issues deep and every *known* gap that doesn't need a human
-call is now ticketed — with #99 and #100 written this run, the queue that "Known gaps"
-had been carrying is refilling. The next cycle should reconcile GitHub state, re-run the
-README backstop check, and write from "Known gaps": the **three loose ends from #97's
-review rounds** (straddling-opening fallback, no decline affordance, plan-global discard
-verdict — all against merged `main`), and **X crossings**, promoted to a first-class gap
-by the 2026-08-04 clarify pass on #100 (product framing is settled in that bullet; it
-wants #100 landed first). Beyond those, expect to create nothing: the remaining
-unticketed items are the three that need a human answer (rooms, cascading follow, the
-`[`/`]` thickness verb) plus two features nobody has asked for yet (weld near-miss
-corners, phone-width layout / stylus). Do not invent work to fill the rest. The one thing
-worth watching is whether
-**PR #97 has merged**; #100 is written against the code it lands, so it should not be
-promoted to `agent:ready` before then.
+Earlier open issues as of 2026-11-20 are #10, #20, #21, #52, and #77. Previously
+scheduled room detection, junction splits/merges, opening bounds, unit settings,
+resize previews, and larger measurement controls have shipped (#96, #100, #99,
+#63, #102, #94, and #104). Existing unticketed wall geometry notes include the
+#97 review follow-ups (straddling-opening fallback, decline affordance, and
+plan-wide discard), X crossings, and near-miss corners. Cascading wall moves and
+selection thickness controls still need the product decisions above.
 
 **A note on testability for UI-behavior issues (#76, #77, #85) — updated 2026-07-30,
 the gap is now half closed.** This file previously recorded "no DOM testing library
@@ -796,6 +778,15 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-11-20 — Created GitHub milestone 1 for drawing, editing, and sharing a
+  single-floor home plan. Opened #117 room names, #118 movable text, #119 export
+  visibility, #120 starter fixtures, #121 outdoor outlines, #122 straight stairs,
+  #123 return-flight stairs, and #124 the dimensioned sample and acceptance
+  walkthrough. Opened #125 calibrated tracing, #126 opening repositioning, #127
+  open passages, #128 sliding doors, #129 grid controls, #130 placed dimensions,
+  #131 inside-face areas, #132 scale print, #133 named levels, and #134 stair links
+  as follow-ups. Reconciled the README feature list with merged changes and updated
+  the backlog priorities. No new product question gates the first three issues.
 - 2026-08-05 — **Triage** of human-submitted **#102**: typing a length on two facing
   walls of a rectangle turns the room into a parallelogram, because the resize always
   pins `a` and the facing walls were drawn in opposite directions. **Accepted and
