@@ -18,6 +18,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WallOptions } from "./WallOptions";
@@ -113,27 +114,39 @@ describe("WallOptions — click-away commits the typed value", () => {
 
     // jsdom has no PointerEvent constructor.
     const touchDown = new Event("pointerdown", { bubbles: true });
-    Object.defineProperties(touchDown, {
-      pointerId: { value: 1 },
-      pointerType: { value: "touch" },
-    });
+    Object.defineProperty(touchDown, "pointerType", { value: "touch" });
     fireEvent(width, touchDown);
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(250);
     expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
 
-    const touchUp = new Event("pointerup", { bubbles: true });
-    Object.defineProperty(touchUp, "pointerId", { value: 1 });
-    fireEvent(width, touchUp);
     act(() => width.focus());
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(320);
     expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
 
-    expect(scheduleFrame).toHaveBeenCalledTimes(2);
-    act(() => {
-      for (const [callback] of scheduleFrame.mock.calls) callback(0);
-    });
+    const [closeMove] = scheduleFrame.mock.calls[0];
+    act(() => closeMove(0));
     expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
     expect(document.activeElement).toBe(width);
+  });
+
+  it("still commits immediately on mouse press outside the length field", () => {
+    useApp.getState().loadPlan(cornerPlan([door("w1", 80)]));
+    useApp.setState({
+      selectedWalls: new Set(["w1"]),
+      selectedItems: new Set(["d1"]),
+    });
+    render(<WallOptionsBar />);
+
+    const length = screen.getByLabelText("Length");
+    const width = screen.getByLabelText("Width");
+    act(() => length.focus());
+    fireEvent.change(length, { target: { value: "320" } });
+
+    const mouseDown = new Event("pointerdown", { bubbles: true });
+    Object.defineProperty(mouseDown, "pointerType", { value: "mouse" });
+    fireEvent(width, mouseDown);
+    expect(getWallLength(useApp.getState().plan.walls[0])).toBe(320);
+    expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
   });
 
   it("leaves the wall alone when the press lands inside the field", () => {
@@ -368,7 +381,7 @@ describe("WallOptions — resize preview", () => {
     expect(preview()).toBeNull();
   });
 
-  it("labels vertical anchors by position and commits when focus leaves the field", () => {
+  it("labels vertical anchors by position and commits when focus leaves the field", async () => {
     const { input, setDraft, preview } = setup("left");
     act(() => input.focus());
     setDraft("400");
@@ -381,7 +394,7 @@ describe("WallOptions — resize preview", () => {
     );
     act(() => screen.getByRole("button", { name: "Remove" }).focus());
     expect(useApp.getState().plan.walls[3]).toEqual(wall(0, 400, 0, 0, "left"));
-    expect(preview()).toBeNull();
+    await waitFor(() => expect(preview()).toBeNull());
   });
 
   it.each([

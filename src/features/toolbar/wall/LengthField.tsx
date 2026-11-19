@@ -88,7 +88,7 @@ export function LengthField({
     if (cm !== null) onCommit(cm);
     finishEdit(keepControls);
   };
-  const { fieldRef, consumeBarTouch } = useCommitOnClickAway(commit);
+  const fieldRef = useCommitOnClickAway(commit);
   const imperial = system === "imperial" && !singleUnit;
 
   return (
@@ -132,9 +132,9 @@ export function LengthField({
       onBlur={(event) => {
         // Moving between the inputs and resize controls keeps the draft open.
         if (event.currentTarget.contains(event.relatedTarget)) return;
-        if (consumeBarTouch() && renderControls) {
-          // Focus changes before the synthesized touch click finishes. Keep
-          // Move in place until the next frame so the tapped control stays put.
+        if (active && renderControls) {
+          // Focus can leave before the click finishes. Save the draft now and
+          // keep Move in place until the next frame so controls stay put.
           commit({ keepControls: true });
           requestAnimationFrame(() => {
             const field = fieldRef.current;
