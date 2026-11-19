@@ -75,18 +75,18 @@ export function LengthField({
           : feetAndInchesToCm(primary, inches);
     return cm !== null && Number.isFinite(cm) && cm >= minCm ? cm : null;
   };
-  const finishEdit = () => {
+  const finishEdit = (keepControls = false) => {
     dirty.current = false;
-    setActive(false);
+    if (!keepControls) setActive(false);
     // Also reset invalid or clamped drafts when the stored length doesn't change.
     setDraft(current);
   };
-  const commit = () => {
+  const commit = ({ keepControls = false } = {}) => {
     // Blur can follow click-away. Apply the draft only once.
     const cm = dirty.current ? draftLength() : null;
     dirty.current = false;
     if (cm !== null) onCommit(cm);
-    finishEdit();
+    finishEdit(keepControls);
   };
   const fieldRef = useCommitOnClickAway(commit);
   const imperial = system === "imperial" && !singleUnit;
@@ -131,7 +131,23 @@ export function LengthField({
       }}
       onBlur={(event) => {
         // Moving between the inputs and resize controls keeps the draft open.
-        if (!event.currentTarget.contains(event.relatedTarget)) commit();
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        if (
+          renderControls &&
+          window.matchMedia?.("(pointer: coarse)").matches
+        ) {
+          // Focus changes before the synthesized touch click finishes. Keep
+          // Move in place until the next frame so the tapped control stays put.
+          commit({ keepControls: true });
+          requestAnimationFrame(() => {
+            const field = fieldRef.current;
+            if (field && !field.contains(document.activeElement)) {
+              setActive(false);
+            }
+          });
+          return;
+        }
+        commit();
       }}
     >
       {!hideLabel && (

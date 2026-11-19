@@ -19,7 +19,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WallOptions } from "./WallOptions";
 import { WallOptionsBar } from "./WallOptionsBar";
 
@@ -64,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 describe("WallOptions — click-away commits the typed value", () => {
@@ -93,6 +94,41 @@ describe("WallOptions — click-away commits the typed value", () => {
     pressCanvas();
 
     expect(useApp.getState().plan.items[0].wallAttach.length).toBe(100);
+  });
+
+  it("keeps Move in place while a tap transfers focus to Width", () => {
+    const scheduleFrame = vi.fn<(callback: FrameRequestCallback) => number>();
+    vi.stubGlobal("requestAnimationFrame", scheduleFrame);
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(pointer: coarse)",
+    }));
+    useApp.getState().loadPlan(cornerPlan([door("w1", 80)]));
+    useApp.setState({
+      selectedWalls: new Set(["w1"]),
+      selectedItems: new Set(["d1"]),
+    });
+    render(<WallOptionsBar />);
+
+    const length = screen.getByLabelText("Length");
+    const width = screen.getByLabelText("Width");
+    act(() => length.focus());
+    fireEvent.change(length, { target: { value: "320" } });
+
+    // jsdom has no PointerEvent constructor.
+    const touchDown = new Event("pointerdown", { bubbles: true });
+    Object.defineProperty(touchDown, "pointerType", { value: "touch" });
+    fireEvent(width, touchDown);
+    expect(getWallLength(useApp.getState().plan.walls[0])).toBe(250);
+    expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
+
+    act(() => width.focus());
+    expect(getWallLength(useApp.getState().plan.walls[0])).toBe(320);
+    expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
+
+    const [closeMove] = scheduleFrame.mock.calls[0];
+    act(() => closeMove(0));
+    expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
+    expect(document.activeElement).toBe(width);
   });
 
   it("leaves the wall alone when the press lands inside the field", () => {

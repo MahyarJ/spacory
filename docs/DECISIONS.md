@@ -13,6 +13,10 @@ centered over that frame so a tap in the extra area goes directly to the
 browser's text editor. Both the bar and the measurement form reserve space
 between wrapped rows for the overhang from adjacent targets.
 
+Touch taps within the bar commit through the usual blur handler and keep the
+Move controls in place until the next frame so wrapping cannot redirect the
+click. Presses on the canvas still commit before the selection can change.
+
 ## Share canonical agent contracts through small Claude/Codex adapters
 
 **Decision.** Extend PR #108's Bash execution adapter instead of rewriting the

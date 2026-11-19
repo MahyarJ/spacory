@@ -23,6 +23,7 @@ export interface DraftFieldNode {
 /** The subset of a `pointerdown` event this module needs. */
 export interface PointerDownLike {
   target: TargetNode | null;
+  pointerType: string;
 }
 
 /** The subset of `document` this module listens on. */
@@ -73,8 +74,9 @@ export function isCommittingPointerDown(
 }
 
 /**
- * Commit a focused draft field when a pointer press lands outside it, *before*
- * React processes that press.
+ * Commit a focused draft field on a press outside it, before React handles
+ * presses that could clear the selection. Touches within the options bar
+ * commit on blur so the browser can finish targeting the tap first.
  *
  * This is the fix for click-away losing a typed value: pressing the canvas
  * clears (or moves) the selection, which unmounts the field — and unmounting a
@@ -88,15 +90,24 @@ export function isCommittingPointerDown(
 export function commitDraftOnOutsidePointerDown({
   source,
   getField,
+  getOptionsBar,
   getActiveElement,
   commit,
 }: {
   source: PointerDownSource;
   getField: () => DraftFieldNode | null;
+  getOptionsBar?: () => DraftFieldNode | null;
   getActiveElement: () => TargetNode | null;
   commit: () => void;
 }): () => void {
   const onPointerDown = (event: PointerDownLike) => {
+    // Closing Move here would shift other controls before the browser clicks.
+    if (
+      event.pointerType === "touch" &&
+      getOptionsBar?.()?.contains(event.target)
+    ) {
+      return;
+    }
     if (isCommittingPointerDown(getField(), event.target, getActiveElement())) {
       commit();
     }
