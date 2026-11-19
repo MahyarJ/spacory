@@ -85,7 +85,9 @@ function fakePointerDownSource() {
     source,
     listenerCount: () => listeners.size,
     pressOn: (target: TargetNode | null) => {
-      for (const listener of [...listeners]) listener({ target });
+      for (const listener of [...listeners]) {
+        listener({ target, pointerType: "mouse" });
+      }
     },
   };
 }

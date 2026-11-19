@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
 import { commitDraftOnOutsidePointerDown } from "./draftField";
+import styles from "./WallOptions.module.css";
 
 /**
- * Commit a draft field when the user clicks away onto the canvas (or anywhere
- * else outside it), which otherwise unmounts the focused input without ever
- * firing `blur`. Returns the ref to put on the field's root element.
+ * Commit a draft field before a press on the canvas can unmount the focused
+ * input without firing `blur`. Returns the ref for the field's root element.
  *
  * Shared by the options bar's fields so they behave identically — see
  * `draftField.ts` for why this listens on the document's capture phase.
@@ -23,6 +23,8 @@ export function useCommitOnClickAway(commit: () => void) {
       commitDraftOnOutsidePointerDown({
         source: document,
         getField: () => fieldRef.current,
+        getOptionsBar: () =>
+          fieldRef.current?.closest(`.${styles.bar}`) ?? null,
         getActiveElement: () => document.activeElement,
         commit: () => commitRef.current(),
       }),

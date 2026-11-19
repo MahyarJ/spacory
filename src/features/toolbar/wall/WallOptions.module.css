@@ -40,13 +40,22 @@
   gap: var(--length-field-gap);
 }
 
-.lengthInput {
-  width: 72px;
-  min-height: var(--sp-toolbar-button-height);
-  padding: 4px 8px;
+.lengthInputFrame {
+  --length-input-width: 72px;
+  display: contents;
+}
+
+.lengthInput,
+.lengthInputFrame::before {
   border-radius: var(--sp-toolbar-button-radius);
   border: 1px solid var(--sp-text);
   background: var(--sp-panel);
+}
+
+.lengthInput {
+  width: var(--length-input-width);
+  min-height: var(--sp-toolbar-button-height);
+  padding: 4px 8px;
   color: var(--sp-text);
 }
 
@@ -117,13 +126,51 @@
   outline: 2px solid var(--sp-accent);
 }
 
-/* Touch: grow the *hit area*, not the button — the same invisible overlay the
-   toolbar and theme switch use, so a touch device renders the same bar a mouse
-   does. The overlay is a 44px square centred on the 32px button, i.e. it
-   reaches 6px past each edge; the bar's own 6px/10px padding and the 10px gap
-   to the length field both clear that, and the 12px gap below keeps two
-   neighbouring hit areas from meeting. */
 @media (pointer: coarse) {
+  /* A wrapped row needs room for the overhang from both adjacent rows. */
+  .wallOptions,
+  .lengthField {
+    row-gap: calc(var(--sp-touch-target) - var(--sp-toolbar-button-height));
+  }
+
+  /* The frame keeps the compact painted box. The native input receives taps
+     across its full height, so the browser handles focus and text entry. */
+  .lengthInputFrame {
+    display: block;
+    position: relative;
+    flex: none;
+    width: var(--length-input-width);
+    height: var(--sp-toolbar-button-height);
+  }
+
+  .lengthInputFrame::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .lengthInputFrame:focus-within {
+    outline: auto;
+    border-radius: var(--sp-toolbar-button-radius);
+  }
+
+  .lengthInput {
+    position: absolute;
+    inset-inline-start: 0;
+    inset-block-start: 50%;
+    width: 100%;
+    height: var(--sp-touch-target);
+    transform: translateY(-50%);
+    background: transparent;
+    border-color: transparent;
+    border-radius: 0;
+    outline: none;
+  }
+
+  /* The 44px action overlays reach 6px past each edge of the 32px buttons.
+     The bar padding and field gap clear the overhang. The 12px gap keeps
+     neighboring action targets distinct. */
   .actions {
     gap: 12px;
   }
