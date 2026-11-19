@@ -23,6 +23,7 @@ export interface DraftFieldNode {
 /** The subset of a `pointerdown` event this module needs. */
 export interface PointerDownLike {
   target: TargetNode | null;
+  pointerId: number;
   pointerType: string;
 }
 
@@ -90,25 +91,21 @@ export function isCommittingPointerDown(
 export function commitDraftOnOutsidePointerDown({
   source,
   getField,
-  getOptionsBar,
   getActiveElement,
+  deferToBlur,
   commit,
 }: {
   source: PointerDownSource;
   getField: () => DraftFieldNode | null;
-  getOptionsBar?: () => DraftFieldNode | null;
   getActiveElement: () => TargetNode | null;
+  deferToBlur?: (event: PointerDownLike) => boolean;
   commit: () => void;
 }): () => void {
   const onPointerDown = (event: PointerDownLike) => {
-    // Closing Move here would shift other controls before the browser clicks.
     if (
-      event.pointerType === "touch" &&
-      getOptionsBar?.()?.contains(event.target)
+      isCommittingPointerDown(getField(), event.target, getActiveElement()) &&
+      !deferToBlur?.(event)
     ) {
-      return;
-    }
-    if (isCommittingPointerDown(getField(), event.target, getActiveElement())) {
       commit();
     }
   };

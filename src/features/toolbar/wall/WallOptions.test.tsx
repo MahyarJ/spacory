@@ -99,9 +99,6 @@ describe("WallOptions — click-away commits the typed value", () => {
   it("keeps Move in place while a tap transfers focus to Width", () => {
     const scheduleFrame = vi.fn<(callback: FrameRequestCallback) => number>();
     vi.stubGlobal("requestAnimationFrame", scheduleFrame);
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(pointer: coarse)",
-    }));
     useApp.getState().loadPlan(cornerPlan([door("w1", 80)]));
     useApp.setState({
       selectedWalls: new Set(["w1"]),
@@ -116,17 +113,25 @@ describe("WallOptions — click-away commits the typed value", () => {
 
     // jsdom has no PointerEvent constructor.
     const touchDown = new Event("pointerdown", { bubbles: true });
-    Object.defineProperty(touchDown, "pointerType", { value: "touch" });
+    Object.defineProperties(touchDown, {
+      pointerId: { value: 1 },
+      pointerType: { value: "touch" },
+    });
     fireEvent(width, touchDown);
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(250);
     expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
 
+    const touchUp = new Event("pointerup", { bubbles: true });
+    Object.defineProperty(touchUp, "pointerId", { value: 1 });
+    fireEvent(width, touchUp);
     act(() => width.focus());
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(320);
     expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
 
-    const [closeMove] = scheduleFrame.mock.calls[0];
-    act(() => closeMove(0));
+    expect(scheduleFrame).toHaveBeenCalledTimes(2);
+    act(() => {
+      for (const [callback] of scheduleFrame.mock.calls) callback(0);
+    });
     expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
     expect(document.activeElement).toBe(width);
   });
