@@ -61,6 +61,20 @@ such as `Closes #N`.
   `style/noNonNullAssertion` is disabled (idiomatic for the SVG canvas refs).
 - Match the existing code style and architecture; read neighbouring code first.
 
+## Keep fixes narrow
+
+- **Trace the failure through the existing code.** Work from a concrete failing
+  case. Look for a fix in the existing handler, state transition, or layout at
+  the point where it goes wrong. When feedback questions the complexity of a
+  fix, revisit the approach and remove work the revised fix makes unnecessary.
+- **Tie each new moving part to a requirement.** Add state, effects, listeners,
+  timers, or helpers only when a concrete requirement needs them. For a non-obvious
+  addition, use the PR's Key decisions section or the review reply to explain
+  which behavior would break with a smaller change.
+- **Challenge avoidable complexity in review.** Point to the existing code
+  that can handle the case and ask for the narrower fix when it preserves the
+  required behavior. Evaluate the responsibilities and cleanup the change adds.
+
 ## Discipline
 
 - **Stay strictly in scope.** Implement/resolve only what the issue or the review
