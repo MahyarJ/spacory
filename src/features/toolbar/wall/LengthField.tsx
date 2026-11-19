@@ -139,42 +139,46 @@ export function LengthField({
           {label}
         </label>
       )}
-      <input
-        id={id}
-        aria-label={imperial ? `${label} feet` : label}
-        type="number"
-        inputMode={imperial ? "numeric" : "decimal"}
-        min={imperial ? 0 : minCm / lengthToCm(1, singleUnit ?? "cm")}
-        step={imperial ? 1 : "any"}
-        className={styles.lengthInput}
-        value={draft.primary}
-        onPointerDown={renderControls ? () => setActive(true) : undefined}
-        onChange={(event) => {
-          dirty.current = true;
-          setActive(true);
-          setDraft({ ...draft, primary: event.target.value });
-        }}
-      />
+      <div className={styles.lengthInputFrame}>
+        <input
+          id={id}
+          aria-label={imperial ? `${label} feet` : label}
+          type="number"
+          inputMode={imperial ? "numeric" : "decimal"}
+          min={imperial ? 0 : minCm / lengthToCm(1, singleUnit ?? "cm")}
+          step={imperial ? 1 : "any"}
+          className={styles.lengthInput}
+          value={draft.primary}
+          onPointerDown={renderControls ? () => setActive(true) : undefined}
+          onChange={(event) => {
+            dirty.current = true;
+            setActive(true);
+            setDraft({ ...draft, primary: event.target.value });
+          }}
+        />
+      </div>
       <span className={styles.unit}>
         {singleUnit ?? (imperial ? "ft" : "cm")}
       </span>
       {imperial && (
         <>
-          <input
-            aria-label={`${label} inches`}
-            type="number"
-            inputMode="decimal"
-            min={0}
-            step="any"
-            className={styles.lengthInput}
-            value={draft.inches}
-            onPointerDown={renderControls ? () => setActive(true) : undefined}
-            onChange={(event) => {
-              dirty.current = true;
-              setActive(true);
-              setDraft({ ...draft, inches: event.target.value });
-            }}
-          />
+          <div className={styles.lengthInputFrame}>
+            <input
+              aria-label={`${label} inches`}
+              type="number"
+              inputMode="decimal"
+              min={0}
+              step="any"
+              className={styles.lengthInput}
+              value={draft.inches}
+              onPointerDown={renderControls ? () => setActive(true) : undefined}
+              onChange={(event) => {
+                dirty.current = true;
+                setActive(true);
+                setDraft({ ...draft, inches: event.target.value });
+              }}
+            />
+          </div>
           <span className={styles.unit}>in</span>
         </>
       )}

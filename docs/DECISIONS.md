@@ -5,6 +5,14 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Keep measurement inputs compact with larger native tap areas
+
+The floating options bar paints each measurement field at the toolbar's
+32 px control height. On coarse pointers, the native input is 44 px tall and
+centered over that frame so a tap in the extra area goes directly to the
+browser's text editor. Both the bar and the measurement form reserve space
+between wrapped rows for the overhang from adjacent targets.
+
 ## Share canonical agent contracts through small Claude/Codex adapters
 
 **Decision.** Extend PR #108's Bash execution adapter instead of rewriting the
