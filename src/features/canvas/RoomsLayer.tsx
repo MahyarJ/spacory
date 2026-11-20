@@ -11,6 +11,7 @@ interface RoomsLayerProps {
   names: Map<Room, RoomName>;
   selectedRoom?: Room;
   activateRoom: (room: Room) => void;
+  onRoomFocus: (outline: string | null) => void;
 }
 
 export function RoomsLayer({
@@ -18,6 +19,7 @@ export function RoomsLayer({
   names,
   selectedRoom,
   activateRoom,
+  onRoomFocus,
 }: RoomsLayerProps) {
   const system = useApp((s) => s.plan.meta.measurementSystem);
   const scale = useApp((s) => s.view.scale);
@@ -91,6 +93,8 @@ export function RoomsLayer({
             tabIndex={0}
             aria-label={`${name ?? "Room"}, ${area}`}
             aria-pressed={room === selectedRoom}
+            onFocus={() => onRoomFocus(points)}
+            onBlur={() => onRoomFocus(null)}
             onClick={(event) => {
               if (event.detail === 0) activateRoom(room);
             }}

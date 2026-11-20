@@ -146,6 +146,10 @@ needed and abbreviate with an ellipsis when space runs out. The full name stays
 in the document and is available in the editor and the SVG's title. Image
 dimensions follow plan geometry, regardless of the length of any room name.
 
+Tab moves keyboard focus between room labels. A dashed outline traces the room
+boundary. Enter or Space selects the room and focuses its name field. The accent
+fill indicates selection.
+
 **Scope / what's deferred.** Openings don't affect enclosure (a door in a wall
 doesn't open the polygon — enclosure is pure wall topology), and open/partial plans
 simply yield fewer faces. Holes/islands (a free-standing column inside a room, a

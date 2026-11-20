@@ -215,12 +215,22 @@ describe("FloorPlan touch gestures", () => {
       const oldName = "Dining room";
       const newName = "Study";
       const label = screen.getByRole("button", { name: "Room, 12 m²" });
-      label.focus();
+      const focusOutline = () =>
+        canvas.querySelector('[data-layer="room-focus"] polygon');
+      act(() => label.focus());
+      expect(focusOutline()?.getAttribute("points")).toBe(
+        label.querySelector("polygon")?.getAttribute("points"),
+      );
+      expect(label.getAttribute("aria-pressed")).toBe("false");
+      expect(screen.queryByRole("textbox", { name: "Room name" })).toBeNull();
+
       fireEvent.keyDown(label, { key: "Enter" });
       const input = screen.getByRole<HTMLInputElement>("textbox", {
         name: "Room name",
       });
       expect(document.activeElement).toBe(input);
+      expect(focusOutline()).toBeNull();
+      expect(label.getAttribute("aria-pressed")).toBe("true");
 
       const save = (value: string) => {
         fireEvent.change(input, { target: { value } });

@@ -86,6 +86,9 @@ export function FloorPlan() {
   const selectedRoom = selectedRoomPoint
     ? findRoomAt(rooms, selectedRoomPoint)
     : undefined;
+  const [focusedRoomOutline, setFocusedRoomOutline] = useState<string | null>(
+    null,
+  );
   const roomTap = useRef(false);
   const roomNameInput = useRef<HTMLInputElement>(null);
   const focusRoomName = useRef(false);
@@ -880,11 +883,35 @@ export function FloorPlan() {
             names={roomNames}
             selectedRoom={selectedRoom}
             activateRoom={activateRoom}
+            onRoomFocus={setFocusedRoomOutline}
           />
           <WallsLayer />
           <ItemsLayer />
           <DimensionsLayer />
           <SelectionLayer />
+          {tool === "select" && focusedRoomOutline && (
+            <g
+              className={styles.roomFocus}
+              data-layer="room-focus"
+              pointerEvents="none"
+              fill="none"
+              strokeDasharray="6 4"
+              strokeLinejoin="round"
+            >
+              <polygon
+                points={focusedRoomOutline}
+                stroke="var(--sp-bg)"
+                strokeWidth={5}
+                vectorEffect="non-scaling-stroke"
+              />
+              <polygon
+                points={focusedRoomOutline}
+                stroke="var(--sp-accent)"
+                strokeWidth={2.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            </g>
+          )}
           <ConnectionPointsLayer />
           <WallEndpointsLayer />
           <WallResizePreview />

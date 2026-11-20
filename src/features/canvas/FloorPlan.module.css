@@ -36,10 +36,21 @@
   cursor: grabbing;
 }
 
-.room[aria-pressed="true"] .roomFill,
-.room:focus-visible .roomFill {
+.room:focus {
+  outline: none;
+}
+
+.room[aria-pressed="true"] .roomFill {
   fill: var(--sp-accent);
   fill-opacity: 0.16;
+}
+
+.roomFocus {
+  visibility: hidden;
+}
+
+.floorplan:focus-within .roomFocus {
+  visibility: visible;
 }
 
 .roomOptions {
