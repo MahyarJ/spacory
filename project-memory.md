@@ -132,6 +132,10 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   position (#126), open passages (#127), sliding doors (#128), grid controls
   (#129), placed dimensions (#130), inside-face room areas (#131), and scale print
   (#132) are follow-ups.
+- **Rounded wall corners — ticketed in #137.** A typed radius and drag handle
+  round a two-wall corner. Revisit the backlog priority when a reference plan
+  needs an accurately rounded boundary. The single-floor sample in #124 can
+  be completed with straight wall segments.
 - **Multi-storey** — named levels and an alignment overlay (#133) precede linking
   stair counterparts (#134).
 - **PNG image export — done (#4, merged).** Raster export of the plan; SVG
@@ -781,6 +785,9 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-11-20 — Opened #137 to round a wall corner with a radius field and drag
+  handle. Placed it after the current single-floor milestone and documented what
+  would raise its priority.
 - 2026-11-20 — Opened #135 to find and select detected rooms from a Rooms panel.
   It follows #117 and reuses its naming flow. The sample in #124 can help assess
   whether thumbnails would improve navigation.
