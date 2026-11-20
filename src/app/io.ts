@@ -3,6 +3,7 @@ import {
   type Item,
   type Plan,
   type Point,
+  type RoomName,
   type Wall,
   type WallAttachment,
 } from "./schema";
@@ -36,6 +37,15 @@ function asPoint(v: unknown, where: string): Point {
     throw new PlanParseError(`${where} must be a point with numeric x and y`);
   }
   return { x: v.x, y: v.y };
+}
+
+function asRoomName(v: unknown, i: number): RoomName {
+  if (!isObject(v))
+    throw new PlanParseError(`roomNames[${i}] must be an object`);
+  if (typeof v.name !== "string" || !v.name.trim()) {
+    throw new PlanParseError(`roomNames[${i}].name must be a non-blank string`);
+  }
+  return { anchor: asPoint(v.anchor, `roomNames[${i}].anchor`), name: v.name };
 }
 
 function asWall(v: unknown, i: number): Wall {
@@ -130,6 +140,10 @@ export function coercePlan(raw: unknown): Plan {
   if (!Array.isArray(raw.items)) {
     throw new PlanParseError('Plan is missing an "items" array.');
   }
+  const { roomNames } = raw;
+  if (roomNames !== undefined && !Array.isArray(roomNames)) {
+    throw new PlanParseError('"roomNames" must be an array.');
+  }
 
   const walls = raw.walls.map(asWall);
   const items = raw.items.map(asItem);
@@ -160,5 +174,9 @@ export function coercePlan(raw: unknown): Plan {
     },
     walls,
     items: validItems,
+    // Keep the field absent for older plans so their saved history still applies.
+    ...(roomNames === undefined
+      ? {}
+      : { roomNames: roomNames.map(asRoomName) }),
   };
 }

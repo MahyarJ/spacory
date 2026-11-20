@@ -150,3 +150,41 @@ it("uses the plan's system for measurements in shared SVG/PNG markup", () => {
   expect(imperial.width).toBe(metric.width);
   expect(imperial.height).toBe(metric.height);
 });
+
+it("exports visible names as escaped Unicode text next to the area", () => {
+  const plan = planOf([
+    wall(0, 0, 400, 0, 10, "a"),
+    wall(400, 0, 400, 300, 10, "b"),
+    wall(400, 300, 0, 300, 10, "c"),
+    wall(0, 300, 0, 0, 10, "d"),
+  ]);
+  plan.roomNames = [
+    { anchor: { x: 100, y: 150 }, name: 'Cuisine & 茶室 <🏠> "special"' },
+    { anchor: { x: 300, y: 150 }, name: "Hidden while merged" },
+    { anchor: { x: 500, y: 150 }, name: "Unenclosed" },
+  ];
+  const { markup } = buildExportSvg(plan);
+  expect(markup).toContain('Cuisine &amp; 茶室 &lt;🏠&gt; "special"</text>');
+  expect(markup).toContain(">12 m²</text>");
+  expect(markup).not.toContain("Hidden while merged");
+  expect(markup).not.toContain("Unenclosed");
+});
+
+it("frames long room names and keeps XML-invalid characters in the plan only", () => {
+  const plan = planOf([
+    wall(0, 0, 80, 0, 10, "a"),
+    wall(80, 0, 80, 80, 10, "b"),
+    wall(80, 80, 0, 80, 10, "c"),
+    wall(0, 80, 0, 0, 10, "d"),
+  ]);
+  const unnamed = buildExportSvg(plan);
+  const wideName = "Ｗ".repeat(24);
+  const name = `${wideName}\u0000\uD800\uFFFE🏠\r`;
+  plan.roomNames = [{ anchor: { x: 40, y: 40 }, name }];
+  const { markup, width, height } = buildExportSvg(plan);
+  expect(width).toBeGreaterThan(unnamed.width);
+  expect(width).toBeGreaterThan(wideName.length * 12);
+  expect(height).toBe(unnamed.height);
+  expect(markup).toContain(`${wideName}���🏠&#13;</text>`);
+  expect(plan.roomNames[0].name).toBe(name);
+});

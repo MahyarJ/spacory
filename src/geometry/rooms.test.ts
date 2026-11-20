@@ -1,6 +1,6 @@
 import type { Point, Wall } from "@app/schema";
 import { describe, expect, it } from "vitest";
-import { detectRooms } from "./rooms";
+import { detectRooms, findRoomAt, resolveRoomNames } from "./rooms";
 
 function boundary(points: number[][], prefix = "w"): Wall[] {
   return points.map(([x, y], i) => {
@@ -238,5 +238,67 @@ describe("detectRooms", () => {
     expect(
       rooms.every((r) => r.area === 90000 && inside(r.labelPoint, r.polygon)),
     ).toBe(true);
+  });
+});
+
+describe("resolveRoomNames", () => {
+  const kitchen = { anchor: { x: 100, y: 150 }, name: "Kitchen" };
+  const dining = { anchor: { x: 300, y: 150 }, name: "Dining room" };
+  const splitBoundary = () =>
+    boundary([
+      [0, 0],
+      [200, 0],
+      [400, 0],
+      [400, 300],
+      [200, 300],
+      [0, 300],
+    ]);
+  const divider: Wall = {
+    id: "divider",
+    a: { x: 200, y: 0 },
+    b: { x: 200, y: 300 },
+    thickness: 10,
+  };
+
+  it("retains a name through a resize and collinear wall splits", () => {
+    const resized = rectangle().map((wall) => ({
+      ...wall,
+      a: { ...wall.a, x: wall.a.x * 1.5 },
+      b: { ...wall.b, x: wall.b.x * 1.5 },
+    }));
+    for (const walls of [rectangle(), resized, splitBoundary()]) {
+      const rooms = detectRooms(walls);
+      expect(resolveRoomNames(rooms, [kitchen]).get(rooms[0])).toBe(kitchen);
+    }
+  });
+
+  it("assigns a name to just the containing face and excludes boundary anchors", () => {
+    const rooms = detectRooms([...splitBoundary(), divider]);
+    const names = resolveRoomNames(rooms, [
+      kitchen,
+      { anchor: { x: 200, y: 150 }, name: "On the divider" },
+    ]);
+    expect(names.get(findRoomAt(rooms, kitchen.anchor)!)).toBe(kitchen);
+    expect(names.get(findRoomAt(rooms, dining.anchor)!)).toBeUndefined();
+    expect(names.size).toBe(1);
+  });
+
+  it("keeps hidden anchors available after merging or opening a boundary", () => {
+    const names = [kitchen, dining];
+    for (const merged of [splitBoundary(), splitBoundary().reverse()]) {
+      expect([
+        ...resolveRoomNames(detectRooms(merged), names).values(),
+      ]).toEqual([kitchen]);
+    }
+    expect(
+      resolveRoomNames(detectRooms(rectangle().slice(1)), names).size,
+    ).toBe(0);
+
+    const restored = resolveRoomNames(
+      detectRooms([...splitBoundary(), divider]),
+      names,
+    );
+    expect([...restored.values()]).toEqual([kitchen, dining]);
+    expect(names).toEqual([kitchen, dining]);
   });
 });

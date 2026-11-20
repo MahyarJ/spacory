@@ -1,4 +1,4 @@
-import type { Point, Wall } from "@app/schema";
+import type { Point, RoomName, Wall } from "@app/schema";
 import { pointsEqual } from "./connectivity";
 
 const EPS = 1e-6;
@@ -77,6 +77,32 @@ function isInterior(point: Point, polygon: Point[]): boolean {
       inside = !inside;
   }
   return inside;
+}
+
+export function findRoomAt(rooms: Room[], point: Point): Room | undefined {
+  let containingRoom: Room | undefined;
+  for (const room of rooms) {
+    if (
+      (!containingRoom || room.area < containingRoom.area) &&
+      isInterior(point, room.polygon)
+    ) {
+      containingRoom = room;
+    }
+  }
+  return containingRoom;
+}
+
+/** The first name in document order wins when several anchors share a face. */
+export function resolveRoomNames(
+  rooms: Room[],
+  names: RoomName[] = [],
+): Map<Room, RoomName> {
+  const resolved = new Map<Room, RoomName>();
+  for (const name of names) {
+    const room = findRoomAt(rooms, name.anchor);
+    if (room && !resolved.has(room)) resolved.set(room, name);
+  }
+  return resolved;
 }
 
 /** Prefer the visual centre; concave faces may need a guaranteed interior fallback. */

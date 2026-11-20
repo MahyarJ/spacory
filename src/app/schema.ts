@@ -5,6 +5,11 @@ export interface Point {
   y: number;
 }
 
+export interface RoomName {
+  anchor: Point;
+  name: string;
+}
+
 export interface Wall {
   id: string;
   a: Point;
@@ -61,6 +66,7 @@ export interface Plan {
   };
   walls: Wall[];
   items: Item[];
+  roomNames?: RoomName[];
 }
 
 export const createInitialPlan = (): Plan => ({

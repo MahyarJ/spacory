@@ -4,8 +4,7 @@ import { parsePlan, serializePlan } from "@app/io";
 import { loadPersistedHistory } from "@app/persistence";
 import { createInitialPlan, type Plan } from "@app/schema";
 import { useApp } from "@app/store";
-import { DimensionsLayer } from "@features/canvas/DimensionsLayer";
-import { RoomsLayer } from "@features/canvas/RoomsLayer";
+import { FloorPlan } from "@features/canvas/FloorPlan";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import {
   act,
@@ -49,10 +48,7 @@ function mount() {
     <>
       <Toolbar />
       <WallOptions />
-      <svg aria-label="Floor plan" role="img">
-        <DimensionsLayer />
-        <RoomsLayer />
-      </svg>
+      <FloorPlan />
     </>,
   );
 }

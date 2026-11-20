@@ -9,6 +9,7 @@ import {
 } from "@geometry/connectivity";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { MIN_OPENING_WIDTH, resizeOpeningWidth } from "@geometry/opening";
+import { detectRooms, findRoomAt, resolveRoomNames } from "@geometry/rooms";
 import {
   getWallLength,
   MIN_WALL_LENGTH,
@@ -90,6 +91,9 @@ interface AppState {
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
+  selectedRoomPoint: Point | null;
+  selectRoom: (point: Point) => void;
+  setSelectedRoomName: (name: string) => void;
   /** The single connection point (shared wall-endpoint coordinate) currently selected. */
   selectedConnectionPoint: Point | null;
   /**
@@ -380,7 +384,8 @@ export const useApp = create<AppState>((set, get) => ({
   view: loadPersistedView() ?? DEFAULT_VIEW,
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
-  setTool: (t) => set({ tool: t }),
+  setTool: (t) =>
+    set(t === "select" ? { tool: t } : { tool: t, selectedRoomPoint: null }),
   setMeasurementSystem: (measurementSystem) => {
     const state = get();
     if (state.plan.meta.measurementSystem === measurementSystem) return;
@@ -428,6 +433,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
   selectedWalls: new Set(),
   selectedItems: new Set(),
+  selectedRoomPoint: null,
   selectedConnectionPoint: null,
   selectedConnectionPointEndpoints: [],
   addWall: (w) => {
@@ -472,9 +478,50 @@ export const useApp = create<AppState>((set, get) => ({
     set({
       selectedWalls: new Set(),
       selectedItems: new Set(),
+      selectedRoomPoint: null,
       selectedConnectionPoint: null,
       selectedConnectionPointEndpoints: [],
     }),
+  selectRoom: (point) =>
+    set({
+      selectedWalls: new Set(),
+      selectedItems: new Set(),
+      selectedConnectionPoint: null,
+      selectedConnectionPointEndpoints: [],
+      selectedRoomPoint: point,
+    }),
+  setSelectedRoomName: (value) => {
+    const state = get();
+    const { selectedRoomPoint } = state;
+    if (!selectedRoomPoint || state.liveDragItems) return;
+    const plan = history.present;
+    const rooms = detectRooms(plan.walls);
+    const room = findRoomAt(rooms, selectedRoomPoint);
+    if (!room) return;
+
+    const roomNames = plan.roomNames ?? [];
+    const existing = resolveRoomNames(rooms, roomNames).get(room);
+    const name = value.trim() ? value : "";
+    if (name === (existing?.name ?? "")) return;
+    const nextNames = [...roomNames];
+    if (existing) {
+      const index = roomNames.indexOf(existing);
+      if (name) nextNames[index] = { ...existing, name };
+      else nextNames.splice(index, 1);
+    } else {
+      nextNames.push({ anchor: room.labelPoint, name });
+    }
+    set(
+      commit(
+        {
+          ...plan,
+          roomNames: nextNames,
+          meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+        },
+        state,
+      ),
+    );
+  },
   selectWall: (id, additive) =>
     set((s) => {
       const ws = additive ? new Set(s.selectedWalls) : new Set<string>();
@@ -482,6 +529,7 @@ export const useApp = create<AppState>((set, get) => ({
       return {
         selectedWalls: ws,
         selectedItems: additive ? s.selectedItems : new Set(),
+        selectedRoomPoint: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
       };
@@ -493,12 +541,14 @@ export const useApp = create<AppState>((set, get) => ({
       return {
         selectedItems: is,
         selectedWalls: additive ? s.selectedWalls : new Set(),
+        selectedRoomPoint: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
       };
     }),
   selectConnectionPoint: (point) =>
     set((s) => ({
+      selectedRoomPoint: null,
       selectedConnectionPoint: point,
       // Snapshot the junction's membership once, at grab time — the live drag
       // and nudge translate exactly this set (see `selectedConnectionPointEndpoints`).
@@ -701,6 +751,7 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       selectedWalls: new Set(),
       selectedItems: new Set(),
+      selectedRoomPoint: null,
       marquee: null,
       // Loading a document ends any in-progress drag; drop its pre-drag snapshot
       // so a stale one can't reconcile the new plan against the old doc's items.

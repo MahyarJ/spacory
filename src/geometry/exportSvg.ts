@@ -7,7 +7,7 @@ import {
   getWindowGeometry,
 } from "./itemGeometry";
 import { computeWallGeometry, polygonToPoints } from "./junction";
-import { detectRooms } from "./rooms";
+import { detectRooms, resolveRoomNames } from "./rooms";
 import { getPointOnWall, getWallAngle, getWallLength } from "./wall";
 
 /** Margin (cm) left around the plan's content on every side of the export. */
@@ -19,6 +19,8 @@ export const EXPORT_EMPTY_PLACEHOLDER_SIZE = 200;
 /** Fixed, theme-independent export colors — chosen for print/share legibility. */
 export const EXPORT_BACKGROUND = "#ffffff";
 export const EXPORT_WALL_COLOR = "#0f172a";
+const LABEL_FONT_SIZE = 12;
+const ROOM_LABEL_OFFSET = 8;
 
 export interface ExportSvgResult {
   /** Standalone, self-contained SVG markup (no external stylesheet or theme). */
@@ -28,13 +30,23 @@ export interface ExportSvgResult {
   height: number;
 }
 
+function escapeSvgText(text: string): string {
+  const invalidXml =
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: XML 1.0 cannot represent these characters in text.
+    /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uD800-\uDFFF\uFFFE\uFFFF]/gu;
+  return text
+    .replace(invalidXml, "\uFFFD")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\r", "&#13;");
+}
+
 /**
- * Build a standalone SVG document of a plan's content — walls (mitered, with
- * junction fills) and items — independent of the live canvas's pan/zoom, grid,
- * and selection overlays. Lengths and room areas use the plan’s system. Framed to the plan's content bounding box
- * (`getPlanBounds`) plus `EXPORT_MARGIN`; an empty plan falls back to a small
- * placeholder square centered on the origin so the result is always a valid,
- * non-crashing image.
+ * Build a standalone SVG of the plan's geometry and labels independent of the
+ * live canvas's pan/zoom, grid, and selections. Measurements use the plan's
+ * system. The export adds a margin around the content, or around a placeholder
+ * square centred on the origin for an empty plan.
  *
  * Colors are fixed (white background, dark walls) rather than theme-aware —
  * export is for sharing/printing, not matching the app's current theme.
@@ -45,12 +57,25 @@ export function buildExportSvg(
 ): ExportSvgResult {
   const bounds = getPlanBounds(plan);
   const half = EXPORT_EMPTY_PLACEHOLDER_SIZE / 2;
-  const { minX, minY, maxX, maxY } = bounds ?? {
+  let { minX, minY, maxX, maxY } = bounds ?? {
     minX: -half,
     minY: -half,
     maxX: half,
     maxY: half,
   };
+  const rooms = detectRooms(plan.walls);
+  const roomNames = resolveRoomNames(rooms, plan.roomNames);
+  for (const [room, { name }] of roomNames) {
+    // Budget one em per code point to frame long names without depending on
+    // installed fonts. The export margin also covers stroke and glyph overhang.
+    const halfWidth = (Array.from(name).length * LABEL_FONT_SIZE) / 2;
+    const halfHeight = ROOM_LABEL_OFFSET + LABEL_FONT_SIZE;
+    const { x, y } = room.labelPoint;
+    minX = Math.min(minX, x - halfWidth);
+    maxX = Math.max(maxX, x + halfWidth);
+    minY = Math.min(minY, y - halfHeight);
+    maxY = Math.max(maxY, y + halfHeight);
+  }
 
   const x = minX - margin;
   const y = minY - margin;
@@ -101,7 +126,7 @@ export function buildExportSvg(
     })
     .join("");
 
-  const textStyle = `font-family="sans-serif" font-size="12" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
+  const textStyle = `font-family="sans-serif" font-size="${LABEL_FONT_SIZE}" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
   const dimensions = plan.walls
     .map((wall) => {
       const length = getWallLength(wall);
@@ -114,11 +139,17 @@ export function buildExportSvg(
       return `<text transform="translate(${mid.x} ${mid.y}) rotate(${angle})" y="${-wall.thickness / 2 - 8}" ${textStyle}>${label}</text>`;
     })
     .join("");
-  const areas = detectRooms(plan.walls)
-    .map(
-      (room) =>
-        `<text x="${room.labelPoint.x}" y="${room.labelPoint.y}" dominant-baseline="central" ${textStyle}>${formatSystemArea(room.area, plan.meta.measurementSystem)}</text>`,
-    )
+  const roomLabels = rooms
+    .map((room) => {
+      const { x, y } = room.labelPoint;
+      const name = roomNames.get(room)?.name;
+      const area = formatSystemArea(room.area, plan.meta.measurementSystem);
+      const label = `x="${x}" dominant-baseline="central" ${textStyle}`;
+      const nameText = name
+        ? `<text ${label} y="${y - ROOM_LABEL_OFFSET}" font-weight="600" xml:space="preserve">${escapeSvgText(name)}</text>`
+        : "";
+      return `${nameText}<text ${label} y="${name ? y + ROOM_LABEL_OFFSET : y}">${area}</text>`;
+    })
     .join("");
 
   const markup =
@@ -127,7 +158,7 @@ export function buildExportSvg(
     `<g data-layer="walls">${wallShapes}${junctionShapes}</g>` +
     `<g data-layer="items">${itemShapes}</g>` +
     `<g data-layer="dimensions">${dimensions}</g>` +
-    `<g data-layer="room-areas">${areas}</g>` +
+    `<g data-layer="room-areas">${roomLabels}</g>` +
     "</svg>";
 
   return { markup, width, height };

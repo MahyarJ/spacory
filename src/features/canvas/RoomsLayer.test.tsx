@@ -91,3 +91,56 @@ it("updates area from live wall arrays, converts units, and counter-scales label
   });
   expect(layer.textContent).toBe("258.33 ft²");
 });
+
+it("restores both names after a shared wall or an exterior boundary is rebuilt", () => {
+  const plan = roomPlan();
+  const kitchen = { anchor: { x: 100, y: 150 }, name: "Kitchen" };
+  const dining = { anchor: { x: 300, y: 150 }, name: "Dining room" };
+  const roomNames = [kitchen, dining];
+  const divider = {
+    id: "divider",
+    a: { x: 200, y: 0 },
+    b: { x: 200, y: 300 },
+    thickness: 10,
+  };
+  const outside = plan.walls[1];
+  const store = useApp.getState();
+  store.loadPlan({ ...plan, roomNames });
+  store.setTool("select");
+  store.addWall(divider);
+  const { container } = render(<FloorPlan />);
+  const layer = container.querySelector('[data-layer="rooms"]')!;
+  const names = () =>
+    [...layer.querySelectorAll("text")]
+      .map((label) => label.textContent)
+      .sort();
+  const removeWall = (id: string) => {
+    store.selectWall(id);
+    store.deleteSelected();
+  };
+
+  expect(names()).toEqual(["Dining room6 m²", "Kitchen6 m²"]);
+  act(() => removeWall(divider.id));
+  expect(names()).toEqual(["Kitchen12 m²"]);
+  expect(useApp.getState().plan.roomNames).toEqual(roomNames);
+  act(() => store.undo());
+  expect(names()).toEqual(["Dining room6 m²", "Kitchen6 m²"]);
+  act(() => store.redo());
+  expect(names()).toEqual(["Kitchen12 m²"]);
+  act(() => {
+    store.selectRoom(kitchen.anchor);
+    store.setSelectedRoomName("");
+  });
+  expect(names()).toEqual(["Dining room12 m²"]);
+  expect(useApp.getState().plan.roomNames).toEqual([dining]);
+  act(() => store.undo());
+  expect(names()).toEqual(["Kitchen12 m²"]);
+
+  act(() => removeWall(outside.id));
+  expect(names()).toEqual([]);
+  expect(useApp.getState().plan.roomNames).toEqual(roomNames);
+  act(() => store.addWall(outside));
+  expect(names()).toEqual(["Kitchen12 m²"]);
+  act(() => store.addWall(divider));
+  expect(names()).toEqual(["Dining room6 m²", "Kitchen6 m²"]);
+});

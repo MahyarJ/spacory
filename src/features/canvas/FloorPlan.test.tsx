@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { loadPersistedHistory } from "@app/persistence";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
@@ -27,6 +28,18 @@ const cornerPlan = (): Plan => ({
   ...createInitialPlan(),
   walls: [wall(0, 0, 400, 0, "w1"), wall(400, 0, 400, 300, "w2")],
 });
+
+const enclosedPlan = (): Plan => {
+  const plan = cornerPlan();
+  return {
+    ...plan,
+    walls: [
+      ...plan.walls,
+      wall(400, 300, 0, 300, "w3"),
+      wall(0, 300, 0, 0, "w4"),
+    ],
+  };
+};
 
 /**
  * jsdom implements neither `PointerEvent` nor pointer capture, so synthesize the
@@ -171,6 +184,78 @@ describe("FloorPlan touch gestures", () => {
       expect(view().panX).toBeCloseTo(40);
       expect(view().panY).toBeCloseTo(90);
       expect(view().scale).toBe(DEFAULT_VIEW.scale);
+    });
+
+    it("selects a room interior, saves a name, and keeps marquee selection available", () => {
+      setup({ tool: "select", plan: enclosedPlan() });
+      const room = () => canvas.querySelector('[data-layer="rooms"]');
+      expect(room()?.textContent).toBe("12 m²");
+
+      down(1, 260, 180);
+      up(1, 261, 180);
+      const name = "Cuisine & 茶室 <🏠>";
+      fireEvent.change(screen.getByRole("textbox", { name: "Room name" }), {
+        target: { value: name },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(room()?.textContent).toBe(`${name}12 m²`);
+      expect(loadPersistedHistory()?.present.roomNames).toEqual([
+        { anchor: { x: 200, y: 150 }, name },
+      ]);
+
+      down(1, 200, 150);
+      move(1, 450, 350);
+      up(1, 450, 350);
+      expect(screen.queryByRole("textbox", { name: "Room name" })).toBeNull();
+      expect(useApp.getState().selectedWalls).toEqual(new Set(["w2", "w3"]));
+    });
+
+    it("can choose, rename and clear a room from the keyboard with undo and redo", () => {
+      setup({ tool: "select", plan: enclosedPlan() });
+      const oldName = "Dining room";
+      const newName = "Study";
+      const label = screen.getByRole("button", { name: "Room, 12 m²" });
+      label.focus();
+      fireEvent.keyDown(label, { key: "Enter" });
+      const input = screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Room name",
+      });
+      expect(document.activeElement).toBe(input);
+
+      const save = (value: string) => {
+        fireEvent.change(input, { target: { value } });
+        fireEvent.submit(input.closest("form")!);
+      };
+      save(oldName);
+      expect(screen.getByRole("button", { name: `${oldName}, 12 m²` })).toBe(
+        label,
+      );
+      save(newName);
+      expect(screen.getByRole("button", { name: `${newName}, 12 m²` })).toBe(
+        label,
+      );
+
+      const clear = screen.getByRole("button", { name: "Clear" });
+      clear.focus();
+      fireEvent.click(clear);
+      expect(document.activeElement).toBe(input);
+      expect(label.getAttribute("aria-label")).toBe("Room, 12 m²");
+      expect(input.value).toBe("");
+
+      for (const value of [newName, oldName, ""]) {
+        act(() => useApp.getState().undo());
+        expect(label.getAttribute("aria-label")).toBe(
+          `${value || "Room"}, 12 m²`,
+        );
+        expect(input.value).toBe(value);
+      }
+      for (const value of [oldName, newName, ""]) {
+        act(() => useApp.getState().redo());
+        expect(label.getAttribute("aria-label")).toBe(
+          `${value || "Room"}, 12 m²`,
+        );
+        expect(input.value).toBe(value);
+      }
     });
   });
 
