@@ -2,6 +2,7 @@ import { formatSystemArea } from "@app/format";
 import type { RoomName } from "@app/schema";
 import { useApp } from "@app/store";
 import { polygonToPoints } from "@geometry/junction";
+import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "@geometry/roomLabels";
 import type { Room } from "@geometry/rooms";
 import styles from "./FloorPlan.module.css";
 
@@ -28,8 +29,12 @@ export function RoomsLayer({
         const points = polygonToPoints(room.polygon);
         const name = names.get(room)?.name;
         const area = formatSystemArea(room.area, system);
+        const label = name ? layoutRoomLabel(room, name, area, scale) : null;
         const content = (
           <>
+            {label && (label.shortened || label.nameLines.length > 1) && (
+              <title>{name}</title>
+            )}
             <polygon
               className={styles.roomFill}
               points={points}
@@ -37,27 +42,37 @@ export function RoomsLayer({
               fillOpacity={0.045}
             />
             <text
-              transform={`translate(${room.labelPoint.x} ${room.labelPoint.y}) scale(${1 / scale})`}
+              transform={`translate(${room.labelPoint.x} ${room.labelPoint.y}) scale(${(label?.fontScale ?? 1) / scale})`}
               textAnchor="middle"
               dominantBaseline="central"
               fontFamily="var(--sp-font)"
-              fontSize={13}
+              fontSize={label ? ROOM_LABEL_FONT_SIZE : 13}
               fill="var(--sp-text)"
               stroke="var(--sp-bg)"
               strokeWidth={3}
               paintOrder="stroke"
             >
-              {name ? (
+              {label ? (
                 <>
+                  {label.nameLines.map((line) => (
+                    <tspan
+                      key={line.y}
+                      x={0}
+                      y={line.y}
+                      fontWeight={600}
+                      textLength={line.width}
+                      lengthAdjust="spacingAndGlyphs"
+                      style={{ whiteSpace: "pre" }}
+                    >
+                      {line.text}
+                    </tspan>
+                  ))}
                   <tspan
                     x={0}
-                    y={-8}
-                    fontWeight={600}
-                    style={{ whiteSpace: "pre" }}
+                    y={label.area.y}
+                    textLength={label.area.width}
+                    lengthAdjust="spacingAndGlyphs"
                   >
-                    {name}
-                  </tspan>
-                  <tspan x={0} y={8}>
                     {area}
                   </tspan>
                 </>

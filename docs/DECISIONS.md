@@ -141,6 +141,10 @@ edits to names. Labels use the area centroid when it is strictly inside the room
 keeping placement independent of extra collinear junctions. If a concave room’s
 centroid is outside or on its boundary, a horizontal interior interval supplies
 the fallback.
+Named labels fit inside the derived face. They wrap to a second line when
+needed and abbreviate with an ellipsis when space runs out. The full name stays
+in the document and is available in the editor and the SVG's title. Image
+dimensions follow plan geometry, regardless of the length of any room name.
 
 **Scope / what's deferred.** Openings don't affect enclosure (a door in a wall
 doesn't open the polygon — enclosure is pure wall topology), and open/partial plans

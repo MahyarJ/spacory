@@ -170,21 +170,34 @@ it("exports visible names as escaped Unicode text next to the area", () => {
   expect(markup).not.toContain("Unenclosed");
 });
 
-it("frames long room names and keeps XML-invalid characters in the plan only", () => {
+it("replaces XML-invalid display characters while preserving the saved text", () => {
   const plan = planOf([
-    wall(0, 0, 80, 0, 10, "a"),
-    wall(80, 0, 80, 80, 10, "b"),
-    wall(80, 80, 0, 80, 10, "c"),
-    wall(0, 80, 0, 0, 10, "d"),
+    wall(0, 0, 400, 0, 10, "a"),
+    wall(400, 0, 400, 300, 10, "b"),
+    wall(400, 300, 0, 300, 10, "c"),
+    wall(0, 300, 0, 0, 10, "d"),
+  ]);
+  const name = "Room\u0000\uD800\uFFFE🏠\r";
+  plan.roomNames = [{ anchor: { x: 100, y: 150 }, name }];
+  expect(buildExportSvg(plan).markup).toContain("Room���🏠&#13;</text>");
+  expect(plan.roomNames[0].name).toBe(name);
+});
+
+it("keeps image dimensions independent of room names and abbreviates long visible labels", () => {
+  const plan = planOf([
+    wall(0, 0, 180, 0, 10, "a"),
+    wall(180, 0, 180, 320, 10, "b"),
+    wall(180, 320, 0, 320, 10, "c"),
+    wall(0, 320, 0, 0, 10, "d"),
   ]);
   const unnamed = buildExportSvg(plan);
-  const wideName = "Ｗ".repeat(24);
-  const name = `${wideName}\u0000\uD800\uFFFE🏠\r`;
-  plan.roomNames = [{ anchor: { x: 40, y: 40 }, name }];
+  const name = "A".repeat(6000);
+  plan.roomNames = [{ anchor: { x: 90, y: 160 }, name }];
   const { markup, width, height } = buildExportSvg(plan);
-  expect(width).toBeGreaterThan(unnamed.width);
-  expect(width).toBeGreaterThan(wideName.length * 12);
+  expect(width).toBe(unnamed.width);
   expect(height).toBe(unnamed.height);
-  expect(markup).toContain(`${wideName}���🏠&#13;</text>`);
+  expect(markup).toContain(`<title>${name}</title>`);
+  expect(markup).toMatch(/font-weight="600"[^>]*>A+…<\/text>/);
+  expect(markup).toContain(">5.76 m²</text>");
   expect(plan.roomNames[0].name).toBe(name);
 });

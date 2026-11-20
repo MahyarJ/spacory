@@ -7,6 +7,7 @@ import {
   getWindowGeometry,
 } from "./itemGeometry";
 import { computeWallGeometry, polygonToPoints } from "./junction";
+import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "./roomLabels";
 import { detectRooms, resolveRoomNames } from "./rooms";
 import { getPointOnWall, getWallAngle, getWallLength } from "./wall";
 
@@ -20,7 +21,6 @@ export const EXPORT_EMPTY_PLACEHOLDER_SIZE = 200;
 export const EXPORT_BACKGROUND = "#ffffff";
 export const EXPORT_WALL_COLOR = "#0f172a";
 const LABEL_FONT_SIZE = 12;
-const ROOM_LABEL_OFFSET = 8;
 
 export interface ExportSvgResult {
   /** Standalone, self-contained SVG markup (no external stylesheet or theme). */
@@ -57,7 +57,7 @@ export function buildExportSvg(
 ): ExportSvgResult {
   const bounds = getPlanBounds(plan);
   const half = EXPORT_EMPTY_PLACEHOLDER_SIZE / 2;
-  let { minX, minY, maxX, maxY } = bounds ?? {
+  const { minX, minY, maxX, maxY } = bounds ?? {
     minX: -half,
     minY: -half,
     maxX: half,
@@ -65,17 +65,6 @@ export function buildExportSvg(
   };
   const rooms = detectRooms(plan.walls);
   const roomNames = resolveRoomNames(rooms, plan.roomNames);
-  for (const [room, { name }] of roomNames) {
-    // Budget one em per code point to frame long names without depending on
-    // installed fonts. The export margin also covers stroke and glyph overhang.
-    const halfWidth = (Array.from(name).length * LABEL_FONT_SIZE) / 2;
-    const halfHeight = ROOM_LABEL_OFFSET + LABEL_FONT_SIZE;
-    const { x, y } = room.labelPoint;
-    minX = Math.min(minX, x - halfWidth);
-    maxX = Math.max(maxX, x + halfWidth);
-    minY = Math.min(minY, y - halfHeight);
-    maxY = Math.max(maxY, y + halfHeight);
-  }
 
   const x = minX - margin;
   const y = minY - margin;
@@ -126,7 +115,7 @@ export function buildExportSvg(
     })
     .join("");
 
-  const textStyle = `font-family="sans-serif" font-size="${LABEL_FONT_SIZE}" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
+  const textStyle = `font-family="sans-serif" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
   const dimensions = plan.walls
     .map((wall) => {
       const length = getWallLength(wall);
@@ -136,7 +125,7 @@ export function buildExportSvg(
       const mid = getPointOnWall(wall, length / 2);
       let angle = (getWallAngle(wall) * 180) / Math.PI;
       if (angle > 90 || angle < -90) angle += 180;
-      return `<text transform="translate(${mid.x} ${mid.y}) rotate(${angle})" y="${-wall.thickness / 2 - 8}" ${textStyle}>${label}</text>`;
+      return `<text transform="translate(${mid.x} ${mid.y}) rotate(${angle})" y="${-wall.thickness / 2 - 8}" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${label}</text>`;
     })
     .join("");
   const roomLabels = rooms
@@ -144,11 +133,21 @@ export function buildExportSvg(
       const { x, y } = room.labelPoint;
       const name = roomNames.get(room)?.name;
       const area = formatSystemArea(room.area, plan.meta.measurementSystem);
-      const label = `x="${x}" dominant-baseline="central" ${textStyle}`;
-      const nameText = name
-        ? `<text ${label} y="${y - ROOM_LABEL_OFFSET}" font-weight="600" xml:space="preserve">${escapeSvgText(name)}</text>`
-        : "";
-      return `${nameText}<text ${label} y="${name ? y + ROOM_LABEL_OFFSET : y}">${area}</text>`;
+      if (!name)
+        return `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${area}</text>`;
+      const label = layoutRoomLabel(room, name, area);
+      const fitText = 'lengthAdjust="spacingAndGlyphs"';
+      const lines = label.nameLines
+        .map(
+          (line) =>
+            `<text x="0" y="${line.y}" textLength="${line.width}" ${fitText} font-weight="600" xml:space="preserve">${escapeSvgText(line.text)}</text>`,
+        )
+        .join("");
+      const title =
+        label.shortened || label.nameLines.length > 1
+          ? `<title>${escapeSvgText(name)}</title>`
+          : "";
+      return `<g transform="translate(${x} ${y}) scale(${label.fontScale})" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" ${textStyle}>${title}${lines}<text x="0" y="${label.area.y}" textLength="${label.area.width}" ${fitText}>${area}</text></g>`;
     })
     .join("");
 

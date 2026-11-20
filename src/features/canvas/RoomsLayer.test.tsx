@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { createInitialPlan, type Plan } from "@app/schema";
 import { useApp } from "@app/store";
+import { DEFAULT_VIEW } from "@app/viewport";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { FloorPlan } from "./FloorPlan";
@@ -36,6 +37,7 @@ function roomPlan(): Plan {
 afterEach(() => {
   cleanup();
   useApp.getState().loadPlan(createInitialPlan());
+  useApp.getState().setView(() => DEFAULT_VIEW);
 });
 
 it("renders rooms beneath walls, ignores doors, and derives enclosure through delete/undo/redo", () => {
@@ -90,6 +92,65 @@ it("updates area from live wall arrays, converts units, and counter-scales label
     });
   });
   expect(layer.textContent).toBe("258.33 ft²");
+});
+
+it("wraps adjacent room names within their own faces at editor zoom", () => {
+  const plan = roomPlan();
+  const roomNames = [
+    { anchor: { x: 90, y: 160 }, name: "Main floor laundry and utility room" },
+    {
+      anchor: { x: 270, y: 160 },
+      name: "Ground floor storage and mechanical room",
+    },
+  ];
+  const resize = ({ x, y }: { x: number; y: number }) => ({
+    x: x * 0.9,
+    y: (y * 320) / 300,
+  });
+  const viewScale = 0.95;
+  const store = useApp.getState();
+  store.loadPlan({
+    ...plan,
+    walls: plan.walls.map((wall) => ({
+      ...wall,
+      a: resize(wall.a),
+      b: resize(wall.b),
+    })),
+    items: [],
+    roomNames,
+  });
+  store.addWall({
+    id: "divider",
+    a: { x: 180, y: 0 },
+    b: { x: 180, y: 320 },
+    thickness: 15,
+  });
+  store.setView(() => ({ ...DEFAULT_VIEW, scale: viewScale }));
+
+  const { container } = render(<FloorPlan />);
+  const labels = [...container.querySelectorAll('[data-layer="rooms"] text')];
+  expect(labels).toHaveLength(2);
+  for (const { anchor, name } of roomNames) {
+    const label = labels.find((node) =>
+      node
+        .getAttribute("transform")
+        ?.startsWith(`translate(${anchor.x} ${anchor.y})`),
+    );
+    expect(label?.getAttribute("transform")).toContain(
+      `scale(${1 / viewScale})`,
+    );
+    const nameLines = [...label!.querySelectorAll('tspan[font-weight="600"]')];
+    const area = label!.querySelector("tspan:last-child")!;
+    expect(nameLines).toHaveLength(2);
+    expect(nameLines.map((line) => line.textContent).join(" ")).toBe(name);
+    expect(area.textContent).toBe("5.76 m²");
+    for (const line of [...nameLines, area]) {
+      expect(line.getAttribute("lengthAdjust")).toBe("spacingAndGlyphs");
+      const halfWidth =
+        Number(line.getAttribute("textLength")) / (2 * viewScale);
+      expect(Math.abs(anchor.x - 180) - halfWidth).toBeGreaterThan(15 / 2);
+    }
+  }
 });
 
 it("restores both names after a shared wall or an exterior boundary is rebuilt", () => {
