@@ -145,10 +145,8 @@ it("wraps adjacent room names within their own faces at editor zoom", () => {
     expect(nameLines.map((line) => line.textContent).join(" ")).toBe(name);
     expect(area.textContent).toBe("5.76 m²");
     for (const line of [...nameLines, area]) {
-      expect(line.getAttribute("lengthAdjust")).toBe("spacingAndGlyphs");
-      const halfWidth =
-        Number(line.getAttribute("textLength")) / (2 * viewScale);
-      expect(Math.abs(anchor.x - 180) - halfWidth).toBeGreaterThan(15 / 2);
+      expect(line.hasAttribute("textLength")).toBe(false);
+      expect(line.hasAttribute("lengthAdjust")).toBe(false);
     }
   }
 });

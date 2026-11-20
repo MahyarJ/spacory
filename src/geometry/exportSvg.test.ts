@@ -201,3 +201,22 @@ it("keeps image dimensions independent of room names and abbreviates long visibl
   expect(markup).toContain(">5.76 m²</text>");
   expect(plan.roomNames[0].name).toBe(name);
 });
+
+it("uses measured glyph widths to wrap labels at their natural proportions", () => {
+  const plan = planOf([
+    wall(0, 0, 180, 0, 10, "a"),
+    wall(180, 0, 180, 320, 10, "b"),
+    wall(180, 320, 0, 320, 10, "c"),
+    wall(0, 320, 0, 0, 10, "d"),
+  ]);
+  plan.roomNames = [{ anchor: { x: 90, y: 160 }, name: "Vestibule storage" }];
+  const { markup } = buildExportSvg(
+    plan,
+    undefined,
+    (text, weight) => text.length * (weight === 600 ? 12 : 6),
+  );
+  expect(markup).toContain(">Vestibule</text>");
+  expect(markup).toContain(">storage</text>");
+  expect(markup).toContain(">5.76 m²</text>");
+  expect(markup).not.toMatch(/textLength=|lengthAdjust=/);
+});

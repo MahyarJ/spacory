@@ -1,7 +1,9 @@
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
+import type { Plan } from "@app/schema";
 import { useApp } from "@app/store";
-import { buildExportSvg } from "@geometry/exportSvg";
+import { buildExportSvg, EXPORT_MARGIN } from "@geometry/exportSvg";
 import { Menu } from "@ui/Menu";
+import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
 import {
   Download,
   FileJson,
@@ -36,8 +38,12 @@ function downloadBlob(blob: Blob, filename: string) {
  *  legible rather than blurry (cm and px are 1:1 on the live canvas). */
 const PNG_EXPORT_SCALE = 2;
 
-function exportPlanAsPng(plan: ReturnType<typeof useApp.getState>["plan"]) {
-  const { markup, width, height } = buildExportSvg(plan);
+function buildProjectExportSvg(plan: Plan) {
+  return buildExportSvg(plan, EXPORT_MARGIN, createRoomLabelMeasurer());
+}
+
+function exportPlanAsPng(plan: Plan) {
+  const { markup, width, height } = buildProjectExportSvg(plan);
   const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
   const svgUrl = URL.createObjectURL(svgBlob);
 
@@ -83,7 +89,7 @@ export function ProjectActions() {
   // skips the canvas step entirely.
   const onExportSvg = () => {
     const plan = useApp.getState().plan;
-    const { markup } = buildExportSvg(plan);
+    const { markup } = buildProjectExportSvg(plan);
     const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
     downloadBlob(blob, `${sanitizeFilename(plan.meta.name)}.svg`);
   };

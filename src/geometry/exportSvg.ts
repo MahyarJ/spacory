@@ -7,7 +7,11 @@ import {
   getWindowGeometry,
 } from "./itemGeometry";
 import { computeWallGeometry, polygonToPoints } from "./junction";
-import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "./roomLabels";
+import {
+  layoutRoomLabel,
+  type MeasureRoomLabel,
+  ROOM_LABEL_FONT_SIZE,
+} from "./roomLabels";
 import { detectRooms, resolveRoomNames } from "./rooms";
 import { getPointOnWall, getWallAngle, getWallLength } from "./wall";
 
@@ -54,6 +58,7 @@ function escapeSvgText(text: string): string {
 export function buildExportSvg(
   plan: Plan,
   margin = EXPORT_MARGIN,
+  measure?: MeasureRoomLabel,
 ): ExportSvgResult {
   const bounds = getPlanBounds(plan);
   const half = EXPORT_EMPTY_PLACEHOLDER_SIZE / 2;
@@ -135,19 +140,18 @@ export function buildExportSvg(
       const area = formatSystemArea(room.area, plan.meta.measurementSystem);
       if (!name)
         return `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${area}</text>`;
-      const label = layoutRoomLabel(room, name, area);
-      const fitText = 'lengthAdjust="spacingAndGlyphs"';
+      const label = layoutRoomLabel(room, name, area, 1, measure);
       const lines = label.nameLines
         .map(
           (line) =>
-            `<text x="0" y="${line.y}" textLength="${line.width}" ${fitText} font-weight="600" xml:space="preserve">${escapeSvgText(line.text)}</text>`,
+            `<text x="0" y="${line.y}" font-weight="600" xml:space="preserve">${escapeSvgText(line.text)}</text>`,
         )
         .join("");
       const title =
         label.shortened || label.nameLines.length > 1
           ? `<title>${escapeSvgText(name)}</title>`
           : "";
-      return `<g transform="translate(${x} ${y}) scale(${label.fontScale})" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" ${textStyle}>${title}${lines}<text x="0" y="${label.area.y}" textLength="${label.area.width}" ${fitText}>${area}</text></g>`;
+      return `<g transform="translate(${x} ${y}) scale(${label.fontScale})" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" ${textStyle}>${title}${lines}<text x="0" y="${label.areaY}">${area}</text></g>`;
     })
     .join("");
 

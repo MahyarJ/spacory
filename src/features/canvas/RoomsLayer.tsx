@@ -4,6 +4,8 @@ import { useApp } from "@app/store";
 import { polygonToPoints } from "@geometry/junction";
 import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "@geometry/roomLabels";
 import type { Room } from "@geometry/rooms";
+import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
+import { useMemo } from "react";
 import styles from "./FloorPlan.module.css";
 
 interface RoomsLayerProps {
@@ -24,6 +26,15 @@ export function RoomsLayer({
   const system = useApp((s) => s.plan.meta.measurementSystem);
   const scale = useApp((s) => s.view.scale);
   const selectable = useApp((s) => s.tool === "select");
+  const measure = useMemo(
+    () =>
+      createRoomLabelMeasurer(
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--sp-font")
+          .trim() || undefined,
+      ),
+    [],
+  );
 
   return (
     <g data-layer="rooms" style={{ pointerEvents: "none" }}>
@@ -31,7 +42,9 @@ export function RoomsLayer({
         const points = polygonToPoints(room.polygon);
         const name = names.get(room)?.name;
         const area = formatSystemArea(room.area, system);
-        const label = name ? layoutRoomLabel(room, name, area, scale) : null;
+        const label = name
+          ? layoutRoomLabel(room, name, area, scale, measure)
+          : null;
         const content = (
           <>
             {label && (label.shortened || label.nameLines.length > 1) && (
@@ -62,19 +75,12 @@ export function RoomsLayer({
                       x={0}
                       y={line.y}
                       fontWeight={600}
-                      textLength={line.width}
-                      lengthAdjust="spacingAndGlyphs"
                       style={{ whiteSpace: "pre" }}
                     >
                       {line.text}
                     </tspan>
                   ))}
-                  <tspan
-                    x={0}
-                    y={label.area.y}
-                    textLength={label.area.width}
-                    lengthAdjust="spacingAndGlyphs"
-                  >
+                  <tspan x={0} y={label.areaY}>
                     {area}
                   </tspan>
                 </>

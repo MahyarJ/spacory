@@ -10,21 +10,16 @@ const segmenter =
     ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
     : null;
 
-interface TextLine {
-  text: string;
-  width: number;
-}
+export type MeasureRoomLabel = (text: string, weight: 400 | 600) => number;
 
 interface RoomLabel {
   fontScale: number;
-  nameLines: (TextLine & { y: number })[];
-  area: { width: number; y: number };
+  nameLines: { text: string; y: number }[];
+  areaY: number;
   shortened: boolean;
 }
 
 function graphemeWidth(char: string): number {
-  // Approximate proportional advances. Both SVG renderers enforce the planned
-  // width so font fallback cannot spread a row into the neighboring face.
   if (/^[\s.,'!:ilI]$/u.test(char)) return ROOM_LABEL_FONT_SIZE * 0.35;
   if (/^[a-z0-9]$/.test(char) && char !== "m" && char !== "w") {
     return ROOM_LABEL_FONT_SIZE * 0.6;
@@ -35,31 +30,50 @@ function graphemeWidth(char: string): number {
   return ROOM_LABEL_FONT_SIZE;
 }
 
-function fitPrefix(text: string, maxWidth: number) {
-  let end = 0;
-  let width = 0;
-  let wordBreak: { end: number; width: number } | undefined;
+function* graphemes(text: string) {
   // The string iterator still keeps surrogate pairs together on older browsers.
   for (const part of segmenter?.segment(text) ?? text) {
-    const segment = typeof part === "string" ? part : part.segment;
-    if (end > 0 && /^\s$/u.test(segment)) wordBreak = { end, width };
-    const next = width + graphemeWidth(segment);
-    if (next > maxWidth) break;
-    end += segment.length;
-    width = next;
+    yield typeof part === "string" ? part : part.segment;
   }
-  return { end, width, wordBreak };
 }
 
-function fitLine(text: string, maxWidth: number): TextLine {
-  const full = fitPrefix(text, maxWidth);
-  if (full.end === text.length) return { text, width: full.width };
-  const markWidth = graphemeWidth(ELLIPSIS);
-  const prefix = fitPrefix(text, maxWidth - markWidth);
-  return {
-    text: text.slice(0, prefix.end) + ELLIPSIS,
-    width: prefix.width + markWidth,
-  };
+// Deterministic fallback for pure exports and environments without canvas.
+function estimateWidth(text: string): number {
+  let width = 0;
+  for (const grapheme of graphemes(text)) width += graphemeWidth(grapheme);
+  return width;
+}
+
+function fitPrefix(
+  text: string,
+  maxWidth: number,
+  measure: (text: string) => number,
+  suffix = "",
+): string {
+  const ends = [0];
+  let end = 0;
+  for (const grapheme of graphemes(text)) {
+    end += grapheme.length;
+    ends.push(end);
+  }
+  let low = 0;
+  let high = ends.length - 1;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (measure(text.slice(0, ends[mid]) + suffix) <= maxWidth) low = mid;
+    else high = mid - 1;
+  }
+  return text.slice(0, ends[low]);
+}
+
+function fitLine(
+  text: string,
+  maxWidth: number,
+  measure: (text: string) => number,
+): string {
+  return measure(text) <= maxWidth
+    ? text
+    : fitPrefix(text, maxWidth, measure, ELLIPSIS) + ELLIPSIS;
 }
 
 /** Width of the largest rectangle centered on the label and staying in the face. */
@@ -85,14 +99,15 @@ function labelHalfHeight(rows: number): number {
   return ((rows - 1) * LINE_HEIGHT) / 2 + ROOM_LABEL_FONT_SIZE / 2 + PADDING;
 }
 
-/** Fit a room's name and area at the same size in the editor and image exports. */
+/** Fit the name and area using the renderer's text measurements. */
 export function layoutRoomLabel(
   room: Room,
   name: string,
   area: string,
   viewScale = 1,
+  measure: MeasureRoomLabel = estimateWidth,
 ): RoomLabel {
-  const areaWidth = fitPrefix(area, Number.POSITIVE_INFINITY).width;
+  const measureName = (text: string) => measure(text, 600);
   let fontScale = 1;
   const widthFor = (rows: number) =>
     (roomWidthAcrossBand(
@@ -102,7 +117,7 @@ export function layoutRoomLabel(
       viewScale) /
       fontScale -
     PADDING * 2;
-  const minWidth = Math.max(areaWidth, graphemeWidth(ELLIPSIS));
+  const minWidth = Math.max(measure(area, 400), measureName(ELLIPSIS));
   if (widthFor(2) < minWidth) {
     // A box this small needs reduced type even for one name line and the full
     // area. Fit both inside the circle that reaches the nearest boundary.
@@ -120,29 +135,35 @@ export function layoutRoomLabel(
     );
   }
 
-  const single = fitLine(name, widthFor(2));
+  const single = fitLine(name, widthFor(2), measureName);
   let names = [single];
-  let shortened = single.text !== name;
+  let shortened = single !== name;
   if (shortened) {
     const wrappedWidth = widthFor(3);
     if (wrappedWidth >= minWidth) {
-      const first = fitPrefix(name, wrappedWidth);
-      const split = first.wordBreak ?? first;
-      const remaining = name.slice(split.end).trimStart();
-      const second = fitLine(remaining, wrappedWidth);
-      names = [{ text: name.slice(0, split.end), width: split.width }, second];
-      shortened = second.text !== remaining;
+      const prefix = fitPrefix(name, wrappedWidth, measureName);
+      const wordBreak = prefix.search(/\s+\S*$/u);
+      const first =
+        wordBreak > 0 &&
+        /\S/u.test(prefix.slice(0, wordBreak)) &&
+        !/^\s/u.test(name.slice(prefix.length))
+          ? prefix.slice(0, wordBreak)
+          : prefix;
+      const remaining = name.slice(first.length).trimStart();
+      const second = fitLine(remaining, wrappedWidth, measureName);
+      names = [first, second];
+      shortened = second !== remaining;
     }
   }
 
   const areaY = (names.length * LINE_HEIGHT) / 2;
   return {
     fontScale,
-    nameLines: names.map((line, index) => ({
-      ...line,
+    nameLines: names.map((text, index) => ({
+      text,
       y: index * LINE_HEIGHT - areaY,
     })),
-    area: { width: areaWidth, y: areaY },
+    areaY,
     shortened,
   };
 }
