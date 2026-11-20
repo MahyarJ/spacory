@@ -42,6 +42,7 @@ import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
+import { RoomFocusLayer } from "./RoomFocusLayer";
 import { RoomNameOptions } from "./RoomNameOptions";
 import { RoomsLayer } from "./RoomsLayer";
 import { SelectionLayer } from "./SelectionLayer";
@@ -890,27 +891,7 @@ export function FloorPlan() {
           <DimensionsLayer />
           <SelectionLayer />
           {tool === "select" && focusedRoomOutline && (
-            <g
-              className={styles.roomFocus}
-              data-layer="room-focus"
-              pointerEvents="none"
-              fill="none"
-              strokeDasharray="6 4"
-              strokeLinejoin="round"
-            >
-              <polygon
-                points={focusedRoomOutline}
-                stroke="var(--sp-bg)"
-                strokeWidth={5}
-                vectorEffect="non-scaling-stroke"
-              />
-              <polygon
-                points={focusedRoomOutline}
-                stroke="var(--sp-accent)"
-                strokeWidth={2.5}
-                vectorEffect="non-scaling-stroke"
-              />
-            </g>
+            <RoomFocusLayer outline={focusedRoomOutline} />
           )}
           <ConnectionPointsLayer />
           <WallEndpointsLayer />
