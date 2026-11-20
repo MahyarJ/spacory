@@ -125,6 +125,9 @@ From the README ("Not yet:"), `docs/DECISIONS.md` scope notes, and code reading:
   export visibility (#119), fixtures (#120), outdoor outlines (#121), straight
   stairs (#122), and return-flight stairs (#123) are ticketed. The original
   dimensioned sample and full draw/edit/undo/reopen/export walkthrough are in #124.
+- **Rooms panel — ticketed in #135, after #117.** List detected rooms with names
+  and areas and synchronize room selection between the panel and canvas.
+  Evaluate thumbnails after trying the list on a representative plan.
 - **Reference image and precision tools** — calibrated tracing (#125), opening
   position (#126), open passages (#127), sliding doors (#128), grid controls
   (#129), placed dimensions (#130), inside-face room areas (#131), and scale print
@@ -778,6 +781,9 @@ pure-logic modules (so the Engineer Agent can add tested logic, not just UI).
 
 Newest first (reverse-chronological). Add each new entry at the **top** of this list.
 
+- 2026-11-20 — Opened #135 to find and select detected rooms from a Rooms panel.
+  It follows #117 and reuses its naming flow. The sample in #124 can help assess
+  whether thumbnails would improve navigation.
 - 2026-11-20 — Created GitHub milestone 1 for drawing, editing, and sharing a
   single-floor home plan. Opened #117 room names, #118 movable text, #119 export
   visibility, #120 starter fixtures, #121 outdoor outlines, #122 straight stairs,
