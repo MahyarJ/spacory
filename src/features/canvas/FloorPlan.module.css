@@ -53,6 +53,10 @@
   visibility: visible;
 }
 
+.roomNameError {
+  flex-basis: 100%;
+}
+
 .roomOptions {
   position: absolute;
   inset: 8px auto auto 8px;

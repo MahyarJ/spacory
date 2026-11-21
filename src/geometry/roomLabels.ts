@@ -1,3 +1,4 @@
+import { graphemes } from "@app/roomName";
 import { distToSegment } from "./hit";
 import type { Room } from "./rooms";
 
@@ -5,10 +6,6 @@ export const ROOM_LABEL_FONT_SIZE = 12;
 const LINE_HEIGHT = 16;
 const PADDING = 10;
 const ELLIPSIS = "…";
-const segmenter =
-  typeof Intl.Segmenter === "function"
-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
-    : null;
 
 export type MeasureRoomLabel = (text: string, weight: 400 | 600) => number;
 
@@ -28,13 +25,6 @@ function graphemeWidth(char: string): number {
     return ROOM_LABEL_FONT_SIZE * 0.72;
   }
   return ROOM_LABEL_FONT_SIZE;
-}
-
-function* graphemes(text: string) {
-  // The string iterator still keeps surrogate pairs together on older browsers.
-  for (const part of segmenter?.segment(text) ?? text) {
-    yield typeof part === "string" ? part : part.segment;
-  }
 }
 
 // Deterministic fallback for pure exports and environments without canvas.

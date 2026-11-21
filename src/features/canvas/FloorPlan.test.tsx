@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { parsePlan, serializePlan } from "@app/io";
 import { loadPersistedHistory } from "@app/persistence";
+import { MAX_ROOM_NAME_LENGTH } from "@app/roomName";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
@@ -266,6 +268,49 @@ describe("FloorPlan touch gestures", () => {
         );
         expect(input.value).toBe(value);
       }
+    });
+
+    it("limits room name edits and preserves an existing long imported name", () => {
+      const plan = enclosedPlan();
+      const importedName = "A".repeat(6000);
+      const anchor = { x: 200, y: 150 };
+      plan.roomNames = [{ anchor, name: importedName }];
+      setup({ tool: "select", plan: parsePlan(serializePlan(plan)) });
+      down(1, anchor.x, anchor.y);
+      up(1, anchor.x, anchor.y);
+
+      const input = screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Room name",
+      });
+      const save = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Save",
+      });
+      expect(input.value).toBe(importedName);
+      expect(screen.queryByRole("alert")).toBeNull();
+
+      const allowed = "🧑🏽‍🔧".repeat(MAX_ROOM_NAME_LENGTH);
+      const tooLong = `${allowed}&`;
+      fireEvent.change(input, { target: { value: tooLong } });
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(screen.getByRole("alert").textContent).toContain(
+        `up to ${MAX_ROOM_NAME_LENGTH} characters`,
+      );
+      expect(save.disabled).toBe(true);
+      fireEvent.submit(input.closest("form")!);
+      act(() => useApp.getState().setSelectedRoomName(tooLong));
+      expect(useApp.getState().plan.roomNames).toEqual([
+        { anchor, name: importedName },
+      ]);
+
+      fireEvent.change(input, { target: { value: allowed } });
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(save.disabled).toBe(false);
+      fireEvent.click(save);
+      expect(useApp.getState().plan.roomNames).toEqual([
+        { anchor, name: allowed },
+      ]);
+      act(() => useApp.getState().undo());
+      expect(input.value).toBe(importedName);
     });
   });
 

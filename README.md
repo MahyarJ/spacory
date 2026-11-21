@@ -29,9 +29,10 @@ connected room structures.
   wall as it moves and resizes
 - 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and
   area in the plan’s units. With Select active, choose a room to add, edit, or
-  clear its name. Labels on the canvas and in SVG and PNG exports wrap or
-  abbreviate to fit, and the editor keeps the full name. Areas are measured to
-  wall centrelines, and doors and windows preserve enclosure
+  clear its name. New names and edits can use up to 80 characters. Labels on
+  the canvas and in SVG and PNG exports wrap or abbreviate to fit, and the
+  editor keeps the full name. Areas are measured to wall centrelines, and
+  doors and windows preserve enclosure
 - 📏 **Dimensions** — every wall shows its length on-canvas; select a wall and
   type an exact length to resize it, or select a single door/window to read its
   current width and type a new one

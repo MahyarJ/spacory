@@ -32,6 +32,7 @@ import {
   undo as undoHistory,
 } from "./history";
 import { loadPersistedHistory, savePersistedHistory } from "./persistence";
+import { isRoomNameTooLong } from "./roomName";
 import {
   createInitialPlan,
   type Item,
@@ -493,7 +494,8 @@ export const useApp = create<AppState>((set, get) => ({
   setSelectedRoomName: (value) => {
     const state = get();
     const { selectedRoomPoint } = state;
-    if (!selectedRoomPoint || state.liveDragItems) return;
+    if (!selectedRoomPoint || state.liveDragItems || isRoomNameTooLong(value))
+      return;
     const plan = history.present;
     const rooms = detectRooms(plan.walls);
     const room = findRoomAt(rooms, selectedRoomPoint);

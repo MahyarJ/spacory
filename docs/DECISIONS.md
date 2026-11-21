@@ -146,6 +146,8 @@ needed and abbreviate with an ellipsis when space runs out. Measuring the
 rendering font preserves the letters' natural proportions. The full name stays
 in the document and is available in the editor and the SVG's title. Image
 dimensions follow plan geometry, regardless of the length of any room name.
+The editor caps newly saved names at 80 characters. Import and reload preserve
+the name text already stored in a plan.
 
 Tab moves keyboard focus between room labels. A dashed outline traces the room
 boundary. Enter or Space selects the room and focuses its name field. The accent
