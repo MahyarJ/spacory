@@ -99,10 +99,12 @@ interface AppState {
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
-  labelSelection: { id: string } | { position: Point; text: string } | null;
+  labelSelection:
+    | { id: string; editing?: boolean }
+    | { position: Point }
+    | null;
   selectLabel: (selection: AppState["labelSelection"]) => void;
-  setNewLabelText: (text: string) => void;
-  saveLabel: (text: string) => void;
+  finishLabelEdit: (text?: string) => void;
   moveSelectedLabel: (id: string, position: Point) => void;
   selectedRoomPoint: Point | null;
   selectRoom: (point: Point) => void;
@@ -529,18 +531,16 @@ export const useApp = create<AppState>((set, get) => ({
   setIsPanning: (p) => set({ isPanning: p }),
   selectNone: () => set(emptySelection()),
   selectLabel: (labelSelection) => set({ ...emptySelection(), labelSelection }),
-  setNewLabelText: (text) =>
-    set(({ labelSelection }) =>
-      labelSelection && "position" in labelSelection
-        ? { labelSelection: { ...labelSelection, text } }
-        : {},
-    ),
-  saveLabel: (text) => {
+  finishLabelEdit: (text) => {
     const state = get();
     const { labelSelection, liveDragItems } = state;
-    if (!labelSelection || liveDragItems || !isPlanLabelText(text)) return;
+    if (!labelSelection || liveDragItems) return;
     const labels = history.present.labels ?? [];
     if ("position" in labelSelection) {
+      if (text === undefined || !isPlanLabelText(text)) {
+        set({ labelSelection: null });
+        return;
+      }
       let id = uid("label");
       while (labels.some((label) => label.id === id)) id = uid("label");
       set({
@@ -553,14 +553,29 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
 
-    const label = labels.find((label) => label.id === labelSelection.id);
-    if (!label || label.text === text) return;
-    set(
-      commitLabels(
-        labels.map((entry) => (entry === label ? { ...label, text } : entry)),
-        state,
-      ),
-    );
+    if (!labelSelection.editing) return;
+    const { id } = labelSelection;
+    if (text !== undefined && !text.trim()) {
+      state.deleteSelected();
+      return;
+    }
+    const label = labels.find((label) => label.id === id);
+    if (
+      label &&
+      text !== undefined &&
+      isPlanLabelText(text) &&
+      label.text !== text
+    ) {
+      set({
+        ...commitLabels(
+          labels.map((entry) => (entry === label ? { ...label, text } : entry)),
+          state,
+        ),
+        labelSelection: { id },
+      });
+    } else {
+      set({ labelSelection: { id } });
+    }
   },
   moveSelectedLabel: (id, position) => {
     const state = get();

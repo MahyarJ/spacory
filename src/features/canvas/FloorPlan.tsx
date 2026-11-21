@@ -1,4 +1,3 @@
-import { DEFAULT_PLAN_LABEL_TEXT } from "@app/planLabel";
 import {
   assertNever,
   type PlanLabel,
@@ -45,13 +44,14 @@ import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { uid } from "../../util/uid";
 import { ConnectionPointsLayer } from "./ConnectionPointsLayer";
 import { DimensionsLayer } from "./DimensionsLayer";
 import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
+import { InlineLabelEditor } from "./InlineLabelEditor";
 import { ItemsLayer } from "./ItemsLayer";
-import { LabelOptions } from "./LabelOptions";
 import { MarqueeLayer } from "./MarqueeLayer";
 import { PlanLabelsLayer } from "./PlanLabelsLayer";
 import { RoomFocusLayer } from "./RoomFocusLayer";
@@ -124,6 +124,7 @@ export function FloorPlan() {
     pointerId: number;
     start: Point;
     label?: PlanLabel;
+    editOnTap?: boolean;
   } | null>(null);
   const [labelPreview, setLabelPreview] = useState<{
     id: string;
@@ -147,6 +148,14 @@ export function FloorPlan() {
     tool === "label" && labelSelection && "position" in labelSelection
       ? labelSelection
       : null;
+  const editingLabel =
+    selectedLabel &&
+    labelSelection &&
+    "id" in labelSelection &&
+    labelSelection.editing
+      ? selectedLabel
+      : undefined;
+  const labelToEdit = editingLabel ?? newLabel;
   const movingLabel =
     labelPreview?.id === selectedLabel?.id ? labelPreview : null;
   const roomNameInput = useRef<HTMLInputElement>(null);
@@ -476,8 +485,14 @@ export function FloorPlan() {
         });
       if (hitLabel) {
         const { label } = hitLabel;
-        selectLabel({ id: label.id });
-        labelPress.current = { pointerId: e.pointerId, start: world, label };
+        const editOnTap = selectedLabel?.id === label.id;
+        if (!editOnTap) selectLabel({ id: label.id });
+        labelPress.current = {
+          pointerId: e.pointerId,
+          start: world,
+          label,
+          editOnTap,
+        };
         return;
       }
 
@@ -804,8 +819,14 @@ export function FloorPlan() {
           x: press.label.position.x + dx,
           y: press.label.position.y + dy,
         });
-      } else if (!press.label && tool === "label" && !moved) {
-        selectLabel({ position: world, text: DEFAULT_PLAN_LABEL_TEXT });
+      } else if (!moved) {
+        if (press.label && press.editOnTap && tool === "select") {
+          const id = press.label.id;
+          // Mount and focus the editor during the pointer gesture.
+          flushSync(() => selectLabel({ id, editing: true }));
+        } else if (!press.label && tool === "label") {
+          flushSync(() => selectLabel({ position: world }));
+        }
       }
       return;
     }
@@ -1027,7 +1048,7 @@ export function FloorPlan() {
             frames={labelFrames}
             selectedId={selectedLabel?.id}
             preview={movingLabel}
-            pending={newLabel}
+            editingId={editingLabel?.id}
             scale={view.scale}
           />
           <MarqueeLayer />
@@ -1042,12 +1063,13 @@ export function FloorPlan() {
           inputRef={roomNameInput}
         />
       )}
-      {selectedLabel && (
-        <LabelOptions key={selectedLabel.id} text={selectedLabel.text} />
-      )}
-      {newLabel && (
-        <LabelOptions
-          key={`new:${newLabel.position.x},${newLabel.position.y}`}
+      {labelToEdit && (
+        <InlineLabelEditor
+          key={editingLabel ? `edit:${editingLabel.id}` : "new"}
+          position={labelToEdit.position}
+          text={editingLabel?.text}
+          view={view}
+          measure={measureLabel}
         />
       )}
       <div className={styles.badge}>

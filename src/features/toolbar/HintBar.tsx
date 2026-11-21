@@ -21,11 +21,19 @@ export function HintBar() {
 
   let text: React.ReactNode = null;
 
-  if (tool === "select") {
+  if (labelSelection && "id" in labelSelection && labelSelection.editing) {
+    text = (
+      <span>
+        Press <kbd>Enter</kbd> or tap away to finish. Clear the text to remove
+        the label.
+      </span>
+    );
+  } else if (tool === "select") {
     if (labelSelection) {
       text = (
         <span>
-          Drag the label to move it. Press <kbd>Delete</kbd> to remove it.
+          Drag to move, click or tap again to edit, or press <kbd>Delete</kbd>{" "}
+          to remove.
         </span>
       );
     } else if (anySel) {
@@ -59,7 +67,12 @@ export function HintBar() {
       );
     }
   } else if (tool === "label") {
-    text = <span>Click or tap anywhere on the plan to add a label.</span>;
+    text = (
+      <span>
+        Click or tap to type a label. Press <kbd>Enter</kbd> or tap away to
+        finish.
+      </span>
+    );
   } else if (tool === "wall") {
     text = (
       <span>Click to start, click again to end a wall. Use grid snapping.</span>

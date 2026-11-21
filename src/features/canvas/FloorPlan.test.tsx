@@ -199,7 +199,7 @@ describe("FloorPlan touch gestures", () => {
       tap(x * 2 + 20, y * 2 + 40);
       expect(document.activeElement).toBe(input());
       fireEvent.change(input(), { target: { value: text } });
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      fireEvent.keyDown(input(), { key: "Enter" });
       expect(labels()?.at(-1)).toMatchObject({ text, position: { x, y } });
     }
     const original = labels();
@@ -225,13 +225,17 @@ describe("FloorPlan touch gestures", () => {
     expect(labels()?.at(-1)?.position).toEqual({ x: 580.5, y: 345 });
 
     tap(1181, 730);
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+    tap(1181, 730);
+    expect(input()).toBe(document.activeElement);
+    expect(labelGraphics()).toHaveLength(3);
     for (const key of ["Backspace", "ArrowLeft", "[", "h", "s"]) {
       expect(fireEvent.keyDown(input(), { key })).toBe(true);
     }
     expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
     expect(labels()?.at(-1)?.text).toBe("Terrace & 茶室 <🌿>");
     fireEvent.change(input(), { target: { value: "Terrace & Patio <🌿>" } });
-    fireEvent.submit(input().closest("form")!);
+    fireEvent.keyDown(input(), { key: "Enter" });
     const edited = labels();
     expect(edited?.at(-1)?.text).toBe("Terrace & Patio <🌿>");
     expect(loadPersistedHistory()?.present.labels).toEqual(edited);
@@ -239,7 +243,9 @@ describe("FloorPlan touch gestures", () => {
       edited,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    tap(1181, 730);
+    fireEvent.change(input(), { target: { value: "" } });
+    tap(1300, 800);
     expect(labelGraphics()).toHaveLength(3);
     selectTool("Undo");
     expect(labels()).toEqual(edited);
@@ -253,39 +259,48 @@ describe("FloorPlan touch gestures", () => {
     expect(detectRooms(walls())).toEqual(rooms);
   });
 
-  it("previews and selects the default text at placement, with readable text at low zoom", () => {
+  it("starts with an empty caret at the placement point and commits inline text on click-away", () => {
     setup({ tool: "label", plan: enclosedPlan() });
     act(() =>
       useApp.getState().setView(() => ({ ...DEFAULT_VIEW, scale: 0.25 })),
     );
     const graphic = () =>
       canvas.querySelector('[data-layer="plan-labels"] text');
-    const place = () => {
-      down(1, 150, 100);
-      up(1, 150, 100);
+    const place = (x = 150) => {
+      down(1, x, 100);
+      up(1, x, 100);
       return screen.getByRole<HTMLInputElement>("textbox", {
         name: "Label text",
       });
     };
     const field = place();
-    expect(field.value).toBe("Label");
+    expect(field.value).toBe("");
     expect(document.activeElement).toBe(field);
-    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 5]);
-    expect(graphic()?.textContent).toBe("Label");
-    expect(graphic()?.getAttribute("x")).toBe("600");
-    expect(graphic()?.getAttribute("y")).toBe("400");
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 0]);
+    expect(field.style.left).toBe("150px");
+    expect(Number.parseFloat(field.style.top)).toBeCloseTo(85.2);
+    expect(graphic()).toBeNull();
     fireEvent.change(field, { target: { value: "Terrace" } });
-    expect(graphic()?.textContent).toBe("Terrace");
+    expect(field.value).toBe("Terrace");
+    fireEvent.keyDown(field, { key: "Enter", isComposing: true });
     expect(useApp.getState().plan.labels).toBeUndefined();
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(field, { key: "Escape" });
     expect(graphic()).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
     expect(loadPersistedHistory()?.past).toHaveLength(0);
 
-    place();
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(graphic()?.textContent).toBe("Label");
-    expect(useApp.getState().plan.labels?.[0]?.text).toBe("Label");
+    fireEvent.change(place(), { target: { value: "Terrace" } });
+    const next = place(250);
+    expect(next.value).toBe("");
+    expect(document.activeElement).toBe(next);
+    expect(graphic()?.textContent).toBe("Terrace");
+    expect(useApp.getState().plan.labels?.[0]).toMatchObject({
+      position: { x: 600, y: 400 },
+      text: "Terrace",
+    });
+    fireEvent.blur(next);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
     const dimension = canvas.querySelector('[data-layer="dimensions"] text');
     expect(
       Number(graphic()?.getAttribute("font-size")) * view().scale,

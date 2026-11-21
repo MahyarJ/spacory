@@ -17,6 +17,10 @@ lines would be too dense to draw. PNG export scales the entire SVG to fit
 within an 8192-pixel side limit and the 16-megapixel canvas limit of older
 iOS WebKit versions.
 
+The inline editor anchors a native text field to the label baseline. Leaving
+the field commits its text before canvas selection can change, and Escape
+cancels the edit. Clearing an existing label removes it, including on touch.
+
 ## Keep measurement inputs compact with larger native tap areas
 
 The floating options bar paints each measurement field at the toolbar's
