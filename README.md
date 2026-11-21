@@ -33,6 +33,10 @@ connected room structures.
   the canvas and in SVG and PNG exports wrap or abbreviate to fit, and the
   editor keeps the full name. Areas are measured to wall centrelines, and
   doors and windows preserve enclosure
+- 🏷️ **Plan labels** — choose **Label** in the main toolbar, click or tap anywhere
+  indoors or outdoors, then enter text and save. Use **Select** to drag a label
+  or to edit or remove it. Labels are included in Fit, autosave, and all
+  export formats.
 - 📏 **Dimensions** — every wall shows its length on-canvas; select a wall and
   type an exact length to resize it, or select a single door/window to read its
   current width and type a new one

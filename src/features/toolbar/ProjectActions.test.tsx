@@ -19,6 +19,13 @@ const cornerPlan = (name: string): Plan => ({
   ...createInitialPlan(),
   meta: { ...createInitialPlan().meta, name },
   walls: [wall(0, 0, 400, 0, "w1"), wall(400, 0, 400, 300, "w2")],
+  labels: [
+    {
+      id: "terrace",
+      position: { x: -300, y: 400 },
+      text: "Terrace & 茶室 <🌿>",
+    },
+  ],
 });
 
 /** Captures what `downloadBlob` handed to the anchor it clicks. */
@@ -107,12 +114,38 @@ describe("ProjectActions — Export menu", () => {
     expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
   });
 
-  it("still rasterizes for PNG rather than saving the SVG markup", () => {
+  it("rasterizes the outdoor label at the shared SVG export dimensions for PNG", async () => {
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(
+      (callback, type) => callback(new Blob([], { type })),
+    );
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+      function (this: HTMLImageElement) {
+        this.dispatchEvent(new Event("load"));
+      },
+    );
+
     render(<ProjectActions />);
     fireEvent.click(openExportMenu()[1]);
-    // PNG goes through an <img> + <canvas>, which resolves asynchronously and
-    // is unsupported in jsdom — the point here is that it did not take the new
-    // synchronous SVG path.
-    expect(downloads).toHaveLength(0);
+    const expected = buildExportSvg(useApp.getState().plan);
+    const [svg] = vi.mocked(URL.createObjectURL).mock.calls[0];
+    const markup = await readBlobText(svg as Blob);
+    const svgDoc = new DOMParser().parseFromString(markup, "image/svg+xml");
+    expect(
+      svgDoc.querySelector('[data-layer="plan-labels"] text')?.textContent,
+    ).toBe("Terrace & 茶室 <🌿>");
+    expect(drawImage).toHaveBeenCalledWith(
+      expect.any(HTMLImageElement),
+      0,
+      0,
+      Math.round(expected.width * 2),
+      Math.round(expected.height * 2),
+    );
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0].filename).toBe("My-Plan.png");
+    expect(downloads[0].blob.type).toBe("image/png");
   });
 });

@@ -11,6 +11,7 @@ export function HintBar() {
   const tool = useApp((s) => s.tool);
   const selW = useApp((s) => s.selectedWalls);
   const selI = useApp((s) => s.selectedItems);
+  const labelSelection = useApp((s) => s.labelSelection);
   const plan = useApp((s) => s.plan);
 
   const anySel = useMemo(() => anySelection(selW, selI), [selW, selI]);
@@ -21,7 +22,13 @@ export function HintBar() {
   let text: React.ReactNode = null;
 
   if (tool === "select") {
-    if (anySel) {
+    if (labelSelection) {
+      text = (
+        <span>
+          Drag the label to move it. Press <kbd>Delete</kbd> to remove it.
+        </span>
+      );
+    } else if (anySel) {
       text = (
         <>
           <span>Shortcuts:</span>
@@ -46,11 +53,13 @@ export function HintBar() {
     } else {
       text = (
         <span>
-          Select a wall or item to edit it, or choose a room to name it.
-          Shift-click to multi-select walls and items.
+          Select a wall, opening, or label to edit it, or choose a room to name
+          it. Shift-click to multi-select walls and items.
         </span>
       );
     }
+  } else if (tool === "label") {
+    text = <span>Click or tap anywhere on the plan to add a label.</span>;
   } else if (tool === "wall") {
     text = (
       <span>Click to start, click again to end a wall. Use grid snapping.</span>

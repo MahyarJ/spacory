@@ -57,7 +57,7 @@
   flex-basis: 100%;
 }
 
-.roomOptions {
+.textOptions {
   position: absolute;
   inset: 8px auto auto 8px;
   max-width: calc(100% - 16px);

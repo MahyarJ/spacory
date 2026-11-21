@@ -5,8 +5,10 @@ import { MAX_ROOM_NAME_LENGTH } from "@app/roomName";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
-import { DEFAULT_VIEW } from "@app/viewport";
+import { DEFAULT_VIEW, MIN_SCALE } from "@app/viewport";
 import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwitch";
+import { Toolbar } from "@features/toolbar/Toolbar";
+import { getPlanBounds } from "@geometry/bounds";
 import { buildExportSvg } from "@geometry/exportSvg";
 import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
@@ -58,7 +60,7 @@ function pointerEvent(
   id: number,
   x: number,
   y: number,
-  init: { button?: number; buttons?: number } = {},
+  init: { button?: number; buttons?: number; pointerType?: string } = {},
 ): Event {
   const event = new MouseEvent(type, {
     bubbles: true,
@@ -69,6 +71,9 @@ function pointerEvent(
     buttons: init.buttons ?? (type === "pointerup" ? 0 : 1),
   });
   Object.defineProperty(event, "pointerId", { value: id });
+  Object.defineProperty(event, "pointerType", {
+    value: init.pointerType ?? "touch",
+  });
   return event;
 }
 
@@ -97,7 +102,7 @@ describe("FloorPlan touch gestures", () => {
     id: number,
     x: number,
     y: number,
-    init?: { button?: number; buttons?: number },
+    init?: { button?: number; buttons?: number; pointerType?: string },
   ) => fireEvent(canvas, pointerEvent("pointerdown", id, x, y, init));
   const move = (
     id: number,
@@ -160,6 +165,143 @@ describe("FloorPlan touch gestures", () => {
     act(() => useApp.getState().undo());
     expect(walls()).toEqual(original);
     expect(useApp.getState().plan.meta.measurementSystem).toBe("metric");
+  });
+
+  it("uses the toolbar to label three areas of one room and the terrace independently", () => {
+    setup({ plan: enclosedPlan() });
+    render(<Toolbar />);
+    const rooms = detectRooms(walls());
+    expect(rooms.map((room) => room.area)).toEqual([120000]);
+    const labels = () => useApp.getState().plan.labels;
+    const input = () => screen.getByRole("textbox", { name: "Label text" });
+    const labelGraphics = () => [
+      ...canvas.querySelectorAll('[data-layer="plan-labels"] text'),
+    ];
+    const selectTool = (name: string) =>
+      fireEvent.click(screen.getByRole("button", { name }));
+    // The test uses client positions, so the result also checks the inverse view transform.
+    act(() =>
+      useApp.getState().setView(() => ({ scale: 2, panX: 20, panY: 40 })),
+    );
+    const tap = (x: number, y: number, pointerType = "touch") => {
+      down(1, x, y, { pointerType });
+      up(1, x, y);
+    };
+
+    selectTool("Label");
+    for (const [text, x, y] of [
+      ["Kitchen", 100, 80],
+      ["Dining", 220, 240],
+      ["Living", 70, 180],
+      ["Terrace & 茶室 <🌿>", 555.5, 330],
+    ] as const) {
+      tap(x * 2 + 20, y * 2 + 40);
+      expect(document.activeElement).toBe(input());
+      fireEvent.change(input(), { target: { value: text } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(labels()?.at(-1)).toMatchObject({ text, position: { x, y } });
+    }
+    const original = labels();
+    expect(
+      original?.map(({ position }) => findRoomAt(rooms, position)?.area),
+    ).toEqual([120000, 120000, 120000, undefined]);
+    expect(labelGraphics().map((label) => label.textContent)).toEqual(
+      original?.map((label) => label.text),
+    );
+
+    selectTool("Select");
+    down(1, 1131, 700, { pointerType: "mouse" });
+    move(1, 1171, 720);
+    expect(
+      labelGraphics().at(-1)?.parentElement?.getAttribute("transform"),
+    ).toBe("translate(575.5 340)");
+    expect(labels()).toEqual(original);
+    up(1, 1181, 730);
+    expect(labels()?.at(-1)?.position).toEqual({ x: 580.5, y: 345 });
+    selectTool("Undo");
+    expect(labels()).toEqual(original);
+    selectTool("Redo");
+    expect(labels()?.at(-1)?.position).toEqual({ x: 580.5, y: 345 });
+
+    tap(1181, 730);
+    for (const key of ["Backspace", "ArrowLeft", "[", "h", "s"]) {
+      expect(fireEvent.keyDown(input(), { key })).toBe(true);
+    }
+    expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
+    expect(labels()?.at(-1)?.text).toBe("Terrace & 茶室 <🌿>");
+    fireEvent.change(input(), { target: { value: "Terrace & Patio <🌿>" } });
+    fireEvent.submit(input().closest("form")!);
+    const edited = labels();
+    expect(edited?.at(-1)?.text).toBe("Terrace & Patio <🌿>");
+    expect(loadPersistedHistory()?.present.labels).toEqual(edited);
+    expect(parsePlan(serializePlan(useApp.getState().plan)).labels).toEqual(
+      edited,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(labelGraphics()).toHaveLength(3);
+    selectTool("Undo");
+    expect(labels()).toEqual(edited);
+    tap(220, 200);
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(labelGraphics().map((label) => label.textContent)).toEqual([
+      "Dining",
+      "Living",
+      "Terrace & Patio <🌿>",
+    ]);
+    expect(detectRooms(walls())).toEqual(rooms);
+  });
+
+  it("abandons a placement or label drag when touch becomes a pinch", () => {
+    const label = {
+      id: "terrace",
+      text: "Terrace",
+      position: { x: 500, y: 350 },
+    };
+    setup({ plan: { ...enclosedPlan(), labels: [label] }, tool: "label" });
+    down(1, 500, 350);
+    down(2, 550, 350);
+    up(2, 550, 350);
+    up(1, 500, 350);
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+
+    act(() => useApp.getState().setTool("select"));
+    down(1, 500, 350);
+    move(1, 540, 370);
+    down(2, 550, 350);
+    up(2, 550, 350);
+    up(1, 540, 370);
+    expect(useApp.getState().plan.labels).toEqual([label]);
+    expect(
+      canvas
+        .querySelector('[data-layer="plan-labels"] > g')
+        ?.getAttribute("transform"),
+    ).toBe("translate(500 350)");
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+  });
+
+  it("fits the full text extent of a distant outdoor label from the toolbar", () => {
+    const plan = {
+      ...enclosedPlan(),
+      labels: [
+        {
+          id: "terrace",
+          text: "Outdoor Terrace",
+          position: { x: 9500, y: -400 },
+        },
+      ],
+    };
+    setup({ plan });
+    render(<Toolbar />);
+    act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    const { scale, panX, panY } = view();
+    const bounds = getPlanBounds(plan)!;
+    expect(scale).toBeLessThan(MIN_SCALE);
+    expect(bounds.minX * scale + panX).toBeGreaterThan(0);
+    expect(bounds.minY * scale + panY).toBeGreaterThan(0);
+    expect(bounds.maxX * scale + panX).toBeLessThan(800);
+    expect(bounds.maxY * scale + panY).toBeLessThan(600);
   });
 
   describe("one finger runs the active tool's gesture", () => {

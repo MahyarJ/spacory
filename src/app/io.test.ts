@@ -211,6 +211,36 @@ describe("parsePlan validation errors", () => {
   });
 });
 
+describe("plan labels", () => {
+  const terrace = {
+    id: "terrace",
+    position: { x: -375.5, y: 1200.25 },
+    text: '  Terrace & 茶室 <🌿> "outside"  ',
+  };
+
+  it("round-trips outdoor text and world coordinates", () => {
+    const imported = parsePlan(serializePlan({ ...plan, labels: [terrace] }));
+    expect(imported.labels).toEqual([terrace]);
+    expect(imported.walls).toEqual(plan.walls);
+  });
+
+  it("preserves the absent labels field for older plans", () => {
+    expect(parsePlan(serializePlan(plan))).not.toHaveProperty("labels");
+  });
+
+  it.each([
+    [null, /"labels" must be an array/],
+    [[null], /labels\[0\] must be an object/],
+    [[{ ...terrace, id: "" }], /labels\[0\]\.id/],
+    [[{ ...terrace, text: " " }], /labels\[0\]\.text/],
+    [[{ ...terrace, text: "First\nsecond" }], /labels\[0\]\.text/],
+    [[{ ...terrace, position: { x: 0, y: "100" } }], /labels\[0\]\.position/],
+    [[terrace, terrace], /Label ids must be unique/],
+  ])("validates imported labels (%j)", (labels, match) => {
+    expect(() => parsePlan(JSON.stringify({ ...plan, labels }))).toThrow(match);
+  });
+});
+
 describe("measurement system metadata", () => {
   it.each([
     "metric",

@@ -3,6 +3,7 @@ import type { Plan } from "@app/schema";
 import { useApp } from "@app/store";
 import { buildExportSvg, EXPORT_MARGIN } from "@geometry/exportSvg";
 import { Menu } from "@ui/Menu";
+import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
 import {
   Download,
@@ -39,7 +40,12 @@ function downloadBlob(blob: Blob, filename: string) {
 const PNG_EXPORT_SCALE = 2;
 
 function buildProjectExportSvg(plan: Plan) {
-  return buildExportSvg(plan, EXPORT_MARGIN, createRoomLabelMeasurer());
+  return buildExportSvg(
+    plan,
+    EXPORT_MARGIN,
+    createRoomLabelMeasurer(),
+    plan.labels?.length ? createPlanLabelMeasurer() : undefined,
+  );
 }
 
 function exportPlanAsPng(plan: Plan) {

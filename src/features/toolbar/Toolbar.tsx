@@ -1,4 +1,5 @@
 import { useApp } from "@app/store";
+import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 
 import clsx from "clsx";
 import {
@@ -9,6 +10,7 @@ import {
   MousePointer2,
   Move,
   Redo2,
+  Type,
   Undo2,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -41,6 +43,7 @@ export function Toolbar() {
           [styles.active]: tool === props.tool,
         })}
         onClick={() => setTool(props.tool)}
+        aria-pressed={tool === props.tool}
       >
         <Icon size={ICON_SIZE} />
         {props.label}
@@ -56,11 +59,12 @@ export function Toolbar() {
         <ToolbarButton tool="wall" label="Wall" icon={BrickWall} />
         <ToolbarButton tool="window" label="Window" icon={Grid2x2} />
         <ToolbarButton tool="door" label="Door" icon={DoorOpen} />
+        <ToolbarButton tool="label" label="Label" icon={Type} />
         <ToolbarButton tool="pan" label="Pan" icon={Move} />
         <button
           type="button"
           className={styles.button}
-          onClick={fitView}
+          onClick={() => fitView(createPlanLabelMeasurer())}
           title="Frame the whole plan in view"
         >
           <Maximize size={ICON_SIZE} />

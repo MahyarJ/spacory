@@ -10,6 +10,12 @@ export interface RoomName {
   name: string;
 }
 
+export interface PlanLabel {
+  id: string;
+  position: Point;
+  text: string;
+}
+
 export interface Wall {
   id: string;
   a: Point;
@@ -67,6 +73,7 @@ export interface Plan {
   walls: Wall[];
   items: Item[];
   roomNames?: RoomName[];
+  labels?: PlanLabel[];
 }
 
 export const createInitialPlan = (): Plan => ({

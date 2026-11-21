@@ -14,7 +14,7 @@ export const VIEW_STORAGE_KEY = "spacory.view";
 /** Bump if the persisted envelope shape changes incompatibly. */
 const VIEW_FORMAT = 1;
 
-/** Zoom bounds — kept in sync with the clamp in `onWheel` (FloorPlan.tsx). */
+/** Normal zoom bounds. Fit can frame a labeled plan below MIN_SCALE. */
 export const MIN_SCALE = 0.2;
 export const MAX_SCALE = 8;
 
@@ -22,8 +22,8 @@ export const MAX_SCALE = 8;
 export const DEFAULT_VIEW: ViewState = { panX: 0, panY: 0, scale: 1 };
 
 /** Clamp a zoom level into the supported range. */
-export function clampScale(scale: number): number {
-  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+export function clampScale(scale: number, minScale = MIN_SCALE): number {
+  return Math.min(MAX_SCALE, Math.max(minScale, scale));
 }
 
 /**
@@ -35,8 +35,7 @@ export const FIT_PADDING = 0.05;
 /**
  * Compute the viewport that frames a content bounding box within a canvas of the
  * given pixel size: zoom so the box (plus a small margin) fits, then center it
- * both ways. The zoom is clamped to [MIN_SCALE, MAX_SCALE], so a tiny plan never
- * zooms past MAX_SCALE and a huge one never past MIN_SCALE.
+ * both ways. Pass a lower minimum when Fit must frame a distant label.
  *
  * Pure — no React, no DOM. Returns DEFAULT_VIEW when there is nothing to frame
  * (`bounds` is null, i.e. an empty plan) or the canvas size is degenerate, so the
@@ -46,6 +45,7 @@ export function computeFitView(
   bounds: Bounds | null,
   viewport: { width: number; height: number },
   padding = FIT_PADDING,
+  minScale = MIN_SCALE,
 ): ViewState {
   if (!bounds || !(viewport.width > 0) || !(viewport.height > 0)) {
     return DEFAULT_VIEW;
@@ -62,7 +62,10 @@ export function computeFitView(
   const scaleX = contentW > 0 ? usableW / contentW : Number.POSITIVE_INFINITY;
   const scaleY = contentH > 0 ? usableH / contentH : Number.POSITIVE_INFINITY;
   const fit = Math.min(scaleX, scaleY);
-  const scale = clampScale(Number.isFinite(fit) ? fit : DEFAULT_VIEW.scale);
+  const scale = clampScale(
+    fit > 0 && Number.isFinite(fit) ? fit : DEFAULT_VIEW.scale,
+    minScale,
+  );
 
   const centerX = (bounds.minX + bounds.maxX) / 2;
   const centerY = (bounds.minY + bounds.maxY) / 2;
@@ -124,7 +127,10 @@ export function computePinchView(
 ): ViewState {
   const startDistance = distance(anchor.a, anchor.b);
   const ratio = startDistance > 0 ? distance(a, b) / startDistance : 1;
-  const scale = clampScale(anchor.view.scale * ratio);
+  const scale = clampScale(
+    anchor.view.scale * ratio,
+    Math.min(MIN_SCALE, anchor.view.scale),
+  );
 
   const from = midpoint(anchor.a, anchor.b);
   const to = midpoint(a, b);
@@ -160,7 +166,7 @@ function getStorage(): Storage | null {
  * else (missing values, corrupt JSON, unknown format) yields null and the
  * caller falls back to DEFAULT_VIEW.
  */
-export function loadPersistedView(): ViewState | null {
+export function loadPersistedView(minScale = MIN_SCALE): ViewState | null {
   const storage = getStorage();
   if (!storage) return null;
   let text: string | null;
@@ -180,7 +186,11 @@ export function loadPersistedView(): ViewState | null {
       !isFiniteNumber(scale)
     )
       return null;
-    return { panX, panY, scale: clampScale(scale) };
+    return {
+      panX,
+      panY,
+      scale: clampScale(scale, scale > 0 ? minScale : MIN_SCALE),
+    };
   } catch {
     return null;
   }

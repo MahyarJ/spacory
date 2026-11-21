@@ -9,6 +9,7 @@ import {
 } from "@geometry/connectivity";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { MIN_OPENING_WIDTH, resizeOpeningWidth } from "@geometry/opening";
+import type { MeasurePlanLabel } from "@geometry/planLabels";
 import { detectRooms, findRoomAt, resolveRoomNames } from "@geometry/rooms";
 import {
   getWallLength,
@@ -32,6 +33,7 @@ import {
   undo as undoHistory,
 } from "./history";
 import { loadPersistedHistory, savePersistedHistory } from "./persistence";
+import { isPlanLabelText } from "./planLabel";
 import { isRoomNameTooLong } from "./roomName";
 import {
   createInitialPlan,
@@ -39,6 +41,7 @@ import {
   isDoor,
   type MeasurementSystem,
   type Plan,
+  type PlanLabel,
   type Point,
   type Wall,
 } from "./schema";
@@ -52,12 +55,14 @@ import { drawingThickness, type ThicknessPreset } from "./thickness";
 import {
   computeFitView,
   DEFAULT_VIEW,
+  FIT_PADDING,
   loadPersistedView,
+  MIN_SCALE,
   savePersistedView,
   type ViewState,
 } from "./viewport";
 
-export type Tool = "select" | "wall" | "window" | "door" | "pan";
+export type Tool = "select" | "wall" | "window" | "door" | "label" | "pan";
 
 type WallLengthEdit = {
   wallId: string;
@@ -80,11 +85,10 @@ interface AppState {
   setView: (fn: (v: ViewState) => ViewState) => void;
   setCanvasSize: (size: { width: number; height: number }) => void;
   /**
-   * Frame the whole plan in the canvas (centered, with a small margin and the
-   * zoom clamped to the scale bounds), or reset to DEFAULT_VIEW when the plan is
-   * empty. Routed through `setView` so the result autosaves like any pan/zoom.
+   * Frame the whole plan in the canvas with a small margin, or reset to
+   * DEFAULT_VIEW when empty. Routed through `setView` so the result autosaves.
    */
-  fitView: () => void;
+  fitView: (measureLabel?: MeasurePlanLabel) => void;
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
   wallThicknessPreset: ThicknessPreset | null;
@@ -92,6 +96,10 @@ interface AppState {
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
+  labelSelection: { id: string } | { position: Point } | null;
+  selectLabel: (selection: AppState["labelSelection"]) => void;
+  saveLabel: (text: string) => void;
+  moveSelectedLabel: (id: string, position: Point) => void;
   selectedRoomPoint: Point | null;
   selectRoom: (point: Point) => void;
   setSelectedRoomName: (name: string) => void;
@@ -342,6 +350,29 @@ function prunedIds(
   return live.size === selected.size ? selected : live;
 }
 
+function emptySelection() {
+  return {
+    selectedWalls: new Set<string>(),
+    selectedItems: new Set<string>(),
+    selectedRoomPoint: null,
+    labelSelection: null,
+    selectedConnectionPoint: null,
+    selectedConnectionPointEndpoints: [],
+  };
+}
+
+function commitLabels(labels: PlanLabel[], state: AppState) {
+  const plan = history.present;
+  return commit(
+    {
+      ...plan,
+      labels,
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    },
+    state,
+  );
+}
+
 // Throttle viewport autosave so continuous wheel/drag stays smooth while still
 // persisting the resting position. Separate from the history autosave above —
 // the viewport is not part of the Plan or the undo history.
@@ -382,11 +413,16 @@ function translateSelectedWallsFollowing(
 export const useApp = create<AppState>((set, get) => ({
   plan: history.present,
   tool: "wall",
-  view: loadPersistedView() ?? DEFAULT_VIEW,
+  view:
+    loadPersistedView(history.present.labels?.length ? 0 : MIN_SCALE) ??
+    DEFAULT_VIEW,
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
-  setTool: (t) =>
-    set(t === "select" ? { tool: t } : { tool: t, selectedRoomPoint: null }),
+  setTool: (tool) => {
+    if (tool === "label") set({ ...emptySelection(), tool });
+    else if (tool === "select" && get().tool === "select") set({ tool });
+    else set({ tool, selectedRoomPoint: null, labelSelection: null });
+  },
   setMeasurementSystem: (measurementSystem) => {
     const state = get();
     if (state.plan.meta.measurementSystem === measurementSystem) return;
@@ -432,11 +468,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!Number.isFinite(t)) return;
     set({ currentWallThickness: Math.max(1, t), wallThicknessPreset: null });
   },
-  selectedWalls: new Set(),
-  selectedItems: new Set(),
-  selectedRoomPoint: null,
-  selectedConnectionPoint: null,
-  selectedConnectionPointEndpoints: [],
+  ...emptySelection(),
   addWall: (w) => {
     const next: Plan = {
       ...get().plan,
@@ -469,26 +501,72 @@ export const useApp = create<AppState>((set, get) => ({
         ? {}
         : { canvasSize: size },
     ),
-  fitView: () => {
+  fitView: (measureLabel) => {
     const { plan, canvasSize, setView } = get();
-    const next = computeFitView(getPlanBounds(plan), canvasSize);
+    const next = computeFitView(
+      getPlanBounds(plan, measureLabel),
+      canvasSize,
+      FIT_PADDING,
+      plan.labels?.length ? 0 : MIN_SCALE,
+    );
     setView(() => next);
   },
   setIsPanning: (p) => set({ isPanning: p }),
-  selectNone: () =>
-    set({
-      selectedWalls: new Set(),
-      selectedItems: new Set(),
-      selectedRoomPoint: null,
-      selectedConnectionPoint: null,
-      selectedConnectionPointEndpoints: [],
-    }),
+  selectNone: () => set(emptySelection()),
+  selectLabel: (labelSelection) => set({ ...emptySelection(), labelSelection }),
+  saveLabel: (text) => {
+    const state = get();
+    const { labelSelection, liveDragItems } = state;
+    if (!labelSelection || liveDragItems || !isPlanLabelText(text)) return;
+    const labels = history.present.labels ?? [];
+    if ("position" in labelSelection) {
+      let id = uid("label");
+      while (labels.some((label) => label.id === id)) id = uid("label");
+      set({
+        ...commitLabels(
+          [...labels, { id, position: labelSelection.position, text }],
+          state,
+        ),
+        labelSelection: null,
+      });
+      return;
+    }
+
+    const label = labels.find((label) => label.id === labelSelection.id);
+    if (!label || label.text === text) return;
+    set(
+      commitLabels(
+        labels.map((entry) => (entry === label ? { ...label, text } : entry)),
+        state,
+      ),
+    );
+  },
+  moveSelectedLabel: (id, position) => {
+    const state = get();
+    const { labelSelection } = state;
+    if (
+      state.tool !== "select" ||
+      !labelSelection ||
+      !("id" in labelSelection) ||
+      labelSelection.id !== id ||
+      state.liveDragItems
+    )
+      return;
+    const labels = history.present.labels ?? [];
+    const label = labels.find((label) => label.id === id);
+    if (!label || pointsEqual(label.position, position)) return;
+    set(
+      commitLabels(
+        labels.map((entry) =>
+          entry === label ? { ...label, position } : entry,
+        ),
+        state,
+      ),
+    );
+  },
   selectRoom: (point) =>
     set({
-      selectedWalls: new Set(),
-      selectedItems: new Set(),
-      selectedConnectionPoint: null,
-      selectedConnectionPointEndpoints: [],
+      ...emptySelection(),
       selectedRoomPoint: point,
     }),
   setSelectedRoomName: (value) => {
@@ -532,6 +610,7 @@ export const useApp = create<AppState>((set, get) => ({
         selectedWalls: ws,
         selectedItems: additive ? s.selectedItems : new Set(),
         selectedRoomPoint: null,
+        labelSelection: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
       };
@@ -544,13 +623,14 @@ export const useApp = create<AppState>((set, get) => ({
         selectedItems: is,
         selectedWalls: additive ? s.selectedWalls : new Set(),
         selectedRoomPoint: null,
+        labelSelection: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
       };
     }),
   selectConnectionPoint: (point) =>
     set((s) => ({
-      selectedRoomPoint: null,
+      ...emptySelection(),
       selectedConnectionPoint: point,
       // Snapshot the junction's membership once, at grab time — the live drag
       // and nudge translate exactly this set (see `selectedConnectionPointEndpoints`).
@@ -558,11 +638,21 @@ export const useApp = create<AppState>((set, get) => ({
         s.plan.walls,
         point,
       ),
-      selectedWalls: new Set(),
-      selectedItems: new Set(),
     })),
   deleteSelected: () => {
-    const { selectedWalls, selectedItems, plan } = get();
+    const state = get();
+    const { selectedWalls, selectedItems, labelSelection, plan } = state;
+    if (labelSelection && "id" in labelSelection) {
+      if (state.liveDragItems) return;
+      const labels = history.present.labels ?? [];
+      const remaining = labels.filter(
+        (label) => label.id !== labelSelection.id,
+      );
+      if (remaining.length !== labels.length) {
+        set({ ...commitLabels(remaining, state), labelSelection: null });
+      }
+      return;
+    }
     if (selectedWalls.size === 0 && selectedItems.size === 0) return;
     const next: Plan = {
       ...plan,
@@ -720,6 +810,7 @@ export const useApp = create<AppState>((set, get) => ({
         get().currentWallThickness,
       ),
       selectedConnectionPoint: null,
+      labelSelection: null,
       selectedConnectionPointEndpoints: [],
     });
   },
@@ -735,6 +826,7 @@ export const useApp = create<AppState>((set, get) => ({
         get().currentWallThickness,
       ),
       selectedConnectionPoint: null,
+      labelSelection: null,
       selectedConnectionPointEndpoints: [],
     });
   },
@@ -754,6 +846,7 @@ export const useApp = create<AppState>((set, get) => ({
       selectedWalls: new Set(),
       selectedItems: new Set(),
       selectedRoomPoint: null,
+      labelSelection: null,
       marquee: null,
       // Loading a document ends any in-progress drag; drop its pre-drag snapshot
       // so a stale one can't reconcile the new plan against the old doc's items.
