@@ -13,11 +13,18 @@ import {
   type WallEndpointRef,
 } from "@geometry/connectivity";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
+import { computeWallGeometry } from "@geometry/junction";
 import {
   MIN_OPENING_WIDTH,
   openingPlacementFromOffsets,
 } from "@geometry/opening";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
+import {
+  detectRooms,
+  findRoomAt,
+  type Room,
+  resolveRoomNames,
+} from "@geometry/rooms";
 import { applyInverseViewTransform, snapToGrid } from "@geometry/snap";
 import {
   findNearestWall,
@@ -26,9 +33,10 @@ import {
   getWallLength,
   MIN_WALL_LENGTH,
 } from "@geometry/wall";
+import { wallDimensions } from "@geometry/wallDimensions";
 import clsx from "clsx";
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { uid } from "../../util/uid";
 import { ConnectionPointsLayer } from "./ConnectionPointsLayer";
 import { DimensionsLayer } from "./DimensionsLayer";
@@ -36,6 +44,8 @@ import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
+import { RoomFocusLayer } from "./RoomFocusLayer";
+import { RoomNameOptions } from "./RoomNameOptions";
 import { RoomsLayer } from "./RoomsLayer";
 import { SelectionLayer } from "./SelectionLayer";
 import { WallEndpointsLayer } from "./WallEndpointsLayer";
@@ -65,9 +75,54 @@ export function FloorPlan() {
   const selectItem = useApp((s) => s.selectItem);
   const selectConnectionPoint = useApp((s) => s.selectConnectionPoint);
   const selectNone = useApp((s) => s.selectNone);
+  const selectRoom = useApp((s) => s.selectRoom);
+  const selectedRoomPoint = useApp((s) => s.selectedRoomPoint);
   const marquee = useApp((s) => s.marquee);
   const setMarquee = useApp((s) => s.setMarquee);
   const canvasSize = useApp((s) => s.canvasSize);
+
+  const rooms = useMemo(() => detectRooms(plan.walls), [plan.walls]);
+  const measurementSystem = plan.meta.measurementSystem;
+  const dimensions = useMemo(
+    () => wallDimensions(plan.walls, measurementSystem, view.scale),
+    [plan.walls, measurementSystem, view.scale],
+  );
+  const wallGeometry = useMemo(
+    () => computeWallGeometry(plan.walls),
+    [plan.walls],
+  );
+  const paintedWalls = useMemo(
+    () => [...wallGeometry.walls.values(), ...wallGeometry.junctions],
+    [wallGeometry],
+  );
+  const roomNames = useMemo(
+    () => resolveRoomNames(rooms, plan.roomNames),
+    [rooms, plan.roomNames],
+  );
+  const selectedRoom = selectedRoomPoint
+    ? findRoomAt(rooms, selectedRoomPoint)
+    : undefined;
+  const [focusedRoomOutline, setFocusedRoomOutline] = useState<string | null>(
+    null,
+  );
+  const roomTap = useRef(false);
+  const roomNameInput = useRef<HTMLInputElement>(null);
+  const focusRoomName = useRef(false);
+
+  useLayoutEffect(() => {
+    if (selectedRoom && focusRoomName.current) {
+      focusRoomName.current = false;
+      roomNameInput.current?.focus();
+    }
+  }, [selectedRoom]);
+
+  const activateRoom = (room: Room) => {
+    if (room === selectedRoom) roomNameInput.current?.focus();
+    else {
+      focusRoomName.current = true;
+      selectRoom(room.labelPoint);
+    }
+  };
 
   const [drawingWall, setDrawingWall] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
@@ -170,6 +225,8 @@ export function FloorPlan() {
 
       switch (e.key.toLowerCase()) {
         case "escape":
+          if (useApp.getState().selectedRoomPoint)
+            useApp.getState().selectNone();
           setDrawingWall(null);
           setOpening(null);
           setDragging(false);
@@ -272,6 +329,7 @@ export function FloorPlan() {
   // before a re-render.
   const abortGesture = () => {
     if (useApp.getState().liveDragItems) useApp.getState().cancelLiveDrag();
+    roomTap.current = false;
     setMoving(null);
     setMovingPoint(null);
     setMovingEndpoint(null);
@@ -432,11 +490,11 @@ export function FloorPlan() {
         return;
       }
 
-      // Start marquee if clicking on empty space
+      // An interior tap selects a room, while a drag can marquee from the same spot.
+      roomTap.current = !additive && Boolean(findRoomAt(rooms, world));
       setMarquee({ x0: world.x, y0: world.y, x1: world.x, y1: world.y });
 
-      // empty: clear if not additive
-      if (!additive) selectNone();
+      if (!additive && !roomTap.current) selectNone();
       return;
     }
 
@@ -674,6 +732,24 @@ export function FloorPlan() {
       return;
     }
     if (marquee) {
+      const canSelectRoom = roomTap.current;
+      roomTap.current = false;
+      if (canSelectRoom) {
+        const world = toWorld(e.clientX, e.clientY);
+        const room = findRoomAt(rooms, { x: marquee.x0, y: marquee.y0 });
+        if (
+          tool === "select" &&
+          room &&
+          Math.hypot(world.x - marquee.x0, world.y - marquee.y0) * view.scale <=
+            5 &&
+          findRoomAt(rooms, world) === room
+        ) {
+          selectRoom(room.labelPoint);
+          setMarquee(null);
+          return;
+        }
+        selectNone();
+      }
       const r = rectFrom(marquee.x0, marquee.y0, marquee.x1, marquee.y1);
       // select items
       for (const item of plan.items) {
@@ -818,11 +894,22 @@ export function FloorPlan() {
         <title>Floor plan canvas</title>
         <g transform={viewTransform}>
           <GridLayer width={canvasSize.width} height={canvasSize.height} />
-          <RoomsLayer />
-          <WallsLayer />
+          <RoomsLayer
+            rooms={rooms}
+            names={roomNames}
+            paintedWalls={paintedWalls}
+            dimensions={dimensions}
+            selectedRoom={selectedRoom}
+            activateRoom={activateRoom}
+            onRoomFocus={setFocusedRoomOutline}
+          />
+          <WallsLayer geometry={wallGeometry} />
           <ItemsLayer />
-          <DimensionsLayer />
+          <DimensionsLayer dimensions={dimensions} scale={view.scale} />
           <SelectionLayer />
+          {tool === "select" && focusedRoomOutline && (
+            <RoomFocusLayer outline={focusedRoomOutline} />
+          )}
           <ConnectionPointsLayer />
           <WallEndpointsLayer />
           <WallResizePreview />
@@ -831,6 +918,13 @@ export function FloorPlan() {
           {openingPreview}
         </g>
       </svg>
+      {tool === "select" && selectedRoom && (
+        <RoomNameOptions
+          key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}
+          name={roomNames.get(selectedRoom)?.name ?? ""}
+          inputRef={roomNameInput}
+        />
+      )}
       <div className={styles.badge}>
         Tool: {tool} • Scale: {view.scale.toFixed(2)} • Pan: (
         {view.panX.toFixed(0)}, {view.panY.toFixed(0)})

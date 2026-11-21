@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
+import { parsePlan, serializePlan } from "@app/io";
+import { loadPersistedHistory } from "@app/persistence";
+import { MAX_ROOM_NAME_LENGTH } from "@app/roomName";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
 import { DEFAULT_VIEW } from "@app/viewport";
 import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwitch";
+import { buildExportSvg } from "@geometry/exportSvg";
+import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
   act,
   cleanup,
@@ -27,6 +32,18 @@ const cornerPlan = (): Plan => ({
   ...createInitialPlan(),
   walls: [wall(0, 0, 400, 0, "w1"), wall(400, 0, 400, 300, "w2")],
 });
+
+const enclosedPlan = (): Plan => {
+  const plan = cornerPlan();
+  return {
+    ...plan,
+    walls: [
+      ...plan.walls,
+      wall(400, 300, 0, 300, "w3"),
+      wall(0, 300, 0, 0, "w4"),
+    ],
+  };
+};
 
 /**
  * jsdom implements neither `PointerEvent` nor pointer capture, so synthesize the
@@ -171,6 +188,199 @@ describe("FloorPlan touch gestures", () => {
       expect(view().panX).toBeCloseTo(40);
       expect(view().panY).toBeCloseTo(90);
       expect(view().scale).toBe(DEFAULT_VIEW.scale);
+    });
+
+    it("selects a room interior, saves a name, and keeps marquee selection available", () => {
+      setup({ tool: "select", plan: enclosedPlan() });
+      const room = () => canvas.querySelector('[data-layer="rooms"]');
+      expect(room()?.textContent).toBe("12 m²");
+
+      down(1, 260, 180);
+      up(1, 261, 180);
+      const name = "Cuisine & 茶室 <🏠>";
+      fireEvent.change(screen.getByRole("textbox", { name: "Room name" }), {
+        target: { value: name },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(room()?.textContent).toBe(`${name}12 m²`);
+      expect(loadPersistedHistory()?.present.roomNames).toEqual([
+        { anchor: { x: 200, y: 150 }, name },
+      ]);
+
+      down(1, 200, 150);
+      move(1, 450, 350);
+      up(1, 450, 350);
+      expect(screen.queryByRole("textbox", { name: "Room name" })).toBeNull();
+      expect(useApp.getState().selectedWalls).toEqual(new Set(["w2", "w3"]));
+    });
+
+    it("can choose, rename and clear a room from the keyboard with undo and redo", () => {
+      setup({ tool: "select", plan: enclosedPlan() });
+      const oldName = "Dining room";
+      const newName = "Study";
+      const label = screen.getByRole("button", { name: "Room, 12 m²" });
+      const focusOutline = () =>
+        canvas.querySelector('[data-layer="room-focus"] polygon');
+      act(() => label.focus());
+      expect(focusOutline()?.getAttribute("points")).toBe(
+        label.querySelector("polygon")?.getAttribute("points"),
+      );
+      expect(label.getAttribute("aria-pressed")).toBe("false");
+      expect(screen.queryByRole("textbox", { name: "Room name" })).toBeNull();
+
+      fireEvent.keyDown(label, { key: "Enter" });
+      const input = screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Room name",
+      });
+      expect(document.activeElement).toBe(input);
+      expect(focusOutline()).toBeNull();
+      expect(label.getAttribute("aria-pressed")).toBe("true");
+
+      const save = (value: string) => {
+        fireEvent.change(input, { target: { value } });
+        fireEvent.submit(input.closest("form")!);
+      };
+      save(oldName);
+      expect(screen.getByRole("button", { name: `${oldName}, 12 m²` })).toBe(
+        label,
+      );
+      save(newName);
+      expect(screen.getByRole("button", { name: `${newName}, 12 m²` })).toBe(
+        label,
+      );
+
+      const clear = screen.getByRole("button", { name: "Clear" });
+      clear.focus();
+      fireEvent.click(clear);
+      expect(document.activeElement).toBe(input);
+      expect(label.getAttribute("aria-label")).toBe("Room, 12 m²");
+      expect(input.value).toBe("");
+
+      for (const value of [newName, oldName, ""]) {
+        act(() => useApp.getState().undo());
+        expect(label.getAttribute("aria-label")).toBe(
+          `${value || "Room"}, 12 m²`,
+        );
+        expect(input.value).toBe(value);
+      }
+      for (const value of [oldName, newName, ""]) {
+        act(() => useApp.getState().redo());
+        expect(label.getAttribute("aria-label")).toBe(
+          `${value || "Room"}, 12 m²`,
+        );
+        expect(input.value).toBe(value);
+      }
+    });
+
+    it("names the surrounding and nested rooms separately by pointer and keyboard", () => {
+      const plan = createInitialPlan();
+      plan.walls = [
+        wall(0, 0, 600, 0, "o1"),
+        wall(600, 0, 600, 480, "o2"),
+        wall(600, 480, 0, 480, "o3"),
+        wall(0, 480, 0, 0, "o4"),
+        wall(100, 80, 500, 80, "i1"),
+        wall(500, 80, 500, 400, "i2"),
+        wall(500, 400, 100, 400, "i3"),
+        wall(100, 400, 100, 80, "i4"),
+      ];
+      setup({ tool: "select", plan });
+      const outer = screen.getByRole("button", { name: "Room, 28.8 m²" });
+      const inner = screen.getByRole("button", { name: "Room, 12.8 m²" });
+      expect(outer.querySelector("text")?.getAttribute("transform")).not.toBe(
+        inner.querySelector("text")?.getAttribute("transform"),
+      );
+      const input = () =>
+        screen.getByRole<HTMLInputElement>("textbox", { name: "Room name" });
+      const save = (value: string) => {
+        fireEvent.change(input(), { target: { value } });
+        fireEvent.submit(input().closest("form")!);
+      };
+
+      down(1, 50, 240);
+      up(1, 50, 240);
+      expect(outer.getAttribute("aria-pressed")).toBe("true");
+      expect(inner.getAttribute("aria-pressed")).toBe("false");
+      save("Hall");
+
+      fireEvent.keyDown(inner, { key: "Enter" });
+      expect(input().value).toBe("");
+      save("Study");
+      const persisted = loadPersistedHistory()!.present;
+      const imported = parsePlan(serializePlan(persisted));
+      const rooms = detectRooms(imported.walls);
+      expect(
+        imported.roomNames?.map(({ anchor, name }) => [
+          name,
+          findRoomAt(rooms, anchor)?.area,
+        ]),
+      ).toEqual([
+        ["Hall", 288000],
+        ["Study", 128000],
+      ]);
+      act(() => useApp.getState().loadPlan(imported));
+      fireEvent.keyDown(screen.getByRole("button", { name: "Hall, 28.8 m²" }), {
+        key: "Enter",
+      });
+      expect(input().value).toBe("Hall");
+
+      const svg = new DOMParser().parseFromString(
+        buildExportSvg(imported).markup,
+        "image/svg+xml",
+      );
+      const labels = [...svg.querySelectorAll('[data-layer="room-areas"] > g')];
+      expect(
+        labels.map(
+          (label) =>
+            label.querySelector('text[font-weight="600"]')?.textContent,
+        ),
+      ).toEqual(["Hall", "Study"]);
+      expect(
+        new Set(labels.map((label) => label.getAttribute("transform"))).size,
+      ).toBe(2);
+    });
+
+    it("limits room name edits and preserves an existing long imported name", () => {
+      const plan = enclosedPlan();
+      const importedName = "A".repeat(6000);
+      const anchor = { x: 200, y: 150 };
+      plan.roomNames = [{ anchor, name: importedName }];
+      setup({ tool: "select", plan: parsePlan(serializePlan(plan)) });
+      down(1, anchor.x, anchor.y);
+      up(1, anchor.x, anchor.y);
+
+      const input = screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Room name",
+      });
+      const save = screen.getByRole<HTMLButtonElement>("button", {
+        name: "Save",
+      });
+      expect(input.value).toBe(importedName);
+      expect(screen.queryByRole("alert")).toBeNull();
+
+      const allowed = "🧑🏽‍🔧".repeat(MAX_ROOM_NAME_LENGTH);
+      const tooLong = `${allowed}&`;
+      fireEvent.change(input, { target: { value: tooLong } });
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(screen.getByRole("alert").textContent).toContain(
+        `up to ${MAX_ROOM_NAME_LENGTH} characters`,
+      );
+      expect(save.disabled).toBe(true);
+      fireEvent.submit(input.closest("form")!);
+      act(() => useApp.getState().setSelectedRoomName(tooLong));
+      expect(useApp.getState().plan.roomNames).toEqual([
+        { anchor, name: importedName },
+      ]);
+
+      fireEvent.change(input, { target: { value: allowed } });
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(save.disabled).toBe(false);
+      fireEvent.click(save);
+      expect(useApp.getState().plan.roomNames).toEqual([
+        { anchor, name: allowed },
+      ]);
+      act(() => useApp.getState().undo());
+      expect(input.value).toBe(importedName);
     });
   });
 

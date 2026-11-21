@@ -56,6 +56,16 @@ describe("serializePlan / parsePlan round-trip", () => {
     expect(door.props).toEqual({ hingeEdge: "end", swingSide: "inside" });
   });
 
+  it("preserves ordered custom names and anchors even in an open plan", () => {
+    const roomNames = [
+      { anchor: { x: 120.5, y: -40 }, name: "  Cuisine & 茶室 <🏠>  " },
+      { anchor: { x: 150, y: 50 }, name: "Dining" },
+    ];
+    const parsed = parsePlan(serializePlan({ ...plan, roomNames }));
+    expect(parsed.roomNames).toEqual(roomNames);
+    expect(parsed.walls).toEqual(plan.walls);
+  });
+
   it("refreshes updatedAt to a valid ISO timestamp on import", () => {
     const parsed = parsePlan(serializePlan(plan));
     expect(() => new Date(parsed.meta.updatedAt).toISOString()).not.toThrow();
@@ -96,7 +106,10 @@ describe("parsePlan normalization", () => {
     });
     const parsed = parsePlan(text);
     expect(parsed.version).toBe(PLAN_VERSION);
-    expect(parsed.walls).toHaveLength(1);
+    expect(parsed.walls).toEqual([
+      { id: "w", a: { x: 0, y: 0 }, b: { x: 10, y: 0 }, thickness: 8 },
+    ]);
+    expect(parsed).not.toHaveProperty("roomNames");
   });
 
   it("falls back to defaults for missing/invalid meta fields", () => {
@@ -134,6 +147,18 @@ describe("parsePlan normalization", () => {
 describe("parsePlan validation errors", () => {
   const expectError = (text: string, match: RegExp) =>
     expect(() => parsePlan(text)).toThrow(match);
+
+  it.each([
+    [{}, /"roomNames" must be an array/],
+    [[null], /roomNames\[0\] must be an object/],
+    [[{ name: " ", anchor: { x: 100, y: 100 } }], /roomNames\[0\]\.name/],
+    [
+      [{ name: "Kitchen", anchor: { x: "100", y: 100 } }],
+      /roomNames\[0\]\.anchor/,
+    ],
+  ])("validates optional room-name metadata (%j)", (roomNames, match) => {
+    expectError(JSON.stringify({ ...plan, roomNames }), match);
+  });
 
   it("rejects non-JSON input", () => {
     expect(() => parsePlan("{not json")).toThrow(PlanParseError);

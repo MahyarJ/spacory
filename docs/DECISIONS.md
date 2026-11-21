@@ -122,6 +122,10 @@ faces merge. An interior point re-matches by point-in-polygon into whichever fac
 now contains it, which is how a user already thinks of a label ("it sits here").
 Re-matching is cheap and degrades gracefully — a point stranded outside every face
 (its room was opened up) just goes unplaced rather than corrupting anything.
+When several anchors share a face, the first name in document order is visible.
+Renaming keeps that record's anchor. Clearing removes the visible record and
+reveals the next name in document order if another anchor shares the face. Other
+anchors remain available when the room boundaries change again.
 
 **Why this is tractable now specifically.** Face detection is well-behaved on a
 planar *straight-line* graph but a mess against mid-span crossings. The just-landed
@@ -132,15 +136,29 @@ needs arrived with that change; this is the moment to answer it.
 **Area measurement.** The first rooms layer measures centreline polygons in cm²
 and converts using the square of the display-unit factor. Wall thickness is not
 subtracted, so this is not net usable interior area. Rooms are memoized from the
-current wall array during rendering, including live edits; no room state or history
-entries are created. Labels use the area centroid when it is strictly inside the room, keeping
-placement independent of extra collinear junctions. If a concave room’s centroid
-is outside or on its boundary, a horizontal interior interval supplies the fallback.
+current wall array during rendering, including live edits. History records user
+edits to names. Nested faces own their own interiors. The surrounding room uses
+a point outside each enclosed face for selection, new name anchors, and label
+placement. The area reading still measures each room's centreline outline.
+Named labels fit between the painted wall polygons, junction fills, wall
+dimensions, and the door hinge, leaf, and arc. Open space within the swing can
+hold a label. Labels can shift within the same face to stay clear, wrap
+to a second line when needed and abbreviate with an ellipsis when space runs out.
+The visible position can shift as wall thickness changes, while the stored name
+anchor stays fixed. Font measurement preserves the letters' natural proportions.
+The full name stays in the document and is available in the editor and the SVG's title. Image
+dimensions follow plan geometry, regardless of the length of any room name.
+The editor caps newly saved names at 80 characters. Import and reload preserve
+the name text already stored in a plan.
+
+Tab moves keyboard focus between room labels. A dashed outline traces the room
+boundary. Enter or Space selects the room and focuses its name field. The accent
+fill indicates selection.
 
 **Scope / what's deferred.** Openings don't affect enclosure (a door in a wall
 doesn't open the polygon — enclosure is pure wall topology), and open/partial plans
-simply yield fewer faces. Holes/islands (a free-standing column inside a room, a
-room within a room) are a v2 concern, not part of the first cut. The
+simply yield fewer faces. Subtracting holes and islands from area measurements
+remains a separate feature. The
 product-facing choices (auto-name vs. blank, area shown always vs. on-select, fill
 in MVP) live in the feature issue, not here.
 

@@ -1,4 +1,11 @@
-import type { DoorItem, Item, Point, Wall, WindowItem } from "@app/schema";
+import {
+  type DoorItem,
+  type Item,
+  isDoor,
+  type Point,
+  type Wall,
+  type WindowItem,
+} from "@app/schema";
 import {
   getPointOnWall,
   getWallAngle,
@@ -34,6 +41,8 @@ export interface DoorGeometry {
   /** Arc radius — equal to the opening length. */
   radius: number;
 }
+
+export const DOOR_HINGE_RADIUS = 3;
 
 function openingRect(
   wall: Wall,
@@ -146,6 +155,73 @@ export function getDoorSweepPoints(geometry: DoorGeometry): Point[] {
     }
   }
   return points;
+}
+
+/** A segment envelope padded both perpendicular to the stroke and at the ends. */
+function paddedSegment(a: Point, b: Point, pad: number): Point[] {
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const alongX = ((b.x - a.x) / length) * pad;
+  const alongY = ((b.y - a.y) / length) * pad;
+  return [
+    { x: a.x - alongX - alongY, y: a.y - alongY + alongX },
+    { x: b.x + alongX - alongY, y: b.y + alongY + alongX },
+    { x: b.x + alongX + alongY, y: b.y + alongY - alongX },
+    { x: a.x - alongX + alongY, y: a.y - alongY - alongX },
+  ];
+}
+
+/** Footprints of the painted hinge, leaf, and arc, leaving the open quadrant usable. */
+export function doorSwingFootprints(
+  items: Item[],
+  wallsById: ReadonlyMap<string, Wall>,
+  viewScale = 1,
+): Point[][] {
+  // The SVG leaf and arc use the default 1px stroke. On the canvas they
+  // are non-scaling, so their world-space footprint grows as we zoom out.
+  const halfStroke = 0.5 / viewScale;
+  const segments = 12;
+  const step = Math.PI / (2 * segments);
+  return items.flatMap((item) => {
+    if (!isDoor(item)) return [];
+    const wall = wallsById.get(item.wallAttach.wallId);
+    if (!wall) return [];
+    const { hinge, tipClosed, tipOpen, radius } = getDoorGeometry(item, wall);
+    const r = DOOR_HINGE_RADIUS;
+    const footprints = [
+      [
+        { x: hinge.x - r, y: hinge.y - r },
+        { x: hinge.x + r, y: hinge.y - r },
+        { x: hinge.x + r, y: hinge.y + r },
+        { x: hinge.x - r, y: hinge.y + r },
+      ],
+    ];
+    if (!radius) return footprints;
+    footprints.push(paddedSegment(hinge, tipOpen, halfStroke));
+    // The arc can bow away from each chord by at most this sagitta. Include
+    // that distance in addition to the stroke so no curve falls in a gap.
+    const arcPad = halfStroke + Math.abs(radius) * (1 - Math.cos(step / 2));
+    let previous = tipClosed;
+    for (let i = 1; i <= segments; i++) {
+      const cos = Math.cos(i * step);
+      const sin = Math.sin(i * step);
+      const next =
+        i === segments
+          ? tipOpen
+          : {
+              x:
+                hinge.x +
+                (tipClosed.x - hinge.x) * cos +
+                (tipOpen.x - hinge.x) * sin,
+              y:
+                hinge.y +
+                (tipClosed.y - hinge.y) * cos +
+                (tipOpen.y - hinge.y) * sin,
+            };
+      footprints.push(paddedSegment(previous, next, arcPad));
+      previous = next;
+    }
+    return footprints;
+  });
 }
 
 /** SVG path `d` for a door's 90° swing arc, from the closed tip to the open tip. */

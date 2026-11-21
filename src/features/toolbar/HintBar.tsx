@@ -46,7 +46,8 @@ export function HintBar() {
     } else {
       text = (
         <span>
-          Click walls or items to select. Shift-click to multi-select.
+          Select a wall or item to edit it, or choose a room to name it.
+          Shift-click to multi-select walls and items.
         </span>
       );
     }

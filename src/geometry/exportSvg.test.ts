@@ -150,3 +150,87 @@ it("uses the plan's system for measurements in shared SVG/PNG markup", () => {
   expect(imperial.width).toBe(metric.width);
   expect(imperial.height).toBe(metric.height);
 });
+
+it("exports visible names as escaped Unicode text next to the area", () => {
+  const plan = planOf([
+    wall(0, 0, 400, 0, 10, "a"),
+    wall(400, 0, 400, 300, 10, "b"),
+    wall(400, 300, 0, 300, 10, "c"),
+    wall(0, 300, 0, 0, 10, "d"),
+  ]);
+  plan.roomNames = [
+    { anchor: { x: 100, y: 150 }, name: 'Cuisine & 茶室 <🏠> "special"' },
+    { anchor: { x: 300, y: 150 }, name: "Hidden while merged" },
+    { anchor: { x: 500, y: 150 }, name: "Unenclosed" },
+  ];
+  const { markup } = buildExportSvg(plan);
+  expect(markup).toContain('Cuisine &amp; 茶室 &lt;🏠&gt; "special"</text>');
+  expect(markup).toContain(">12 m²</text>");
+  expect(markup).not.toContain("Hidden while merged");
+  expect(markup).not.toContain("Unenclosed");
+});
+
+it("replaces XML-invalid display characters while preserving the saved text", () => {
+  const plan = planOf([
+    wall(0, 0, 400, 0, 10, "a"),
+    wall(400, 0, 400, 300, 10, "b"),
+    wall(400, 300, 0, 300, 10, "c"),
+    wall(0, 300, 0, 0, 10, "d"),
+  ]);
+  const name = "Room\u0000\uD800\uFFFE🏠\r";
+  plan.roomNames = [{ anchor: { x: 100, y: 150 }, name }];
+  expect(buildExportSvg(plan).markup).toContain("Room���🏠&#13;</text>");
+  expect(plan.roomNames[0].name).toBe(name);
+});
+
+it("keeps image dimensions independent of room names and abbreviates long visible labels", () => {
+  const plan = planOf([
+    wall(0, 0, 180, 0, 10, "a"),
+    wall(180, 0, 180, 320, 10, "b"),
+    wall(180, 320, 0, 320, 10, "c"),
+    wall(0, 320, 0, 0, 10, "d"),
+  ]);
+  const unnamed = buildExportSvg(plan);
+  const name = "A".repeat(6000);
+  plan.roomNames = [{ anchor: { x: 90, y: 160 }, name }];
+  const { markup, width, height } = buildExportSvg(plan);
+  expect(width).toBe(unnamed.width);
+  expect(height).toBe(unnamed.height);
+  expect(markup).toContain(`<title>${name}</title>`);
+  expect(markup).toMatch(/font-weight="600"[^>]*>A+…<\/text>/);
+  expect(markup).toContain(">5.76 m²</text>");
+  expect(plan.roomNames[0].name).toBe(name);
+});
+
+it("uses measured glyph widths to wrap labels at their natural proportions", () => {
+  const plan = planOf([
+    wall(0, 0, 180, 0, 10, "a"),
+    wall(180, 0, 180, 320, 10, "b"),
+    wall(180, 320, 0, 320, 10, "c"),
+    wall(0, 320, 0, 0, 10, "d"),
+  ]);
+  plan.roomNames = [{ anchor: { x: 90, y: 160 }, name: "Vestibule storage" }];
+  const { markup } = buildExportSvg(
+    plan,
+    undefined,
+    (text, weight) => text.length * (weight === 600 ? 12 : 6),
+  );
+  expect(markup).toContain(">Vestibule</text>");
+  expect(markup).toContain(">storage</text>");
+  expect(markup).toContain(">5.76 m²</text>");
+  expect(markup).not.toMatch(/textLength=|lengthAdjust=/);
+});
+
+it("preserves the name in the SVG title when walls fill the entire face", () => {
+  const plan = planOf([
+    wall(0, 0, 80, 0, 100, "a"),
+    wall(80, 0, 80, 80, 100, "b"),
+    wall(80, 80, 0, 80, 100, "c"),
+    wall(0, 80, 0, 0, 100, "d"),
+  ]);
+  plan.roomNames = [{ anchor: { x: 40, y: 40 }, name: "Coats & linen" }];
+  const { markup } = buildExportSvg(plan);
+  expect(markup).toContain("<title>Coats &amp; linen</title>");
+  expect(markup).not.toContain('font-weight="600"');
+  expect(markup).toContain(">0.64 m²</text>");
+});
