@@ -1,3 +1,4 @@
+import { DEFAULT_PLAN_LABEL_TEXT } from "@app/planLabel";
 import {
   assertNever,
   type PlanLabel,
@@ -23,7 +24,7 @@ import {
   MIN_OPENING_WIDTH,
   openingPlacementFromOffsets,
 } from "@geometry/opening";
-import { planLabelRect } from "@geometry/planLabels";
+import { planLabelCanvasScale, planLabelRect } from "@geometry/planLabels";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
 import {
   detectRooms,
@@ -129,21 +130,22 @@ export function FloorPlan() {
     position: Point;
   } | null>(null);
   const measureLabel = useMemo(createPlanLabelMeasurer, []);
+  const labelScale = planLabelCanvasScale(view.scale);
   const labelFrames = useMemo(
     () =>
       plan.labels?.map((label) => ({
         label,
-        rect: planLabelRect(label, measureLabel),
+        rect: planLabelRect(label, measureLabel, labelScale),
       })) ?? [],
-    [plan.labels, measureLabel],
+    [plan.labels, measureLabel, labelScale],
   );
   const selectedLabel =
     tool === "select" && labelSelection && "id" in labelSelection
       ? plan.labels?.find((label) => label.id === labelSelection.id)
       : undefined;
-  const labelPosition =
+  const newLabel =
     tool === "label" && labelSelection && "position" in labelSelection
-      ? labelSelection.position
+      ? labelSelection
       : null;
   const movingLabel =
     labelPreview?.id === selectedLabel?.id ? labelPreview : null;
@@ -803,7 +805,7 @@ export function FloorPlan() {
           y: press.label.position.y + dy,
         });
       } else if (!press.label && tool === "label" && !moved) {
-        selectLabel({ position: world });
+        selectLabel({ position: world, text: DEFAULT_PLAN_LABEL_TEXT });
       }
       return;
     }
@@ -1025,7 +1027,7 @@ export function FloorPlan() {
             frames={labelFrames}
             selectedId={selectedLabel?.id}
             preview={movingLabel}
-            pending={labelPosition}
+            pending={newLabel}
             scale={view.scale}
           />
           <MarqueeLayer />
@@ -1043,8 +1045,10 @@ export function FloorPlan() {
       {selectedLabel && (
         <LabelOptions key={selectedLabel.id} text={selectedLabel.text} />
       )}
-      {labelPosition && (
-        <LabelOptions key={`new:${labelPosition.x},${labelPosition.y}`} />
+      {newLabel && (
+        <LabelOptions
+          key={`new:${newLabel.position.x},${newLabel.position.y}`}
+        />
       )}
       <div className={styles.badge}>
         Tool: {tool} • Scale: {view.scale.toFixed(2)} • Pan: (

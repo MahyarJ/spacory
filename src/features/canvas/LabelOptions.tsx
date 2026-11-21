@@ -1,4 +1,4 @@
-import { isPlanLabelText } from "@app/planLabel";
+import { DEFAULT_PLAN_LABEL_TEXT, isPlanLabelText } from "@app/planLabel";
 import { useApp } from "@app/store";
 import { useLayoutEffect, useRef, useState } from "react";
 import styles from "./FloorPlan.module.css";
@@ -7,13 +7,23 @@ export function LabelOptions({ text }: { text?: string }) {
   const saveLabel = useApp((s) => s.saveLabel);
   const removeLabel = useApp((s) => s.deleteSelected);
   const selectNone = useApp((s) => s.selectNone);
+  const newText = useApp((s) =>
+    s.labelSelection && "position" in s.labelSelection
+      ? s.labelSelection.text
+      : undefined,
+  );
+  const setNewLabelText = useApp((s) => s.setNewLabelText);
   const input = useRef<HTMLInputElement>(null);
-  const [draft, setDraft] = useState(text ?? "");
+  const [edit, setEdit] = useState(text ?? "");
   const creating = text === undefined;
+  const draft = creating ? (newText ?? DEFAULT_PLAN_LABEL_TEXT) : edit;
   const canSave = draft !== text && isPlanLabelText(draft);
 
   useLayoutEffect(() => {
-    if (creating) input.current?.focus();
+    if (creating) {
+      input.current?.focus();
+      input.current?.select();
+    }
   }, [creating]);
 
   return (
@@ -30,7 +40,10 @@ export function LabelOptions({ text }: { text?: string }) {
           ref={input}
           type="text"
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          placeholder={creating ? DEFAULT_PLAN_LABEL_TEXT : undefined}
+          onChange={(event) =>
+            (creating ? setNewLabelText : setEdit)(event.target.value)
+          }
           onKeyDown={(event) => {
             if (event.key === "Escape") selectNone();
           }}

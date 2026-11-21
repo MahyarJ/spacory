@@ -10,6 +10,7 @@ import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwit
 import { Toolbar } from "@features/toolbar/Toolbar";
 import { getPlanBounds } from "@geometry/bounds";
 import { buildExportSvg } from "@geometry/exportSvg";
+import { planLabelCanvasScale } from "@geometry/planLabels";
 import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
   act,
@@ -252,6 +253,45 @@ describe("FloorPlan touch gestures", () => {
     expect(detectRooms(walls())).toEqual(rooms);
   });
 
+  it("previews and selects the default text at placement, with readable text at low zoom", () => {
+    setup({ tool: "label", plan: enclosedPlan() });
+    act(() =>
+      useApp.getState().setView(() => ({ ...DEFAULT_VIEW, scale: 0.25 })),
+    );
+    const graphic = () =>
+      canvas.querySelector('[data-layer="plan-labels"] text');
+    const place = () => {
+      down(1, 150, 100);
+      up(1, 150, 100);
+      return screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Label text",
+      });
+    };
+    const field = place();
+    expect(field.value).toBe("Label");
+    expect(document.activeElement).toBe(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 5]);
+    expect(graphic()?.textContent).toBe("Label");
+    expect(graphic()?.getAttribute("x")).toBe("600");
+    expect(graphic()?.getAttribute("y")).toBe("400");
+    fireEvent.change(field, { target: { value: "Terrace" } });
+    expect(graphic()?.textContent).toBe("Terrace");
+    expect(useApp.getState().plan.labels).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(graphic()).toBeNull();
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    place();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(graphic()?.textContent).toBe("Label");
+    expect(useApp.getState().plan.labels?.[0]?.text).toBe("Label");
+    const dimension = canvas.querySelector('[data-layer="dimensions"] text');
+    expect(
+      Number(graphic()?.getAttribute("font-size")) * view().scale,
+    ).toBeGreaterThan(Number(dimension?.getAttribute("font-size")));
+  });
+
   it("abandons a placement or label drag when touch becomes a pinch", () => {
     const label = {
       id: "terrace",
@@ -296,7 +336,7 @@ describe("FloorPlan touch gestures", () => {
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
     fireEvent.click(screen.getByRole("button", { name: "Fit" }));
     const { scale, panX, panY } = view();
-    const bounds = getPlanBounds(plan)!;
+    const bounds = getPlanBounds(plan, undefined, planLabelCanvasScale(scale))!;
     expect(scale).toBeLessThan(MIN_SCALE);
     expect(bounds.minX * scale + panX).toBeGreaterThan(0);
     expect(bounds.minY * scale + panY).toBeGreaterThan(0);

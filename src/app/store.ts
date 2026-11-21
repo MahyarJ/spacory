@@ -9,7 +9,10 @@ import {
 } from "@geometry/connectivity";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { MIN_OPENING_WIDTH, resizeOpeningWidth } from "@geometry/opening";
-import type { MeasurePlanLabel } from "@geometry/planLabels";
+import {
+  type MeasurePlanLabel,
+  planLabelCanvasScale,
+} from "@geometry/planLabels";
 import { detectRooms, findRoomAt, resolveRoomNames } from "@geometry/rooms";
 import {
   getWallLength,
@@ -96,8 +99,9 @@ interface AppState {
   setCurrentWallThickness: (t: number) => void;
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
-  labelSelection: { id: string } | { position: Point } | null;
+  labelSelection: { id: string } | { position: Point; text: string } | null;
   selectLabel: (selection: AppState["labelSelection"]) => void;
+  setNewLabelText: (text: string) => void;
   saveLabel: (text: string) => void;
   moveSelectedLabel: (id: string, position: Point) => void;
   selectedRoomPoint: Point | null;
@@ -501,17 +505,36 @@ export const useApp = create<AppState>((set, get) => ({
     ),
   fitView: (measureLabel) => {
     const { plan, canvasSize, setView } = get();
+    const minScale = plan.labels?.length ? 0 : MIN_SCALE;
     const next = computeFitView(
       getPlanBounds(plan, measureLabel),
       canvasSize,
       FIT_PADDING,
-      plan.labels?.length ? 0 : MIN_SCALE,
+      minScale,
     );
-    setView(() => next);
+    if (plan.labels?.length && planLabelCanvasScale(next.scale) > 1) {
+      // Reserve space for the largest world footprint the canvas can render.
+      const enlarged = getPlanBounds(
+        plan,
+        measureLabel,
+        planLabelCanvasScale(MIN_SCALE),
+      );
+      setView(() =>
+        computeFitView(enlarged, canvasSize, FIT_PADDING, minScale),
+      );
+    } else {
+      setView(() => next);
+    }
   },
   setIsPanning: (p) => set({ isPanning: p }),
   selectNone: () => set(emptySelection()),
   selectLabel: (labelSelection) => set({ ...emptySelection(), labelSelection }),
+  setNewLabelText: (text) =>
+    set(({ labelSelection }) =>
+      labelSelection && "position" in labelSelection
+        ? { labelSelection: { ...labelSelection, text } }
+        : {},
+    ),
   saveLabel: (text) => {
     const state = get();
     const { labelSelection, liveDragItems } = state;
