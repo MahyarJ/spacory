@@ -5,6 +5,18 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Plan labels use world coordinates and shared text bounds
+
+Plan labels store a plain text line and a world position at the horizontal
+center of its baseline. The canvas and image exports share a base world font
+size. The canvas enlarges the text to at least 16 pixels at normal zoom levels
+and Fit reserves space for the enlarged glyph bounds. On very wide labeled
+plans, Fit can lower the zoom limit. Wheel and pinch can return to that scale,
+and the viewport preserves the limit on reload. The grid is hidden if its
+lines would be too dense to draw. PNG export scales the entire SVG to fit
+within an 8192-pixel side limit and the 16-megapixel canvas limit of older
+iOS WebKit versions.
+
 ## Keep measurement inputs compact with larger native tap areas
 
 The floating options bar paints each measurement field at the toolbar's

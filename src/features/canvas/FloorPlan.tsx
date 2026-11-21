@@ -1,4 +1,10 @@
-import { assertNever, type Point, type Wall } from "@app/schema";
+import { DEFAULT_PLAN_LABEL_TEXT } from "@app/planLabel";
+import {
+  assertNever,
+  type PlanLabel,
+  type Point,
+  type Wall,
+} from "@app/schema";
 import { useApp } from "@app/store";
 import {
   type CanvasPoint,
@@ -18,6 +24,7 @@ import {
   MIN_OPENING_WIDTH,
   openingPlacementFromOffsets,
 } from "@geometry/opening";
+import { planLabelCanvasScale, planLabelRect } from "@geometry/planLabels";
 import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
 import {
   detectRooms,
@@ -34,6 +41,7 @@ import {
   MIN_WALL_LENGTH,
 } from "@geometry/wall";
 import { wallDimensions } from "@geometry/wallDimensions";
+import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -43,7 +51,9 @@ import { DimensionsLayer } from "./DimensionsLayer";
 import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { ItemsLayer } from "./ItemsLayer";
+import { LabelOptions } from "./LabelOptions";
 import { MarqueeLayer } from "./MarqueeLayer";
+import { PlanLabelsLayer } from "./PlanLabelsLayer";
 import { RoomFocusLayer } from "./RoomFocusLayer";
 import { RoomNameOptions } from "./RoomNameOptions";
 import { RoomsLayer } from "./RoomsLayer";
@@ -59,6 +69,8 @@ type Opening = {
   currentOffset: number;
   thickness: number;
 };
+
+const LABEL_DRAG_THRESHOLD = 5; // CSS pixels, regardless of zoom
 
 export function FloorPlan() {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -77,6 +89,8 @@ export function FloorPlan() {
   const selectNone = useApp((s) => s.selectNone);
   const selectRoom = useApp((s) => s.selectRoom);
   const selectedRoomPoint = useApp((s) => s.selectedRoomPoint);
+  const labelSelection = useApp((s) => s.labelSelection);
+  const selectLabel = useApp((s) => s.selectLabel);
   const marquee = useApp((s) => s.marquee);
   const setMarquee = useApp((s) => s.setMarquee);
   const canvasSize = useApp((s) => s.canvasSize);
@@ -106,6 +120,35 @@ export function FloorPlan() {
     null,
   );
   const roomTap = useRef(false);
+  const labelPress = useRef<{
+    pointerId: number;
+    start: Point;
+    label?: PlanLabel;
+  } | null>(null);
+  const [labelPreview, setLabelPreview] = useState<{
+    id: string;
+    position: Point;
+  } | null>(null);
+  const measureLabel = useMemo(createPlanLabelMeasurer, []);
+  const labelScale = planLabelCanvasScale(view.scale);
+  const labelFrames = useMemo(
+    () =>
+      plan.labels?.map((label) => ({
+        label,
+        rect: planLabelRect(label, measureLabel, labelScale),
+      })) ?? [],
+    [plan.labels, measureLabel, labelScale],
+  );
+  const selectedLabel =
+    tool === "select" && labelSelection && "id" in labelSelection
+      ? plan.labels?.find((label) => label.id === labelSelection.id)
+      : undefined;
+  const newLabel =
+    tool === "label" && labelSelection && "position" in labelSelection
+      ? labelSelection
+      : null;
+  const movingLabel =
+    labelPreview?.id === selectedLabel?.id ? labelPreview : null;
   const roomNameInput = useRef<HTMLInputElement>(null);
   const focusRoomName = useRef(false);
 
@@ -225,8 +268,13 @@ export function FloorPlan() {
 
       switch (e.key.toLowerCase()) {
         case "escape":
-          if (useApp.getState().selectedRoomPoint)
+          if (
+            useApp.getState().selectedRoomPoint ||
+            useApp.getState().labelSelection
+          )
             useApp.getState().selectNone();
+          labelPress.current = null;
+          setLabelPreview(null);
           setDrawingWall(null);
           setOpening(null);
           setDragging(false);
@@ -330,6 +378,8 @@ export function FloorPlan() {
   const abortGesture = () => {
     if (useApp.getState().liveDragItems) useApp.getState().cancelLiveDrag();
     roomTap.current = false;
+    labelPress.current = null;
+    setLabelPreview(null);
     setMoving(null);
     setMovingPoint(null);
     setMovingEndpoint(null);
@@ -407,7 +457,30 @@ export function FloorPlan() {
     const world = toWorld(e.clientX, e.clientY);
     const additive = e.shiftKey;
 
+    if (tool === "label" && e.button === 0) {
+      labelPress.current = { pointerId: e.pointerId, start: world };
+      return;
+    }
+
     if (tool === "select") {
+      const hitLabel =
+        e.button === 0 &&
+        labelFrames.findLast(({ rect }) => {
+          const pad = (e.pointerType === "touch" ? 10 : 2) / view.scale;
+          return pointInRect(world, {
+            x: rect.x - pad,
+            y: rect.y - pad,
+            w: rect.w + 2 * pad,
+            h: rect.h + 2 * pad,
+          });
+        });
+      if (hitLabel) {
+        const { label } = hitLabel;
+        selectLabel({ id: label.id });
+        labelPress.current = { pointerId: e.pointerId, start: world, label };
+        return;
+      }
+
       // test items first
       const hitI = [...plan.items].findLast((i) => {
         const w = plan.walls.find((w) => w.id === i.wallAttach.wallId);
@@ -564,6 +637,25 @@ export function FloorPlan() {
 
     const world = toWorld(e.clientX, e.clientY);
     setCursor(world);
+    const press = labelPress.current;
+    if (press?.pointerId === e.pointerId) {
+      if (press.label && tool === "select") {
+        const dx = world.x - press.start.x;
+        const dy = world.y - press.start.y;
+        setLabelPreview(
+          Math.hypot(dx, dy) * view.scale > LABEL_DRAG_THRESHOLD
+            ? {
+                id: press.label.id,
+                position: {
+                  x: press.label.position.x + dx,
+                  y: press.label.position.y + dy,
+                },
+              }
+            : null,
+        );
+      }
+      return;
+    }
     if (marquee) {
       setMarquee({ ...marquee, x1: world.x, y1: world.y });
       return;
@@ -699,6 +791,24 @@ export function FloorPlan() {
     }
     if (releasePointer(e.pointerId)) return;
     if (isPanning) setIsPanning(false);
+    const press = labelPress.current;
+    if (press?.pointerId === e.pointerId) {
+      labelPress.current = null;
+      setLabelPreview(null);
+      const world = toWorld(e.clientX, e.clientY);
+      const dx = world.x - press.start.x;
+      const dy = world.y - press.start.y;
+      const moved = Math.hypot(dx, dy) * view.scale > LABEL_DRAG_THRESHOLD;
+      if (press.label && moved) {
+        useApp.getState().moveSelectedLabel(press.label.id, {
+          x: press.label.position.x + dx,
+          y: press.label.position.y + dy,
+        });
+      } else if (!press.label && tool === "label" && !moved) {
+        selectLabel({ position: world, text: DEFAULT_PLAN_LABEL_TEXT });
+      }
+      return;
+    }
     if (dragging && drawingWall && tool === "wall") {
       const world = toWorld(e.clientX, e.clientY);
       const snapped = snapToGrid(world, plan.meta.gridSize);
@@ -821,7 +931,7 @@ export function FloorPlan() {
     const factor = Math.exp(delta * 0.001);
     const worldBefore = toWorld(e.clientX, e.clientY);
     setView((v) => {
-      const newScale = clampScale(v.scale * factor);
+      const newScale = clampScale(v.scale * factor, v.minScale);
       const rect = svgRef.current!.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;
@@ -880,8 +990,8 @@ export function FloorPlan() {
       <svg
         className={clsx(
           styles.floorplan,
-          moving && styles.moving,
-          tool === "select" && !moving && styles.select,
+          (moving || movingLabel) && styles.moving,
+          tool === "select" && !moving && !movingLabel && styles.select,
         )}
         ref={svgRef}
         onContextMenu={(e) => e.preventDefault()}
@@ -913,6 +1023,13 @@ export function FloorPlan() {
           <ConnectionPointsLayer />
           <WallEndpointsLayer />
           <WallResizePreview />
+          <PlanLabelsLayer
+            frames={labelFrames}
+            selectedId={selectedLabel?.id}
+            preview={movingLabel}
+            pending={newLabel}
+            scale={view.scale}
+          />
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}
@@ -923,6 +1040,14 @@ export function FloorPlan() {
           key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}
           name={roomNames.get(selectedRoom)?.name ?? ""}
           inputRef={roomNameInput}
+        />
+      )}
+      {selectedLabel && (
+        <LabelOptions key={selectedLabel.id} text={selectedLabel.text} />
+      )}
+      {newLabel && (
+        <LabelOptions
+          key={`new:${newLabel.position.x},${newLabel.position.y}`}
         />
       )}
       <div className={styles.badge}>

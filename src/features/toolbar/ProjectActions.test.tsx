@@ -19,6 +19,13 @@ const cornerPlan = (name: string): Plan => ({
   ...createInitialPlan(),
   meta: { ...createInitialPlan().meta, name },
   walls: [wall(0, 0, 400, 0, "w1"), wall(400, 0, 400, 300, "w2")],
+  labels: [
+    {
+      id: "terrace",
+      position: { x: -300, y: 400 },
+      text: "Terrace & 茶室 <🌿>",
+    },
+  ],
 });
 
 /** Captures what `downloadBlob` handed to the anchor it clicks. */
@@ -107,12 +114,87 @@ describe("ProjectActions — Export menu", () => {
     expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
   });
 
-  it("still rasterizes for PNG rather than saving the SVG markup", () => {
+  it.each([
+    { description: "at the normal resolution", x: -300, y: 400, limit: "none" },
+    {
+      description: "within the canvas area limit",
+      x: 9500,
+      y: 9500,
+      limit: "area",
+    },
+    {
+      description: "within the canvas side limit",
+      x: 9500,
+      y: 0,
+      limit: "side",
+    },
+  ])("rasterizes the entire plan with an outdoor label $description", async ({
+    x,
+    y,
+    limit,
+  }) => {
+    const plan = cornerPlan("My Plan!");
+    const label = plan.labels![0];
+    plan.labels = [{ ...label, position: { x, y } }];
+    useApp.getState().loadPlan(plan);
+
+    const drawImage =
+      vi.fn<
+        (
+          image: HTMLImageElement,
+          x: number,
+          y: number,
+          width: number,
+          height: number,
+        ) => void
+      >();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(
+      (callback, type) => callback(new Blob([], { type })),
+    );
+    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+      function (this: HTMLImageElement) {
+        this.dispatchEvent(new Event("load"));
+      },
+    );
+
     render(<ProjectActions />);
     fireEvent.click(openExportMenu()[1]);
-    // PNG goes through an <img> + <canvas>, which resolves asynchronously and
-    // is unsupported in jsdom — the point here is that it did not take the new
-    // synchronous SVG path.
-    expect(downloads).toHaveLength(0);
+    const expected = buildExportSvg(plan);
+    const [svg] = vi.mocked(URL.createObjectURL).mock.calls[0];
+    const markup = await readBlobText(svg as Blob);
+    const svgDoc = new DOMParser().parseFromString(markup, "image/svg+xml");
+    expect(
+      svgDoc.querySelector('[data-layer="plan-labels"] text')?.textContent,
+    ).toBe(label.text);
+    expect(markup).toBe(expected.markup);
+    const [[, , , width, height]] = drawImage.mock.calls;
+    expect(drawImage).toHaveBeenCalledWith(
+      expect.any(HTMLImageElement),
+      0,
+      0,
+      width,
+      height,
+    );
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+    expect(
+      Math.abs(height - (width * expected.height) / expected.width),
+    ).toBeLessThan(2);
+    expect(Math.max(width, height)).toBeLessThanOrEqual(8192);
+    expect(width * height).toBeLessThanOrEqual(4096 ** 2);
+    if (limit === "none") {
+      expect(width).toBe(Math.round(expected.width * 2));
+      expect(height).toBe(Math.round(expected.height * 2));
+    } else if (limit === "area") {
+      expect(width * height).toBeGreaterThan(16_000_000);
+    } else {
+      expect(width).toBe(8192);
+    }
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0].filename).toBe("My-Plan.png");
+    expect(downloads[0].blob.type).toBe("image/png");
   });
 });

@@ -1,4 +1,5 @@
 import { useApp } from "@app/store";
+import { MIN_SCALE } from "@app/viewport";
 import { useMemo } from "react";
 
 export function GridLayer({
@@ -15,6 +16,8 @@ export function GridLayer({
   const lines = useMemo(() => {
     const cols: number[] = [];
     const rows: number[] = [];
+    // Fit can zoom farther out to frame a distant plan label.
+    if (scale < MIN_SCALE && step * scale < 3) return { cols, rows };
     const worldLeft = -panX / scale;
     const worldTop = -panY / scale;
     const worldRight = worldLeft + width / scale;

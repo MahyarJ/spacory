@@ -183,6 +183,44 @@ it("replaces XML-invalid display characters while preserving the saved text", ()
   expect(plan.roomNames[0].name).toBe(name);
 });
 
+it("exports an outdoor label with room for the full glyph extents and stroke", () => {
+  const plan = planOf([wall(0, 0, 100, 0)]);
+  const text = '  Terrace & 茶室 <🌿> "outside"  ';
+  plan.labels = [{ id: "terrace", position: { x: 500, y: -200 }, text }];
+  const measure = (line: string) => {
+    expect(line).toBe(text);
+    return {
+      width: 240,
+      actualBoundingBoxLeft: 110,
+      actualBoundingBoxRight: 140,
+      actualBoundingBoxAscent: 35,
+      actualBoundingBoxDescent: 20,
+    } as TextMetrics;
+  };
+  // Use zero margin to ensure the label's own bounds are sufficient.
+  const { markup, width, height } = buildExportSvg(plan, 0, undefined, measure);
+  expect(width).toBe(647.5);
+  expect(height).toBe(242.5);
+  expect(markup).toContain('viewBox="-5 -237.5 647.5 242.5"');
+  expect(markup).toContain(
+    '<g data-layer="plan-labels"><text x="500" y="-200" xml:space="preserve"',
+  );
+  expect(markup).toContain(
+    '>  Terrace &amp; 茶室 &lt;🌿&gt; "outside"  </text>',
+  );
+});
+
+it("frames a label-only plan around the label", () => {
+  const plan = planOf([]);
+  plan.labels = [
+    { id: "terrace", position: { x: 500, y: 500 }, text: "Terrace" },
+  ];
+  const { markup, width, height } = buildExportSvg(plan, 0);
+  expect(width).toBe(320);
+  expect(height).toBe(50);
+  expect(markup).toContain('viewBox="340 467.5 320 50"');
+});
+
 it("keeps image dimensions independent of room names and abbreviates long visible labels", () => {
   const plan = planOf([
     wall(0, 0, 180, 0, 10, "a"),

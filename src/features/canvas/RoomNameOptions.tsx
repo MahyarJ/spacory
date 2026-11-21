@@ -19,7 +19,7 @@ export function RoomNameOptions({
 
   return (
     <form
-      className={styles.roomOptions}
+      className={styles.textOptions}
       onSubmit={(event) => {
         event.preventDefault();
         if (changed && !tooLong) setSelectedRoomName(draft.value);

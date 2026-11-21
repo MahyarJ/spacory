@@ -10,6 +10,12 @@ import {
 } from "./itemGeometry";
 import { computeWallGeometry, polygonToPoints } from "./junction";
 import {
+  type MeasurePlanLabel,
+  PLAN_LABEL_FONT_FAMILY,
+  PLAN_LABEL_FONT_SIZE,
+  PLAN_LABEL_STROKE_WIDTH,
+} from "./planLabels";
+import {
   layoutRoomLabel,
   type MeasureRoomLabel,
   ROOM_LABEL_FONT_SIZE,
@@ -65,8 +71,9 @@ export function buildExportSvg(
   plan: Plan,
   margin = EXPORT_MARGIN,
   measure?: MeasureRoomLabel,
+  measureLabel?: MeasurePlanLabel,
 ): ExportSvgResult {
-  const bounds = getPlanBounds(plan);
+  const bounds = getPlanBounds(plan, measureLabel);
   const half = EXPORT_EMPTY_PLACEHOLDER_SIZE / 2;
   const { minX, minY, maxX, maxY } = bounds ?? {
     minX: -half,
@@ -173,6 +180,12 @@ export function buildExportSvg(
     })
     .join("");
 
+  const planLabels = plan.labels
+    ?.map(
+      ({ position: { x, y }, text }) =>
+        `<text x="${x}" y="${y}" xml:space="preserve" font-family="${PLAN_LABEL_FONT_FAMILY}" font-size="${PLAN_LABEL_FONT_SIZE}" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="${PLAN_LABEL_STROKE_WIDTH}" paint-order="stroke">${escapeSvgText(text)}</text>`,
+    )
+    .join("");
   const markup =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}">` +
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${EXPORT_BACKGROUND}" />` +
@@ -180,6 +193,7 @@ export function buildExportSvg(
     `<g data-layer="items">${itemShapes}</g>` +
     `<g data-layer="dimensions">${dimensions}</g>` +
     `<g data-layer="room-areas">${roomLabels}</g>` +
+    (planLabels ? `<g data-layer="plan-labels">${planLabels}</g>` : "") +
     "</svg>";
 
   return { markup, width, height };
