@@ -355,11 +355,43 @@ it.each([
   }
 });
 
-it("keeps the full bathroom label below the rendered door swing in the editor and SVG", () => {
+it.each([
+  {
+    name: "Bathroom",
+    width: 150,
+    height: 220,
+    hingeY: 102,
+    area: "3.3 m²",
+    betweenDoorMarks: false,
+  },
+  {
+    name: "WC",
+    width: 120,
+    height: 140,
+    hingeY: 115,
+    area: "1.68 m²",
+    betweenDoorMarks: true,
+  },
+])("keeps the full $name label clear of the rendered door swing in the editor and SVG", ({
+  name,
+  width,
+  height,
+  hingeY,
+  area,
+  betweenDoorMarks,
+}) => {
+  // Use the same deterministic width for both renderers in compact geometry.
+  const measureText = (text: string) => ({ width: text.length * 6 });
+  if (betweenDoorMarks) {
+    vi.stubGlobal("CanvasRenderingContext2D", function CanvasContext() {});
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      () => ({ measureText }) as CanvasRenderingContext2D,
+    );
+  }
   const plan = roomPlan();
   const resize = ({ x, y }: { x: number; y: number }) => ({
-    x: (x * 150) / 400,
-    y: (y * 220) / 300,
+    x: (x * width) / 400,
+    y: (y * height) / 300,
   });
   plan.walls = plan.walls.map((wall) => ({
     ...wall,
@@ -371,35 +403,39 @@ it("keeps the full bathroom label below the rendered door swing in the editor an
     {
       id: "bathroom-door",
       type: "door",
-      wallAttach: { wallId: "w3", offset: 118, length: 90 },
+      wallAttach: { wallId: "w3", offset: height - hingeY, length: 90 },
       thickness: 20,
       props: { hingeEdge: "start", swingSide: "inside" },
     },
   ];
-  plan.roomNames = [{ anchor: { x: 75, y: 110 }, name: "Bathroom" }];
+  plan.roomNames = [{ anchor: { x: width / 2, y: height / 2 }, name }];
   const store = useApp.getState();
   store.loadPlan(plan);
   store.setView(() => DEFAULT_VIEW);
 
   const { container } = render(<FloorPlan />);
   const svg = new DOMParser().parseFromString(
-    buildExportSvg(plan).markup,
+    buildExportSvg(
+      plan,
+      undefined,
+      betweenDoorMarks ? (text) => measureText(text).width : undefined,
+    ).markup,
     "image/svg+xml",
   );
   const verify = (root: ParentNode, label: Element, rows: string) => {
     const door = root.querySelector('[data-layer="items"]')!;
     expect(door.querySelector("path")?.getAttribute("d")).toBe(
-      "M 0 12 A 90 90 0 0 1 90 102",
+      `M 0 ${hingeY - 90} A 90 90 0 0 1 90 ${hingeY}`,
     );
     const leaf = door.querySelector("line")!;
     expect(
       ["x1", "y1", "x2", "y2"].map((attr) => leaf.getAttribute(attr)),
-    ).toEqual(["0", "102", "90", "102"]);
+    ).toEqual(["0", String(hingeY), "90", String(hingeY)]);
     const hinge = door.querySelector("circle")!;
     const swingBottom =
       Number(hinge.getAttribute("cy")) + Number(hinge.getAttribute("r"));
-    const [, labelY, labelScale] =
-      /translate\([^ ]+ ([^)]+)\) scale\(([^)]+)\)/.exec(
+    const [, labelX, labelY, labelScale] =
+      /translate\(([^ ]+) ([^)]+)\) scale\(([^)]+)\)/.exec(
         label.getAttribute("transform")!,
       )!;
     const glyphHalfHeight =
@@ -407,12 +443,26 @@ it("keeps the full bathroom label below the rendered door swing in the editor an
         Number(label.getAttribute("stroke-width"))) /
       2;
     const lines = [...label.querySelectorAll(rows)];
-    expect(lines.map((row) => row.textContent)).toEqual(["Bathroom", "3.3 m²"]);
+    expect(lines.map((row) => row.textContent)).toEqual([name, area]);
+    expect(Number(labelScale)).toBe(1);
     for (const line of lines) {
       const top =
         Number(labelY) +
         Number(labelScale) * (Number(line.getAttribute("y")) - glyphHalfHeight);
-      expect(top).toBeGreaterThan(swingBottom);
+      if (betweenDoorMarks) {
+        const bottom = top + 2 * glyphHalfHeight;
+        const halfWidth = measureText(line.textContent ?? "").width / 2 + 1.5;
+        const left = Number(labelX) - halfWidth;
+        const right = Number(labelX) + halfWidth;
+        expect(left).toBeGreaterThan(6);
+        expect(top).toBeGreaterThan(hingeY - 90);
+        // The upper-right corner is farthest from the hinge here. Keep the
+        // entire text box above the leaf and inside the arc's inner edge.
+        expect(Math.hypot(right, top - hingeY)).toBeLessThan(89.5);
+        expect(bottom).toBeLessThan(hingeY - 0.5);
+      } else {
+        expect(top).toBeGreaterThan(swingBottom);
+      }
     }
   };
   verify(

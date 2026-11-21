@@ -1,6 +1,7 @@
-import type { DoorItem, Wall, WindowItem } from "@app/schema";
+import type { DoorItem, Point, Wall, WindowItem } from "@app/schema";
 import { describe, expect, it } from "vitest";
 import {
+  doorSwingFootprints,
   getDoorArcPath,
   getDoorGeometry,
   getDoorSweepPoints,
@@ -141,6 +142,51 @@ describe("getDoorSweepPoints", () => {
     expect(box.maxX).toBeCloseTo(56.5685425);
     expect(box.maxY).toBeCloseTo(42.4264069); // the hinge
   });
+});
+
+it.each([
+  0.2, 1,
+])("covers the rotated stroke while keeping the swing's interior free at %s×", (scale) => {
+  const host = wall(0, 0, 100, 100);
+  const door = doorItem("end", "outside");
+  const { hinge, radius, tipClosed, tipOpen, sweepFlag } = getDoorGeometry(
+    door,
+    host,
+  );
+  const footprint = doorSwingFootprints(
+    [door],
+    new Map([[host.id, host]]),
+    scale,
+  );
+  const covered = (point: Point) =>
+    footprint.some((polygon) => {
+      const crosses = polygon.map((a, index) => {
+        const b = polygon[(index + 1) % polygon.length];
+        return (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
+      });
+      return (
+        crosses.every((cross) => cross >= -1e-8) ||
+        crosses.every((cross) => cross <= 1e-8)
+      );
+    });
+  const start = Math.atan2(tipClosed.y - hinge.y, tipClosed.x - hinge.x);
+  const angle = (fraction: number) =>
+    start + ((sweepFlag ? 1 : -1) * fraction * Math.PI) / 2;
+  const at = (r: number, theta: number) => ({
+    x: hinge.x + r * Math.cos(theta),
+    y: hinge.y + r * Math.sin(theta),
+  });
+  const halfStroke = 0.5 / scale;
+  for (let step = 0; step <= 72; step++) {
+    for (const distance of [radius - halfStroke, radius + halfStroke]) {
+      expect(covered(at(distance, angle(step / 72)))).toBe(true);
+    }
+  }
+  expect(covered(hinge)).toBe(true);
+  expect(
+    covered({ x: (hinge.x + tipOpen.x) / 2, y: (hinge.y + tipOpen.y) / 2 }),
+  ).toBe(true);
+  expect(covered(at(radius / 2, angle(0.5)))).toBe(false);
 });
 
 describe("reconcileItemsToWalls", () => {

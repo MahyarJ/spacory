@@ -52,7 +52,7 @@ export function RoomsLayer({
     return [
       ...paintedWalls,
       ...dimensionFootprints(dimensions, scale, measure),
-      ...doorSwingFootprints(items, wallsById),
+      ...doorSwingFootprints(items, wallsById, scale),
     ];
   }, [names, paintedWalls, dimensions, scale, measure, items, walls]);
   const labels = useMemo(
