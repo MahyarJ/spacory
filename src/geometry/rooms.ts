@@ -6,6 +6,8 @@ const EPS = 1e-6;
 export interface Room {
   /** Closed boundary, including the first point again at the end. */
   polygon: Point[];
+  /** Enclosed faces whose interiors belong to their own room. */
+  nested: Point[][];
   /** Centreline area in square centimetres. */
   area: number;
   labelPoint: Point;
@@ -54,7 +56,11 @@ function centroid(polygon: Point[], area: number): Point {
 }
 
 /** Boundary points are excluded: a label anchor must be strictly inside. */
-function isInterior(point: Point, polygon: Point[]): boolean {
+function isInterior(
+  point: Point,
+  polygon: Point[],
+  includeBoundary = false,
+): boolean {
   let inside = false;
   for (let i = 1; i < polygon.length; i++) {
     const a = polygon[i - 1];
@@ -69,7 +75,7 @@ function isInterior(point: Point, polygon: Point[]): boolean {
       point.y >= Math.min(a.y, b.y) - EPS &&
       point.y <= Math.max(a.y, b.y) + EPS
     )
-      return false;
+      return includeBoundary;
     if (
       a.y > point.y !== b.y > point.y &&
       point.x < a.x + ((point.y - a.y) * dx) / dy
@@ -79,12 +85,19 @@ function isInterior(point: Point, polygon: Point[]): boolean {
   return inside;
 }
 
+function ownsPoint(room: Room, point: Point): boolean {
+  return (
+    isInterior(point, room.polygon) &&
+    !room.nested.some((nested) => isInterior(point, nested, true))
+  );
+}
+
 export function findRoomAt(rooms: Room[], point: Point): Room | undefined {
   let containingRoom: Room | undefined;
   for (const room of rooms) {
     if (
       (!containingRoom || room.area < containingRoom.area) &&
-      isInterior(point, room.polygon)
+      ownsPoint(room, point)
     ) {
       containingRoom = room;
     }
@@ -143,11 +156,75 @@ function interiorPoint(polygon: Point[]): Point {
   return { x, y };
 }
 
+/** Give surrounding rooms a point outside any enclosure they contain. */
+function assignNestedRooms(rooms: Room[]) {
+  const ordered = rooms
+    .map((room) => ({
+      room,
+      // A contained face has to fit within the candidate's bounding rectangle.
+      left: Math.min(...room.polygon.map((p) => p.x)),
+      right: Math.max(...room.polygon.map((p) => p.x)),
+      top: Math.min(...room.polygon.map((p) => p.y)),
+      bottom: Math.max(...room.polygon.map((p) => p.y)),
+    }))
+    .sort((a, b) => a.room.area - b.room.area);
+  for (let i = 0; i < ordered.length; i++) {
+    const child = ordered[i];
+    for (let j = i + 1; j < ordered.length; j++) {
+      const parent = ordered[j];
+      if (
+        parent.room.area > child.room.area &&
+        child.left >= parent.left &&
+        child.right <= parent.right &&
+        child.top >= parent.top &&
+        child.bottom <= parent.bottom &&
+        isInterior(child.room.labelPoint, parent.room.polygon)
+      ) {
+        parent.room.nested.push(child.room.polygon);
+        break;
+      }
+    }
+  }
+  for (const { room } of ordered) {
+    if (room.nested.length === 0 || ownsPoint(room, room.labelPoint)) continue;
+    const polygons = [room.polygon, ...room.nested];
+    const ys = [
+      ...new Set(
+        polygons.flatMap((polygon) => polygon.map((point) => point.y)),
+      ),
+    ].sort((a, b) => a - b);
+    let best = 0;
+    for (let row = 1; row < ys.length; row++) {
+      const height = ys[row] - ys[row - 1];
+      const y = ys[row - 1] + height / 2;
+      const xs: number[] = [];
+      for (const polygon of polygons) {
+        for (let i = 1; i < polygon.length; i++) {
+          const a = polygon[i - 1];
+          const b = polygon[i];
+          if (a.y > y !== b.y > y)
+            xs.push(a.x + ((y - a.y) * (b.x - a.x)) / (b.y - a.y));
+        }
+      }
+      xs.sort((a, b) => a - b);
+      for (let i = 1; i < xs.length; i++) {
+        const width = xs[i] - xs[i - 1];
+        const point = { x: xs[i - 1] + width / 2, y };
+        if (width * height > best && ownsPoint(room, point)) {
+          best = width * height;
+          room.labelPoint = point;
+        }
+      }
+    }
+  }
+}
+
 /**
  * Bounded faces of a planar wall-centreline graph. Connections must already be
  * split into shared endpoints (as the plan commit pipeline does for T junctions).
- * Openings are irrelevant. Holes and unsplit crossings are not modelled here.
- * Spatial buckets + sorted half-edges keep work O(E log E) for ordinary plans.
+ * Openings are irrelevant. Unsplit crossings are outside this graph model.
+ * Nested outlines partition ownership and label placement while each room's
+ * area remains the measurement of its own centreline polygon.
  */
 export function detectRooms(walls: Wall[]): Room[] {
   const vertices: Vertex[] = [];
@@ -231,9 +308,15 @@ export function detectRooms(walls: Wall[]): Room[] {
       );
       const area = signedArea(polygon);
       if (area > EPS)
-        rooms.push({ polygon, area, labelPoint: labelPoint(polygon, area) });
+        rooms.push({
+          polygon,
+          area,
+          labelPoint: labelPoint(polygon, area),
+          nested: [],
+        });
       while (path.length > position + 1) positions.delete(path.pop()!);
     }
   }
+  assignNestedRooms(rooms);
   return rooms;
 }

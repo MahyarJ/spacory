@@ -58,7 +58,7 @@ connected room structures.
   keyboard — and that bar is where further selection actions will land
 - ⚡ Built with **Vite + React + TypeScript**
 
-Not yet: holes / islands, interior-face areas, stylus/Apple Pencil
+Not yet: subtracting holes or islands from room areas, interior-face areas, stylus/Apple Pencil
 specifics, and a phone-width layout. See
 [`docs/DECISIONS.md`](docs/DECISIONS.md) for scope notes.
 

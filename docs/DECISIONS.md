@@ -137,15 +137,15 @@ needs arrived with that change; this is the moment to answer it.
 and converts using the square of the display-unit factor. Wall thickness is not
 subtracted, so this is not net usable interior area. Rooms are memoized from the
 current wall array during rendering, including live edits. History records user
-edits to names. Unnamed area labels use the area centroid when it is strictly
-inside the room. If a concave room’s centroid is outside or on its boundary, a
-horizontal interior interval supplies the fallback.
-Named labels fit between the painted wall polygons and junction fills. They wrap
+edits to names. Nested faces own their own interiors. The surrounding room uses
+a point outside each enclosed face for selection, new name anchors, and label
+placement. The area reading still measures each room's centreline outline.
+Named labels fit between the painted wall polygons, junction fills, and wall
+dimensions. They can shift within the same face to keep those readings legible, wrap
 to a second line when needed and abbreviate with an ellipsis when space runs out.
 The visible position can shift as wall thickness changes, while the stored name
 anchor stays fixed. Font measurement preserves the letters' natural proportions.
-The full name stays
-in the document and is available in the editor and the SVG's title. Image
+The full name stays in the document and is available in the editor and the SVG's title. Image
 dimensions follow plan geometry, regardless of the length of any room name.
 The editor caps newly saved names at 80 characters. Import and reload preserve
 the name text already stored in a plan.
@@ -156,8 +156,8 @@ fill indicates selection.
 
 **Scope / what's deferred.** Openings don't affect enclosure (a door in a wall
 doesn't open the polygon — enclosure is pure wall topology), and open/partial plans
-simply yield fewer faces. Holes/islands (a free-standing column inside a room, a
-room within a room) are a v2 concern, not part of the first cut. The
+simply yield fewer faces. Subtracting holes and islands from area measurements
+remains a separate feature. The
 product-facing choices (auto-name vs. blank, area shown always vs. on-select, fill
 in MVP) live in the feature issue, not here.
 

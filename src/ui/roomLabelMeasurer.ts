@@ -9,6 +9,7 @@ export function createRoomLabelMeasurer(
   if (typeof CanvasRenderingContext2D === "undefined") return;
   const context = document.createElement("canvas").getContext("2d");
   if (!context) return;
+  context.textAlign = "center";
 
   let measuredWeight: 400 | 600 | undefined;
   return (text, weight) => {
@@ -16,6 +17,6 @@ export function createRoomLabelMeasurer(
       context.font = `${weight} ${ROOM_LABEL_FONT_SIZE}px ${fontFamily}`;
       measuredWeight = weight;
     }
-    return context.measureText(text).width;
+    return context.measureText(text);
   };
 }

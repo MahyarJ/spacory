@@ -7,8 +7,12 @@ export const ROOM_LABEL_FONT_SIZE = 12;
 const LINE_HEIGHT = 16;
 const PADDING = 4;
 const ELLIPSIS = "…";
+const BAND_GAP = 1e-5;
 
-export type MeasureRoomLabel = (text: string, weight: 400 | 600) => number;
+export type MeasureRoomLabel = (
+  text: string,
+  weight: 400 | 600,
+) => number | TextMetrics;
 
 interface RoomLabel {
   point: Point;
@@ -123,7 +127,7 @@ function visibleBand(
   let best: { point: Point; width: number } | undefined;
   for (const [left, right] of blocked) {
     const width = left - farthest;
-    if (width > (best?.width ?? 0)) {
+    if (width > (best?.width ?? BAND_GAP)) {
       const point = { x: farthest + width / 2, y };
       if (findRoomAt([room], point)) best = { point, width };
     }
@@ -149,103 +153,171 @@ function labelHalfHeight(rows: number): number {
   return ((rows - 1) * LINE_HEIGHT) / 2 + ROOM_LABEL_FONT_SIZE / 2 + PADDING;
 }
 
+function wrappedName(
+  name: string,
+  width: number,
+  measure: (text: string) => number,
+): string[] {
+  const prefix = fitPrefix(name, width, measure);
+  const wordBreak = prefix.search(/\s+\S*$/u);
+  const first =
+    wordBreak > 0 &&
+    /\S/u.test(prefix.slice(0, wordBreak)) &&
+    !/^\s/u.test(name.slice(prefix.length))
+      ? prefix.slice(0, wordBreak)
+      : prefix;
+  const remaining = name.slice(first.length).trimStart();
+  return [first, fitLine(remaining, width, measure)];
+}
+
 /** Fit the name and area using the renderer's text measurements. */
 export function layoutRoomLabel(
   room: Room,
   name: string,
   area: string,
-  walls: readonly Polygon[],
+  painted: readonly Polygon[],
   viewScale = 1,
   measure: MeasureRoomLabel = estimateWidth,
 ): RoomLabel | undefined {
-  const measureName = (text: string) => measure(text, 600);
-  let y = room.labelPoint.y;
-  let fontScale = 1;
-  const band = (rows: number) =>
-    visibleBand(
-      room,
-      walls,
-      y,
-      (labelHalfHeight(rows) * fontScale) / viewScale,
-    );
-  const widthFor = (width: number) =>
-    (width * viewScale) / fontScale - PADDING * 2;
-  const minWidth = Math.max(measure(area, 400), measureName(ELLIPSIS));
-  let space = band(2);
-  if (!space || widthFor(space.width) < minWidth) {
-    // Try the center in a shallower band. If a wall covers the whole row, try
-    // the gaps between painted vertices elsewhere in the face.
-    let visible = visibleBand(room, walls, y, 0);
-    if (!visible) {
-      const ys = room.polygon.map((point) => point.y);
-      const xs = room.polygon.map((point) => point.x);
-      const top = Math.min(...ys);
-      const bottom = Math.max(...ys);
-      const left = Math.min(...xs);
-      const right = Math.max(...xs);
-      for (const wall of walls) {
+  const measuredWidths = new Map<string, number>();
+  const widthOf = (text: string, weight: 400 | 600) => {
+    const result = measure(text, weight);
+    return typeof result === "number" ? result : result.width;
+  };
+  const measureName = (text: string) => {
+    const cached = measuredWidths.get(text);
+    if (cached !== undefined) return cached;
+    const width = widthOf(text, 600);
+    measuredWidths.set(text, width);
+    return width;
+  };
+  const xs = room.polygon.map((p) => p.x);
+  const ys = room.polygon.map((p) => p.y);
+  const left = Math.min(...xs);
+  const right = Math.max(...xs);
+  const top = Math.min(...ys);
+  const bottom = Math.max(...ys);
+  const obstacles = [
+    ...room.nested,
+    ...painted.filter(
+      (polygon) =>
+        !polygon.every((p) => p.x < left) &&
+        !polygon.every((p) => p.x > right) &&
+        !polygon.every((p) => p.y < top) &&
+        !polygon.every((p) => p.y > bottom),
+    ),
+  ];
+  const preferredY = room.labelPoint.y;
+  const levels = [
+    ...new Set([
+      ...ys,
+      ...obstacles.flatMap((polygon) => polygon.map((p) => p.y)),
+    ]),
+  ].sort((a, b) => a - b);
+  const minWidth = Math.max(widthOf(area, 400), measureName(ELLIPSIS));
+  const makeLabel = (
+    point: Point,
+    names: string[],
+    fontScale: number,
+  ): RoomLabel => {
+    const areaY = (names.length * LINE_HEIGHT) / 2;
+    return {
+      point,
+      fontScale,
+      nameLines: names.map((text, index) => ({
+        text,
+        y: index * LINE_HEIGHT - areaY,
+      })),
+      areaY,
+      shortened: names.join("").replace(/\s/g, "") !== name.replace(/\s/g, ""),
+    };
+  };
+
+  let abbreviated: RoomLabel | undefined;
+  let bestLength = 0;
+  for (const fontScale of [1, 0.85, 0.72, 0.64, 0.56]) {
+    // Skip looking for full text at smaller sizes if even the face's full
+    // width would be insufficient. Imported names may be very long.
+    if (
+      abbreviated &&
+      measureName(name) * fontScale > 2 * (right - left) * viewScale
+    )
+      break;
+    const widths = new Map<string, string[]>();
+    let full: RoomLabel | undefined;
+    for (const rows of [1, 2]) {
+      const halfHeight = (labelHalfHeight(rows + 1) * fontScale) / viewScale;
+      // Consider each side of the painted edges. The small nudge keeps the
+      // band beyond the edge even with floating-point roundoff.
+      const offset = halfHeight + BAND_GAP;
+      const candidates = [
+        preferredY,
+        ...levels.flatMap((y) => [y - offset, y + offset]),
+      ]
+        .filter((y) => y - halfHeight > top && y + halfHeight < bottom)
+        .sort((a, b) => Math.abs(a - preferredY) - Math.abs(b - preferredY));
+      for (const y of candidates) {
+        const distance = Math.abs(y - preferredY);
+        if (full && distance >= Math.abs(full.point.y - preferredY)) break;
+        const space = visibleBand(room, obstacles, y, halfHeight);
+        if (!space) continue;
+        const width = (space.width * viewScale) / fontScale - PADDING * 2;
+        if (width < minWidth) continue;
+        const key = `${rows}:${width}`;
+        let names = widths.get(key);
+        if (!names) {
+          names =
+            rows === 1 || measureName(name) <= width
+              ? [fitLine(name, width, measureName)]
+              : wrappedName(name, width, measureName);
+          widths.set(key, names);
+        }
+        const label = makeLabel(space.point, names, fontScale);
+        if (!label.shortened) {
+          full = label;
+          break;
+        }
+        const length = names.join("").length;
         if (
-          wall.every((point) => point.x < left) ||
-          wall.every((point) => point.x > right)
-        )
-          continue;
-        for (const point of wall) {
-          if (point.y > top && point.y < bottom) ys.push(point.y);
+          !abbreviated ||
+          (fontScale === abbreviated.fontScale && length > bestLength)
+        ) {
+          abbreviated = label;
+          bestLength = length;
         }
       }
-      ys.sort((a, b) => a - b);
-      for (let i = 1; i < ys.length; i++) {
-        if (ys[i] === ys[i - 1]) continue;
-        const candidate = visibleBand(room, walls, (ys[i - 1] + ys[i]) / 2, 0);
-        if (candidate && (!visible || candidate.width > visible.width))
-          visible = candidate;
-      }
     }
-    if (!visible) return;
-    y = visible.point.y;
-    const clearance = labelClearance(visible.point, [room.polygon, ...walls]);
-    fontScale = Math.min(
-      1,
-      (clearance * viewScale) /
-        Math.hypot(minWidth / 2 + PADDING, labelHalfHeight(2)),
-    );
-    if (fontScale <= 0) return;
-    space = band(2);
-    if (!space) return;
+    if (full) return full;
   }
+  if (abbreviated) return abbreviated;
 
-  const single = fitLine(name, widthFor(space.width), measureName);
-  let names = [single];
-  let shortened = single !== name;
-  if (shortened) {
-    const wrappedSpace = band(3);
-    const wrappedWidth = widthFor(wrappedSpace?.width ?? 0);
-    if (wrappedSpace && wrappedWidth >= minWidth) {
-      const prefix = fitPrefix(name, wrappedWidth, measureName);
-      const wordBreak = prefix.search(/\s+\S*$/u);
-      const first =
-        wordBreak > 0 &&
-        /\S/u.test(prefix.slice(0, wordBreak)) &&
-        !/^\s/u.test(name.slice(prefix.length))
-          ? prefix.slice(0, wordBreak)
-          : prefix;
-      const remaining = name.slice(first.length).trimStart();
-      const second = fitLine(remaining, wrappedWidth, measureName);
-      names = [first, second];
-      shortened = second !== remaining;
-      space = wrappedSpace;
+  // For a tiny room, preserve at least an abbreviated name and the full area.
+  // Fit both inside the circle that reaches the nearest painted boundary.
+  let visible: ReturnType<typeof visibleBand>;
+  let clearance = BAND_GAP;
+  for (let i = 1; i < levels.length; i++) {
+    const y = levels[i - 1] + (levels[i] - levels[i - 1]) / 2;
+    if (y <= top || y >= bottom) continue;
+    const candidate = visibleBand(room, obstacles, y, 0);
+    if (!candidate) continue;
+    const distance = labelClearance(candidate.point, [
+      room.polygon,
+      ...obstacles,
+    ]);
+    if (distance > clearance) {
+      clearance = distance;
+      visible = candidate;
     }
   }
-
-  const areaY = (names.length * LINE_HEIGHT) / 2;
-  return {
-    point: space.point,
+  if (!visible) return;
+  const fontScale = Math.min(
+    1,
+    (clearance * viewScale) /
+      Math.hypot(minWidth / 2 + PADDING, labelHalfHeight(2)),
+  );
+  return makeLabel(
+    visible.point,
+    [fitLine(name, minWidth, measureName)],
     fontScale,
-    nameLines: names.map((text, index) => ({
-      text,
-      y: index * LINE_HEIGHT - areaY,
-    })),
-    areaY,
-    shortened,
-  };
+  );
 }

@@ -7,6 +7,8 @@ import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
 import { DEFAULT_VIEW } from "@app/viewport";
 import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwitch";
+import { buildExportSvg } from "@geometry/exportSvg";
+import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
   act,
   cleanup,
@@ -268,6 +270,74 @@ describe("FloorPlan touch gestures", () => {
         );
         expect(input.value).toBe(value);
       }
+    });
+
+    it("names the surrounding and nested rooms separately by pointer and keyboard", () => {
+      const plan = createInitialPlan();
+      plan.walls = [
+        wall(0, 0, 600, 0, "o1"),
+        wall(600, 0, 600, 480, "o2"),
+        wall(600, 480, 0, 480, "o3"),
+        wall(0, 480, 0, 0, "o4"),
+        wall(100, 80, 500, 80, "i1"),
+        wall(500, 80, 500, 400, "i2"),
+        wall(500, 400, 100, 400, "i3"),
+        wall(100, 400, 100, 80, "i4"),
+      ];
+      setup({ tool: "select", plan });
+      const outer = screen.getByRole("button", { name: "Room, 28.8 m²" });
+      const inner = screen.getByRole("button", { name: "Room, 12.8 m²" });
+      expect(outer.querySelector("text")?.getAttribute("transform")).not.toBe(
+        inner.querySelector("text")?.getAttribute("transform"),
+      );
+      const input = () =>
+        screen.getByRole<HTMLInputElement>("textbox", { name: "Room name" });
+      const save = (value: string) => {
+        fireEvent.change(input(), { target: { value } });
+        fireEvent.submit(input().closest("form")!);
+      };
+
+      down(1, 50, 240);
+      up(1, 50, 240);
+      expect(outer.getAttribute("aria-pressed")).toBe("true");
+      expect(inner.getAttribute("aria-pressed")).toBe("false");
+      save("Hall");
+
+      fireEvent.keyDown(inner, { key: "Enter" });
+      expect(input().value).toBe("");
+      save("Study");
+      const persisted = loadPersistedHistory()!.present;
+      const imported = parsePlan(serializePlan(persisted));
+      const rooms = detectRooms(imported.walls);
+      expect(
+        imported.roomNames?.map(({ anchor, name }) => [
+          name,
+          findRoomAt(rooms, anchor)?.area,
+        ]),
+      ).toEqual([
+        ["Hall", 288000],
+        ["Study", 128000],
+      ]);
+      act(() => useApp.getState().loadPlan(imported));
+      fireEvent.keyDown(screen.getByRole("button", { name: "Hall, 28.8 m²" }), {
+        key: "Enter",
+      });
+      expect(input().value).toBe("Hall");
+
+      const svg = new DOMParser().parseFromString(
+        buildExportSvg(imported).markup,
+        "image/svg+xml",
+      );
+      const labels = [...svg.querySelectorAll('[data-layer="room-areas"] > g')];
+      expect(
+        labels.map(
+          (label) =>
+            label.querySelector('text[font-weight="600"]')?.textContent,
+        ),
+      ).toEqual(["Hall", "Study"]);
+      expect(
+        new Set(labels.map((label) => label.getAttribute("transform"))).size,
+      ).toBe(2);
     });
 
     it("limits room name edits and preserves an existing long imported name", () => {

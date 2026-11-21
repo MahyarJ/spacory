@@ -4,6 +4,10 @@ import { useApp } from "@app/store";
 import { polygonToPoints } from "@geometry/junction";
 import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "@geometry/roomLabels";
 import type { Room } from "@geometry/rooms";
+import {
+  dimensionFootprints,
+  type WallDimension,
+} from "@geometry/wallDimensions";
 import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
 import { useMemo } from "react";
 import styles from "./FloorPlan.module.css";
@@ -12,6 +16,7 @@ interface RoomsLayerProps {
   rooms: Room[];
   names: Map<Room, RoomName>;
   paintedWalls: readonly (readonly Point[])[];
+  dimensions: WallDimension[];
   selectedRoom?: Room;
   activateRoom: (room: Room) => void;
   onRoomFocus: (outline: string | null) => void;
@@ -21,6 +26,7 @@ export function RoomsLayer({
   rooms,
   names,
   paintedWalls,
+  dimensions,
   selectedRoom,
   activateRoom,
   onRoomFocus,
@@ -37,17 +43,24 @@ export function RoomsLayer({
       ),
     [],
   );
+  const obstacles = useMemo(
+    () =>
+      names.size
+        ? [...paintedWalls, ...dimensionFootprints(dimensions, scale, measure)]
+        : paintedWalls,
+    [names, paintedWalls, dimensions, scale, measure],
+  );
   const labels = useMemo(
     () =>
       rooms.map((room) => {
         const name = names.get(room)?.name;
         const area = formatSystemArea(room.area, system);
         const label = name
-          ? layoutRoomLabel(room, name, area, paintedWalls, scale, measure)
+          ? layoutRoomLabel(room, name, area, obstacles, scale, measure)
           : undefined;
         return { room, name, area, label };
       }),
-    [rooms, names, system, paintedWalls, scale, measure],
+    [rooms, names, system, obstacles, scale, measure],
   );
 
   return (
@@ -61,12 +74,24 @@ export function RoomsLayer({
               (!label || label.shortened || label.nameLines.length > 1) && (
                 <title>{name}</title>
               )}
-            <polygon
-              className={styles.roomFill}
-              points={points}
-              fill="var(--sp-text)"
-              fillOpacity={0.045}
-            />
+            {room.nested.length ? (
+              <path
+                className={styles.roomFill}
+                d={[room.polygon, ...room.nested]
+                  .map((polygon) => `M ${polygonToPoints(polygon)} Z`)
+                  .join(" ")}
+                fillRule="evenodd"
+                fill="var(--sp-text)"
+                fillOpacity={0.045}
+              />
+            ) : (
+              <polygon
+                className={styles.roomFill}
+                points={points}
+                fill="var(--sp-text)"
+                fillOpacity={0.045}
+              />
+            )}
             <text
               transform={`translate(${x} ${y}) scale(${(label?.fontScale ?? 1) / scale})`}
               textAnchor="middle"

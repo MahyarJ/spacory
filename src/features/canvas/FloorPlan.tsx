@@ -33,6 +33,7 @@ import {
   getWallLength,
   MIN_WALL_LENGTH,
 } from "@geometry/wall";
+import { wallDimensions } from "@geometry/wallDimensions";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -81,6 +82,11 @@ export function FloorPlan() {
   const canvasSize = useApp((s) => s.canvasSize);
 
   const rooms = useMemo(() => detectRooms(plan.walls), [plan.walls]);
+  const measurementSystem = plan.meta.measurementSystem;
+  const dimensions = useMemo(
+    () => wallDimensions(plan.walls, measurementSystem, view.scale),
+    [plan.walls, measurementSystem, view.scale],
+  );
   const wallGeometry = useMemo(
     () => computeWallGeometry(plan.walls),
     [plan.walls],
@@ -892,13 +898,14 @@ export function FloorPlan() {
             rooms={rooms}
             names={roomNames}
             paintedWalls={paintedWalls}
+            dimensions={dimensions}
             selectedRoom={selectedRoom}
             activateRoom={activateRoom}
             onRoomFocus={setFocusedRoomOutline}
           />
           <WallsLayer geometry={wallGeometry} />
           <ItemsLayer />
-          <DimensionsLayer />
+          <DimensionsLayer dimensions={dimensions} scale={view.scale} />
           <SelectionLayer />
           {tool === "select" && focusedRoomOutline && (
             <RoomFocusLayer outline={focusedRoomOutline} />

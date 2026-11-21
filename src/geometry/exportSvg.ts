@@ -1,4 +1,4 @@
-import { formatSystemArea, formatSystemLength } from "@app/format";
+import { formatSystemArea } from "@app/format";
 import { isDoor, type Plan } from "@app/schema";
 import { getPlanBounds } from "./bounds";
 import {
@@ -13,7 +13,11 @@ import {
   ROOM_LABEL_FONT_SIZE,
 } from "./roomLabels";
 import { detectRooms, resolveRoomNames } from "./rooms";
-import { getPointOnWall, getWallAngle, getWallLength } from "./wall";
+import {
+  dimensionFootprints,
+  WALL_DIMENSION_FONT_SIZE,
+  wallDimensions,
+} from "./wallDimensions";
 
 /** Margin (cm) left around the plan's content on every side of the export. */
 export const EXPORT_MARGIN = 40;
@@ -122,24 +126,25 @@ export function buildExportSvg(
     .join("");
 
   const textStyle = `font-family="sans-serif" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
-  const dimensions = plan.walls
-    .map((wall) => {
-      const length = getWallLength(wall);
-      const label = formatSystemLength(length, plan.meta.measurementSystem);
-      // Keep long imperial labels from spilling past short walls or the frame.
-      if (length < label.length * 7) return "";
-      const mid = getPointOnWall(wall, length / 2);
-      let angle = (getWallAngle(wall) * 180) / Math.PI;
-      if (angle > 90 || angle < -90) angle += 180;
-      return `<text transform="translate(${mid.x} ${mid.y}) rotate(${angle})" y="${-wall.thickness / 2 - 8}" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${label}</text>`;
-    })
+  const dimensionLabels = wallDimensions(
+    plan.walls,
+    plan.meta.measurementSystem,
+  );
+  const dimensions = dimensionLabels
+    .map(
+      ({ midpoint, angle, offset, text }) =>
+        `<text transform="translate(${midpoint.x} ${midpoint.y}) rotate(${angle})" y="${-offset}" font-size="${WALL_DIMENSION_FONT_SIZE}" ${textStyle}>${text}</text>`,
+    )
     .join("");
+  const obstacles = roomNames.size
+    ? [...paintedWalls, ...dimensionFootprints(dimensionLabels, 1, measure)]
+    : paintedWalls;
   const roomLabels = rooms
     .map((room) => {
       const name = roomNames.get(room)?.name;
       const area = formatSystemArea(room.area, plan.meta.measurementSystem);
       const label = name
-        ? layoutRoomLabel(room, name, area, paintedWalls, 1, measure)
+        ? layoutRoomLabel(room, name, area, obstacles, 1, measure)
         : undefined;
       const { x, y } = label?.point ?? room.labelPoint;
       if (!name || !label) {

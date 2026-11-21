@@ -212,6 +212,148 @@ it.each([
   expect(useApp.getState().plan.roomNames).toEqual([{ anchor, name }]);
 });
 
+it.each([
+  {
+    width: 180,
+    height: 70,
+    thickness: 12,
+    scale: 1,
+    name: "Ground floor coat and linen storage",
+    area: "1.26 m²",
+    shared: false,
+  },
+  {
+    width: 220,
+    height: 240,
+    thickness: 16,
+    scale: 1,
+    name: "Utility room",
+    area: "2.64 m²",
+    shared: true,
+  },
+  {
+    width: 220,
+    height: 240,
+    thickness: 16,
+    scale: 0.5,
+    name: "Utility room",
+    area: "2.64 m²",
+    shared: true,
+  },
+])("keeps $name and its area clear of dimensions at $scale×", ({
+  width,
+  height,
+  thickness,
+  scale,
+  name,
+  area,
+  shared,
+}) => {
+  const measureText = (text: string) => ({
+    width: text.length * 6,
+    actualBoundingBoxAscent: 8,
+    actualBoundingBoxDescent: 2,
+  });
+  vi.stubGlobal("CanvasRenderingContext2D", function CanvasContext() {});
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    () => ({ measureText }) as CanvasRenderingContext2D,
+  );
+  const plan = roomPlan();
+  const resize = ({ x, y }: { x: number; y: number }) => ({
+    x: (x * width) / 400,
+    y: (y * height) / 300,
+  });
+  const store = useApp.getState();
+  store.loadPlan({
+    ...plan,
+    walls: plan.walls.map((wall) => ({
+      ...wall,
+      a: resize(wall.a),
+      b: resize(wall.b),
+      thickness,
+    })),
+    items: [],
+    roomNames: [
+      { anchor: { x: width * (shared ? 0.75 : 0.5), y: height / 2 }, name },
+    ],
+  });
+  if (shared)
+    store.addWall({
+      id: "divider",
+      a: { x: width / 2, y: 0 },
+      b: { x: width / 2, y: height },
+      thickness,
+    });
+  store.setTool("select");
+  store.setView(() => ({ ...DEFAULT_VIEW, scale }));
+
+  const { container } = render(<FloorPlan />);
+  const label = screen
+    .getByRole("button", { name: `${name}, ${area}` })
+    .querySelector("text")!;
+  const nameLines = [...label.querySelectorAll('tspan[font-weight="600"]')];
+  expect(nameLines.length).toBeGreaterThan(0);
+  if (shared)
+    expect(nameLines.map((row) => row.textContent).join(" ")).toBe(name);
+  expect(label.querySelector("tspan:last-child")?.textContent).toBe(area);
+
+  // Apply each rendered label's translate, rotation, and counter-scale to
+  // the mocked glyph bounds. jsdom has no SVG layout or getBBox().
+  const bounds = (line: SVGElement, alphaBaseline: boolean) => {
+    const transform = line.parentElement!.getAttribute("transform")!;
+    const [, x, y, rotation, factor] =
+      /translate\(([^ ]+) ([^)]+)\)(?: rotate\(([^)]+)\))? scale\(([^)]+)\)/.exec(
+        transform,
+      )!;
+    const radians = (Number(rotation ?? 0) * Math.PI) / 180;
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const halo = 1.5;
+    const halfWidth = measureText(line.textContent ?? "").width / 2 + halo;
+    const baseline = Number(line.getAttribute("y"));
+    const top = baseline - (alphaBaseline ? 8 : 6) - halo;
+    const bottom = baseline + (alphaBaseline ? 2 : 6) + halo;
+    const corners = [
+      [-halfWidth, top],
+      [halfWidth, top],
+      [halfWidth, bottom],
+      [-halfWidth, bottom],
+    ].map(([u, v]) => ({
+      x: Number(x) + (u * cos - v * sin) * Number(factor),
+      y: Number(y) + (u * sin + v * cos) * Number(factor),
+    }));
+    return {
+      left: Math.min(...corners.map((point) => point.x)),
+      right: Math.max(...corners.map((point) => point.x)),
+      top: Math.min(...corners.map((point) => point.y)),
+      bottom: Math.max(...corners.map((point) => point.y)),
+    };
+  };
+
+  const dimensions = [
+    ...container.querySelectorAll<SVGTextElement>(
+      '[data-layer="dimensions"] text',
+    ),
+  ];
+  expect(
+    dimensions.some(
+      (line) => line.textContent === (shared ? "240 cm" : "180 cm"),
+    ),
+  ).toBe(true);
+  for (const line of label.querySelectorAll<SVGTSpanElement>("tspan")) {
+    const room = bounds(line, false);
+    for (const text of dimensions) {
+      const dim = bounds(text, true);
+      expect(
+        room.right < dim.left ||
+          room.left > dim.right ||
+          room.bottom < dim.top ||
+          room.top > dim.bottom,
+      ).toBe(true);
+    }
+  }
+});
+
 it("restores both names after a shared wall or an exterior boundary is rebuilt", () => {
   const plan = roomPlan();
   const kitchen = { anchor: { x: 100, y: 150 }, name: "Kitchen" };
