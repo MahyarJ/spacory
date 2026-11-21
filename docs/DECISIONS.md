@@ -10,9 +10,11 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 Plan labels store a plain text line and a world position at the horizontal
 center of its baseline. The canvas and image exports use the same font and
 world size so Fit and export can include the measured glyph bounds, including
-labels outside the walls. On very wide labeled plans, Fit can zoom below the
-usual manual zoom limit. The grid is hidden at that zoom if its lines would
-be too dense to draw.
+labels outside the walls. On very wide labeled plans, Fit can lower the zoom
+limit. Wheel and pinch can return to that scale, and the viewport preserves
+the limit on reload. The grid is hidden if its lines would be too dense to
+draw. PNG export scales the entire SVG to fit within an 8192-pixel side limit
+and the 16-megapixel canvas limit of older iOS WebKit versions.
 
 ## Keep measurement inputs compact with larger native tap areas
 

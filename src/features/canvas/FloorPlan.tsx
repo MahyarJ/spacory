@@ -9,7 +9,6 @@ import {
   type CanvasPoint,
   clampScale,
   computePinchView,
-  MIN_SCALE,
   type PinchAnchor,
 } from "@app/viewport";
 import {
@@ -930,10 +929,7 @@ export function FloorPlan() {
     const factor = Math.exp(delta * 0.001);
     const worldBefore = toWorld(e.clientX, e.clientY);
     setView((v) => {
-      const newScale = clampScale(
-        v.scale * factor,
-        Math.min(MIN_SCALE, v.scale),
-      );
+      const newScale = clampScale(v.scale * factor, v.minScale);
       const rect = svgRef.current!.getBoundingClientRect();
       const sx = e.clientX - rect.left;
       const sy = e.clientY - rect.top;

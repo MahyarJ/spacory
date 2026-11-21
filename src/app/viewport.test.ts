@@ -248,10 +248,10 @@ describe("savePersistedView / loadPersistedView", () => {
     expect(loadPersistedView()).toEqual(sampleView);
   });
 
-  it("restores a labeled-plan fit below the manual zoom limit", () => {
-    const fittedView = { ...sampleView, scale: MIN_SCALE / 2 };
+  it("restores the fitted zoom floor even after zooming above the usual limit", () => {
+    const fittedView = { ...sampleView, minScale: MIN_SCALE / 2 };
     savePersistedView(fittedView);
-    expect(loadPersistedView(0)).toEqual(fittedView);
+    expect(loadPersistedView()).toEqual(fittedView);
   });
 
   it("writes under the documented key", () => {

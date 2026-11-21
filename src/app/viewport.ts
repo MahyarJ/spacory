@@ -6,6 +6,8 @@ export interface ViewState {
   panX: number;
   panY: number;
   scale: number;
+  /** Fit can lower the zoom floor until the next Fit. */
+  minScale?: number;
 }
 
 /** localStorage key under which the viewport is autosaved. */
@@ -73,6 +75,7 @@ export function computeFitView(
     scale,
     panX: viewport.width / 2 - centerX * scale,
     panY: viewport.height / 2 - centerY * scale,
+    ...(scale < MIN_SCALE ? { minScale: scale } : {}),
   };
 }
 
@@ -114,7 +117,7 @@ function distance(a: CanvasPoint, b: CanvasPoint): number {
  * zooms about the midpoint (mirroring how wheel zoom pins the point under the
  * cursor), and doing both at once pans and zooms together.
  *
- * Pure — no React, no DOM. The zoom is clamped to [MIN_SCALE, MAX_SCALE], and
+ * Pure — no React, no DOM. The zoom is clamped to the viewport's zoom limits, and
  * the pan is derived from the *clamped* scale so the midpoint stays anchored
  * even at the limits. Fingers that start on the same spot give no scale
  * reference, so that degenerate case pans without zooming instead of dividing
@@ -127,10 +130,7 @@ export function computePinchView(
 ): ViewState {
   const startDistance = distance(anchor.a, anchor.b);
   const ratio = startDistance > 0 ? distance(a, b) / startDistance : 1;
-  const scale = clampScale(
-    anchor.view.scale * ratio,
-    Math.min(MIN_SCALE, anchor.view.scale),
-  );
+  const scale = clampScale(anchor.view.scale * ratio, anchor.view.minScale);
 
   const from = midpoint(anchor.a, anchor.b);
   const to = midpoint(a, b);
@@ -139,6 +139,7 @@ export function computePinchView(
   const worldY = (from.y - anchor.view.panY) / anchor.view.scale;
   // ...has to land under the current midpoint: to = pan + world * scale.
   return {
+    ...anchor.view,
     scale,
     panX: to.x - worldX * scale,
     panY: to.y - worldY * scale,
@@ -160,13 +161,10 @@ function getStorage(): Storage | null {
 
 /**
  * Load the persisted viewport from localStorage, or null if there is none or it
- * fails validation. `panX`/`panY`/`scale` must be finite numbers; `scale` is
- * clamped into [MIN_SCALE, MAX_SCALE] rather than rejected, so an out-of-range
- * zoom is corrected instead of crashing or discarding the saved pan. Anything
- * else (missing values, corrupt JSON, unknown format) yields null and the
- * caller falls back to DEFAULT_VIEW.
+ * fails validation. Pan and scale must be finite numbers. Clamp the scale to
+ * the zoom limits, preserving a valid lower limit set by Fit.
  */
-export function loadPersistedView(minScale = MIN_SCALE): ViewState | null {
+export function loadPersistedView(): ViewState | null {
   const storage = getStorage();
   if (!storage) return null;
   let text: string | null;
@@ -179,17 +177,22 @@ export function loadPersistedView(minScale = MIN_SCALE): ViewState | null {
   try {
     const raw = JSON.parse(text);
     if (raw?.format !== VIEW_FORMAT) return null;
-    const { panX, panY, scale } = raw;
+    const { panX, panY, scale, minScale } = raw;
     if (
       !isFiniteNumber(panX) ||
       !isFiniteNumber(panY) ||
       !isFiniteNumber(scale)
     )
       return null;
+    const fittedMinimum =
+      isFiniteNumber(minScale) && minScale > 0 && minScale < MIN_SCALE
+        ? minScale
+        : undefined;
     return {
       panX,
       panY,
-      scale: clampScale(scale, scale > 0 ? minScale : MIN_SCALE),
+      scale: clampScale(scale, fittedMinimum),
+      ...(fittedMinimum === undefined ? {} : { minScale: fittedMinimum }),
     };
   } catch {
     return null;

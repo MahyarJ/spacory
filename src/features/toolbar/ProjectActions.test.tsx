@@ -114,8 +114,40 @@ describe("ProjectActions — Export menu", () => {
     expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
   });
 
-  it("rasterizes the outdoor label at the shared SVG export dimensions for PNG", async () => {
-    const drawImage = vi.fn();
+  it.each([
+    { description: "at the normal resolution", x: -300, y: 400, limit: "none" },
+    {
+      description: "within the canvas area limit",
+      x: 9500,
+      y: 9500,
+      limit: "area",
+    },
+    {
+      description: "within the canvas side limit",
+      x: 9500,
+      y: 0,
+      limit: "side",
+    },
+  ])("rasterizes the entire plan with an outdoor label $description", async ({
+    x,
+    y,
+    limit,
+  }) => {
+    const plan = cornerPlan("My Plan!");
+    const label = plan.labels![0];
+    plan.labels = [{ ...label, position: { x, y } }];
+    useApp.getState().loadPlan(plan);
+
+    const drawImage =
+      vi.fn<
+        (
+          image: HTMLImageElement,
+          x: number,
+          y: number,
+          width: number,
+          height: number,
+        ) => void
+      >();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
       drawImage,
     } as unknown as CanvasRenderingContext2D);
@@ -130,20 +162,37 @@ describe("ProjectActions — Export menu", () => {
 
     render(<ProjectActions />);
     fireEvent.click(openExportMenu()[1]);
-    const expected = buildExportSvg(useApp.getState().plan);
+    const expected = buildExportSvg(plan);
     const [svg] = vi.mocked(URL.createObjectURL).mock.calls[0];
     const markup = await readBlobText(svg as Blob);
     const svgDoc = new DOMParser().parseFromString(markup, "image/svg+xml");
     expect(
       svgDoc.querySelector('[data-layer="plan-labels"] text')?.textContent,
-    ).toBe("Terrace & 茶室 <🌿>");
+    ).toBe(label.text);
+    expect(markup).toBe(expected.markup);
+    const [[, , , width, height]] = drawImage.mock.calls;
     expect(drawImage).toHaveBeenCalledWith(
       expect.any(HTMLImageElement),
       0,
       0,
-      Math.round(expected.width * 2),
-      Math.round(expected.height * 2),
+      width,
+      height,
     );
+    expect(width).toBeGreaterThan(0);
+    expect(height).toBeGreaterThan(0);
+    expect(
+      Math.abs(height - (width * expected.height) / expected.width),
+    ).toBeLessThan(2);
+    expect(Math.max(width, height)).toBeLessThanOrEqual(8192);
+    expect(width * height).toBeLessThanOrEqual(4096 ** 2);
+    if (limit === "none") {
+      expect(width).toBe(Math.round(expected.width * 2));
+      expect(height).toBe(Math.round(expected.height * 2));
+    } else if (limit === "area") {
+      expect(width * height).toBeGreaterThan(16_000_000);
+    } else {
+      expect(width).toBe(8192);
+    }
     expect(downloads).toHaveLength(1);
     expect(downloads[0].filename).toBe("My-Plan.png");
     expect(downloads[0].blob.type).toBe("image/png");

@@ -413,9 +413,7 @@ function translateSelectedWallsFollowing(
 export const useApp = create<AppState>((set, get) => ({
   plan: history.present,
   tool: "wall",
-  view:
-    loadPersistedView(history.present.labels?.length ? 0 : MIN_SCALE) ??
-    DEFAULT_VIEW,
+  view: loadPersistedView() ?? DEFAULT_VIEW,
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
   setTool: (tool) => {

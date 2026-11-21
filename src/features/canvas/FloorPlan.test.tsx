@@ -280,7 +280,7 @@ describe("FloorPlan touch gestures", () => {
     expect(loadPersistedHistory()?.past).toHaveLength(0);
   });
 
-  it("fits the full text extent of a distant outdoor label from the toolbar", () => {
+  it("fits a distant outdoor label and returns to that zoom with wheel and pinch", () => {
     const plan = {
       ...enclosedPlan(),
       labels: [
@@ -302,6 +302,29 @@ describe("FloorPlan touch gestures", () => {
     expect(bounds.minY * scale + panY).toBeGreaterThan(0);
     expect(bounds.maxX * scale + panX).toBeLessThan(800);
     expect(bounds.maxY * scale + panY).toBeLessThan(600);
+
+    fireEvent.wheel(canvas, { deltaY: -250, clientX: 400, clientY: 300 });
+    expect(view().scale).toBeGreaterThan(scale);
+    fireEvent.wheel(canvas, { deltaY: 250, clientX: 400, clientY: 300 });
+    expect(view().scale).toBeCloseTo(scale, 8);
+    expect(view().panX).toBeCloseTo(panX);
+    expect(view().panY).toBeCloseTo(panY);
+
+    down(1, 200, 300);
+    down(2, 600, 300);
+    move(2, 700, 300);
+    up(2, 700, 300);
+    up(1, 200, 300);
+    expect(view().scale).toBeGreaterThan(scale);
+
+    down(1, 200, 300);
+    down(2, 700, 300);
+    move(2, 600, 300);
+    up(2, 600, 300);
+    up(1, 200, 300);
+    expect(view().scale).toBeCloseTo(scale, 8);
+    expect(view().panX).toBeCloseTo(panX);
+    expect(view().panY).toBeCloseTo(panY);
   });
 
   describe("one finger runs the active tool's gesture", () => {

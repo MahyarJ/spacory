@@ -38,6 +38,25 @@ function downloadBlob(blob: Blob, filename: string) {
 /** Raster the export SVG at this multiple of its cm dimensions, so the PNG is
  *  legible rather than blurry (cm and px are 1:1 on the live canvas). */
 const PNG_EXPORT_SCALE = 2;
+// Allow wide floor plans while staying within the canvas area supported by
+// older iOS WebKit versions (4096 × 4096 pixels).
+const MAX_PNG_SIDE = 8192;
+const MAX_PNG_PIXELS = 4096 ** 2;
+
+function pngRasterSize(width: number, height: number) {
+  const pixelsWide = Math.max(1, Math.round(width * PNG_EXPORT_SCALE));
+  const pixelsHigh = Math.max(1, Math.round(height * PNG_EXPORT_SCALE));
+  const scale = Math.min(
+    1,
+    MAX_PNG_SIDE / pixelsWide,
+    MAX_PNG_SIDE / pixelsHigh,
+    Math.sqrt(MAX_PNG_PIXELS / pixelsWide / pixelsHigh),
+  );
+  return {
+    width: Math.max(1, Math.floor(pixelsWide * scale)),
+    height: Math.max(1, Math.floor(pixelsHigh * scale)),
+  };
+}
 
 function buildProjectExportSvg(plan: Plan) {
   return buildExportSvg(
@@ -56,8 +75,9 @@ function exportPlanAsPng(plan: Plan) {
   const image = new Image();
   image.onload = () => {
     const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * PNG_EXPORT_SCALE);
-    canvas.height = Math.round(height * PNG_EXPORT_SCALE);
+    const raster = pngRasterSize(width, height);
+    canvas.width = raster.width;
+    canvas.height = raster.height;
     const ctx = canvas.getContext("2d");
     URL.revokeObjectURL(svgUrl);
     if (!ctx) {
