@@ -2,6 +2,8 @@ import { formatSystemArea } from "@app/format";
 import { isDoor, type Plan } from "@app/schema";
 import { getPlanBounds } from "./bounds";
 import {
+  DOOR_HINGE_RADIUS,
+  doorSwingFootprints,
   getDoorArcPath,
   getDoorGeometry,
   getWindowGeometry,
@@ -120,7 +122,7 @@ export function buildExportSvg(
         `<rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" transform="rotate(${rect.angleDeg}, ${rect.cx}, ${rect.cy})" fill="${EXPORT_BACKGROUND}" stroke="${EXPORT_WALL_COLOR}" />` +
         `<path d="${getDoorArcPath(geometry)}" fill="none" stroke="${EXPORT_WALL_COLOR}" />` +
         `<line x1="${hinge.x}" y1="${hinge.y}" x2="${tipOpen.x}" y2="${tipOpen.y}" stroke="${EXPORT_WALL_COLOR}" />` +
-        `<circle cx="${hinge.x}" cy="${hinge.y}" r="3" fill="${EXPORT_WALL_COLOR}" />`
+        `<circle cx="${hinge.x}" cy="${hinge.y}" r="${DOOR_HINGE_RADIUS}" fill="${EXPORT_WALL_COLOR}" />`
       );
     })
     .join("");
@@ -137,7 +139,11 @@ export function buildExportSvg(
     )
     .join("");
   const obstacles = roomNames.size
-    ? [...paintedWalls, ...dimensionFootprints(dimensionLabels, 1, measure)]
+    ? [
+        ...paintedWalls,
+        ...dimensionFootprints(dimensionLabels, 1, measure),
+        ...doorSwingFootprints(plan.items, wallsById),
+      ]
     : paintedWalls;
   const roomLabels = rooms
     .map((room) => {

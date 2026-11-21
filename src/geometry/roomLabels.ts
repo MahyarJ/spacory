@@ -245,6 +245,7 @@ export function layoutRoomLabel(
       break;
     const widths = new Map<string, string[]>();
     let full: RoomLabel | undefined;
+    let splitWord: RoomLabel | undefined;
     for (const rows of [1, 2]) {
       const halfHeight = (labelHalfHeight(rows + 1) * fontScale) / viewScale;
       // Consider each side of the painted edges. The small nudge keeps the
@@ -274,6 +275,16 @@ export function layoutRoomLabel(
         }
         const label = makeLabel(space.point, names, fontScale);
         if (!label.shortened) {
+          // Keep looking for a full label whose line break falls between words.
+          // A nearby one-line label can be easier to read than a split word.
+          if (
+            names.length > 1 &&
+            !/\s$/u.test(names[0]) &&
+            !/^\s/u.test(name.slice(names[0].length))
+          ) {
+            splitWord ??= label;
+            continue;
+          }
           full = label;
           break;
         }
@@ -287,7 +298,7 @@ export function layoutRoomLabel(
         }
       }
     }
-    if (full) return full;
+    if (full || splitWord) return full ?? splitWord;
   }
   if (abbreviated) return abbreviated;
 

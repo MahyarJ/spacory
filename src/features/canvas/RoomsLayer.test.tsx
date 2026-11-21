@@ -2,6 +2,7 @@
 import { createInitialPlan, type Plan } from "@app/schema";
 import { useApp } from "@app/store";
 import { DEFAULT_VIEW } from "@app/viewport";
+import { buildExportSvg } from "@geometry/exportSvg";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { FloorPlan } from "./FloorPlan";
@@ -352,6 +353,74 @@ it.each([
       ).toBe(true);
     }
   }
+});
+
+it("keeps the full bathroom label below the rendered door swing in the editor and SVG", () => {
+  const plan = roomPlan();
+  const resize = ({ x, y }: { x: number; y: number }) => ({
+    x: (x * 150) / 400,
+    y: (y * 220) / 300,
+  });
+  plan.walls = plan.walls.map((wall) => ({
+    ...wall,
+    a: resize(wall.a),
+    b: resize(wall.b),
+    thickness: 12,
+  }));
+  plan.items = [
+    {
+      id: "bathroom-door",
+      type: "door",
+      wallAttach: { wallId: "w3", offset: 118, length: 90 },
+      thickness: 20,
+      props: { hingeEdge: "start", swingSide: "inside" },
+    },
+  ];
+  plan.roomNames = [{ anchor: { x: 75, y: 110 }, name: "Bathroom" }];
+  const store = useApp.getState();
+  store.loadPlan(plan);
+  store.setView(() => DEFAULT_VIEW);
+
+  const { container } = render(<FloorPlan />);
+  const svg = new DOMParser().parseFromString(
+    buildExportSvg(plan).markup,
+    "image/svg+xml",
+  );
+  const verify = (root: ParentNode, label: Element, rows: string) => {
+    const door = root.querySelector('[data-layer="items"]')!;
+    expect(door.querySelector("path")?.getAttribute("d")).toBe(
+      "M 0 12 A 90 90 0 0 1 90 102",
+    );
+    const leaf = door.querySelector("line")!;
+    expect(
+      ["x1", "y1", "x2", "y2"].map((attr) => leaf.getAttribute(attr)),
+    ).toEqual(["0", "102", "90", "102"]);
+    const hinge = door.querySelector("circle")!;
+    const swingBottom =
+      Number(hinge.getAttribute("cy")) + Number(hinge.getAttribute("r"));
+    const [, labelY, labelScale] =
+      /translate\([^ ]+ ([^)]+)\) scale\(([^)]+)\)/.exec(
+        label.getAttribute("transform")!,
+      )!;
+    const glyphHalfHeight =
+      (Number(label.getAttribute("font-size")) +
+        Number(label.getAttribute("stroke-width"))) /
+      2;
+    const lines = [...label.querySelectorAll(rows)];
+    expect(lines.map((row) => row.textContent)).toEqual(["Bathroom", "3.3 m²"]);
+    for (const line of lines) {
+      const top =
+        Number(labelY) +
+        Number(labelScale) * (Number(line.getAttribute("y")) - glyphHalfHeight);
+      expect(top).toBeGreaterThan(swingBottom);
+    }
+  };
+  verify(
+    container,
+    container.querySelector('[data-layer="rooms"] text')!,
+    "tspan",
+  );
+  verify(svg, svg.querySelector('[data-layer="room-areas"] > g')!, "text");
 });
 
 it("restores both names after a shared wall or an exterior boundary is rebuilt", () => {

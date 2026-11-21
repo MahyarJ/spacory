@@ -140,8 +140,8 @@ current wall array during rendering, including live edits. History records user
 edits to names. Nested faces own their own interiors. The surrounding room uses
 a point outside each enclosed face for selection, new name anchors, and label
 placement. The area reading still measures each room's centreline outline.
-Named labels fit between the painted wall polygons, junction fills, and wall
-dimensions. They can shift within the same face to keep those readings legible, wrap
+Named labels fit between the painted wall polygons, junction fills, wall
+dimensions, and door swings. They can shift within the same face to stay clear, wrap
 to a second line when needed and abbreviate with an ellipsis when space runs out.
 The visible position can shift as wall thickness changes, while the stored name
 anchor stays fixed. Font measurement preserves the letters' natural proportions.

@@ -1,6 +1,7 @@
 import { isDoor } from "@app/schema";
 import { useApp } from "@app/store";
 import {
+  DOOR_HINGE_RADIUS,
   getDoorArcPath,
   getDoorGeometry,
   getWindowGeometry,
@@ -79,7 +80,7 @@ export function ItemsLayer() {
             <circle
               cx={hinge.x}
               cy={hinge.y}
-              r={3}
+              r={DOOR_HINGE_RADIUS}
               fill="var(--sp-wall)"
               vectorEffect="non-scaling-stroke"
             />

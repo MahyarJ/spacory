@@ -1,4 +1,11 @@
-import type { DoorItem, Item, Point, Wall, WindowItem } from "@app/schema";
+import {
+  type DoorItem,
+  type Item,
+  isDoor,
+  type Point,
+  type Wall,
+  type WindowItem,
+} from "@app/schema";
 import {
   getPointOnWall,
   getWallAngle,
@@ -34,6 +41,8 @@ export interface DoorGeometry {
   /** Arc radius — equal to the opening length. */
   radius: number;
 }
+
+export const DOOR_HINGE_RADIUS = 3;
 
 function openingRect(
   wall: Wall,
@@ -146,6 +155,35 @@ export function getDoorSweepPoints(geometry: DoorGeometry): Point[] {
     }
   }
   return points;
+}
+
+/** Reserve a clear envelope around each painted door swing for text layout. */
+export function doorSwingFootprints(
+  items: Item[],
+  wallsById: ReadonlyMap<string, Wall>,
+): Point[][] {
+  return items.flatMap((item) => {
+    if (!isDoor(item)) return [];
+    const wall = wallsById.get(item.wallAttach.wallId);
+    if (!wall) return [];
+    const points = getDoorSweepPoints(getDoorGeometry(item, wall));
+    // The hinge dot is wider than the leaf and arc strokes, even at minimum zoom.
+    const left =
+      Math.min(...points.map((point) => point.x)) - DOOR_HINGE_RADIUS;
+    const right =
+      Math.max(...points.map((point) => point.x)) + DOOR_HINGE_RADIUS;
+    const top = Math.min(...points.map((point) => point.y)) - DOOR_HINGE_RADIUS;
+    const bottom =
+      Math.max(...points.map((point) => point.y)) + DOOR_HINGE_RADIUS;
+    return [
+      [
+        { x: left, y: top },
+        { x: right, y: top },
+        { x: right, y: bottom },
+        { x: left, y: bottom },
+      ],
+    ];
+  });
 }
 
 /** SVG path `d` for a door's 90° swing arc, from the closed tip to the open tip. */

@@ -1,6 +1,7 @@
 import { formatSystemArea } from "@app/format";
 import type { Point, RoomName } from "@app/schema";
 import { useApp } from "@app/store";
+import { doorSwingFootprints } from "@geometry/itemGeometry";
 import { polygonToPoints } from "@geometry/junction";
 import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "@geometry/roomLabels";
 import type { Room } from "@geometry/rooms";
@@ -34,6 +35,8 @@ export function RoomsLayer({
   const system = useApp((s) => s.plan.meta.measurementSystem);
   const scale = useApp((s) => s.view.scale);
   const selectable = useApp((s) => s.tool === "select");
+  const walls = useApp((s) => s.plan.walls);
+  const items = useApp((s) => s.plan.items);
   const measure = useMemo(
     () =>
       createRoomLabelMeasurer(
@@ -43,13 +46,15 @@ export function RoomsLayer({
       ),
     [],
   );
-  const obstacles = useMemo(
-    () =>
-      names.size
-        ? [...paintedWalls, ...dimensionFootprints(dimensions, scale, measure)]
-        : paintedWalls,
-    [names, paintedWalls, dimensions, scale, measure],
-  );
+  const obstacles = useMemo(() => {
+    if (!names.size) return paintedWalls;
+    const wallsById = new Map(walls.map((wall) => [wall.id, wall]));
+    return [
+      ...paintedWalls,
+      ...dimensionFootprints(dimensions, scale, measure),
+      ...doorSwingFootprints(items, wallsById),
+    ];
+  }, [names, paintedWalls, dimensions, scale, measure, items, walls]);
   const labels = useMemo(
     () =>
       rooms.map((room) => {
