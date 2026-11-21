@@ -137,13 +137,14 @@ needs arrived with that change; this is the moment to answer it.
 and converts using the square of the display-unit factor. Wall thickness is not
 subtracted, so this is not net usable interior area. Rooms are memoized from the
 current wall array during rendering, including live edits. History records user
-edits to names. Labels use the area centroid when it is strictly inside the room,
-keeping placement independent of extra collinear junctions. If a concave room’s
-centroid is outside or on its boundary, a horizontal interior interval supplies
-the fallback.
-Named labels fit inside the derived face. They wrap to a second line when
-needed and abbreviate with an ellipsis when space runs out. Measuring the
-rendering font preserves the letters' natural proportions. The full name stays
+edits to names. Unnamed area labels use the area centroid when it is strictly
+inside the room. If a concave room’s centroid is outside or on its boundary, a
+horizontal interior interval supplies the fallback.
+Named labels fit between the painted wall polygons and junction fills. They wrap
+to a second line when needed and abbreviate with an ellipsis when space runs out.
+The visible position can shift as wall thickness changes, while the stored name
+anchor stays fixed. Font measurement preserves the letters' natural proportions.
+The full name stays
 in the document and is available in the editor and the SVG's title. Image
 dimensions follow plan geometry, regardless of the length of any room name.
 The editor caps newly saved names at 80 characters. Import and reload preserve

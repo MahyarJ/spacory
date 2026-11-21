@@ -2,8 +2,8 @@
 import { createInitialPlan, type Plan } from "@app/schema";
 import { useApp } from "@app/store";
 import { DEFAULT_VIEW } from "@app/viewport";
-import { act, cleanup, render } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { act, cleanup, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
 import { FloorPlan } from "./FloorPlan";
 
 function roomPlan(): Plan {
@@ -36,6 +36,8 @@ function roomPlan(): Plan {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   useApp.getState().loadPlan(createInitialPlan());
   useApp.getState().setView(() => DEFAULT_VIEW);
 });
@@ -109,6 +111,7 @@ it("wraps adjacent room names within their own faces at editor zoom", () => {
   });
   const viewScale = 0.95;
   const store = useApp.getState();
+  store.setTool("select");
   store.loadPlan({
     ...plan,
     walls: plan.walls.map((wall) => ({
@@ -130,12 +133,10 @@ it("wraps adjacent room names within their own faces at editor zoom", () => {
   const { container } = render(<FloorPlan />);
   const labels = [...container.querySelectorAll('[data-layer="rooms"] text')];
   expect(labels).toHaveLength(2);
-  for (const { anchor, name } of roomNames) {
-    const label = labels.find((node) =>
-      node
-        .getAttribute("transform")
-        ?.startsWith(`translate(${anchor.x} ${anchor.y})`),
-    );
+  for (const { name } of roomNames) {
+    const label = screen
+      .getByRole("button", { name: `${name}, 5.76 m²` })
+      .querySelector("text");
     expect(label?.getAttribute("transform")).toContain(
       `scale(${1 / viewScale})`,
     );
@@ -149,6 +150,66 @@ it("wraps adjacent room names within their own faces at editor zoom", () => {
       expect(line.hasAttribute("lengthAdjust")).toBe(false);
     }
   }
+});
+
+it.each([
+  40, 140,
+])("keeps room text inside painted walls with a %icm left wall", (leftThickness) => {
+  // jsdom cannot measure painted SVG text. Supply deterministic widths to the
+  // same canvas measurement path the editor uses, and compare the rendered
+  // rows to the inside edges of the wall polygons it actually drew.
+  const measureText = (text: string) => ({ width: text.length * 6.5 });
+  vi.stubGlobal("CanvasRenderingContext2D", function CanvasContext() {});
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    () => ({ measureText }) as CanvasRenderingContext2D,
+  );
+  const plan = roomPlan();
+  const anchor = { x: 65, y: 120 };
+  const name = "Ground floor coat and linen storage";
+  const resize = ({ x, y }: { x: number; y: number }) => ({
+    x: (x * 130) / 400,
+    y: (y * 240) / 300,
+  });
+  const store = useApp.getState();
+  store.loadPlan({
+    ...plan,
+    walls: plan.walls.map((wall) => ({
+      ...wall,
+      a: resize(wall.a),
+      b: resize(wall.b),
+      thickness: wall.id === "w3" ? leftThickness : 40,
+    })),
+    items: [],
+    roomNames: [{ anchor, name }],
+  });
+  store.setTool("select");
+  store.setView(() => DEFAULT_VIEW);
+
+  const { container } = render(<FloorPlan />);
+  const group = screen.getByRole("button", { name: `${name}, 3.12 m²` });
+  const label = group.querySelector("text")!;
+  const outline = label.getAttribute("transform")!;
+  const [, x, , fontScale] =
+    /translate\(([^ ]+) ([^)]+)\) scale\(([^)]+)\)/.exec(outline)!;
+  const walls = container.querySelectorAll('[data-layer="walls"] polygon');
+  const wallXs = (index: number) =>
+    walls[index]
+      .getAttribute("points")!
+      .split(" ")
+      .map((p) => Number(p.split(",")[0]));
+  const leftInnerEdge = Math.max(...wallXs(3));
+  const rightInnerEdge = Math.min(...wallXs(1));
+
+  expect(rightInnerEdge - leftInnerEdge).toBe(110 - leftThickness / 2);
+  expect(label.querySelector('tspan[font-weight="600"]')).not.toBeNull();
+  expect(label.querySelector("tspan:last-child")?.textContent).toBe("3.12 m²");
+  for (const line of label.querySelectorAll("tspan")) {
+    const halfWidth =
+      (measureText(line.textContent ?? "").width / 2 + 1.5) * Number(fontScale);
+    expect(Number(x) - halfWidth).toBeGreaterThan(leftInnerEdge);
+    expect(Number(x) + halfWidth).toBeLessThan(rightInnerEdge);
+  }
+  expect(useApp.getState().plan.roomNames).toEqual([{ anchor, name }]);
 });
 
 it("restores both names after a shared wall or an exterior boundary is rebuilt", () => {

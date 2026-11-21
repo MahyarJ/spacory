@@ -77,6 +77,7 @@ export function buildExportSvg(
   const height = maxY - minY + margin * 2;
 
   const { walls: wallPolys, junctions } = computeWallGeometry(plan.walls);
+  const paintedWalls = [...wallPolys.values(), ...junctions];
   const wallsById = new Map(plan.walls.map((w) => [w.id, w]));
 
   const wallShapes = plan.walls
@@ -135,12 +136,18 @@ export function buildExportSvg(
     .join("");
   const roomLabels = rooms
     .map((room) => {
-      const { x, y } = room.labelPoint;
       const name = roomNames.get(room)?.name;
       const area = formatSystemArea(room.area, plan.meta.measurementSystem);
-      if (!name)
-        return `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${area}</text>`;
-      const label = layoutRoomLabel(room, name, area, 1, measure);
+      const label = name
+        ? layoutRoomLabel(room, name, area, paintedWalls, 1, measure)
+        : undefined;
+      const { x, y } = label?.point ?? room.labelPoint;
+      if (!name || !label) {
+        const areaText = `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${area}</text>`;
+        return name
+          ? `<g><title>${escapeSvgText(name)}</title>${areaText}</g>`
+          : areaText;
+      }
       const lines = label.nameLines
         .map(
           (line) =>

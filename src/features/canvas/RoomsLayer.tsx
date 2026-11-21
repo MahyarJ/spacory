@@ -1,5 +1,5 @@
 import { formatSystemArea } from "@app/format";
-import type { RoomName } from "@app/schema";
+import type { Point, RoomName } from "@app/schema";
 import { useApp } from "@app/store";
 import { polygonToPoints } from "@geometry/junction";
 import { layoutRoomLabel, ROOM_LABEL_FONT_SIZE } from "@geometry/roomLabels";
@@ -11,6 +11,7 @@ import styles from "./FloorPlan.module.css";
 interface RoomsLayerProps {
   rooms: Room[];
   names: Map<Room, RoomName>;
+  paintedWalls: readonly (readonly Point[])[];
   selectedRoom?: Room;
   activateRoom: (room: Room) => void;
   onRoomFocus: (outline: string | null) => void;
@@ -19,6 +20,7 @@ interface RoomsLayerProps {
 export function RoomsLayer({
   rooms,
   names,
+  paintedWalls,
   selectedRoom,
   activateRoom,
   onRoomFocus,
@@ -35,21 +37,30 @@ export function RoomsLayer({
       ),
     [],
   );
-
-  return (
-    <g data-layer="rooms" style={{ pointerEvents: "none" }}>
-      {rooms.map((room) => {
-        const points = polygonToPoints(room.polygon);
+  const labels = useMemo(
+    () =>
+      rooms.map((room) => {
         const name = names.get(room)?.name;
         const area = formatSystemArea(room.area, system);
         const label = name
-          ? layoutRoomLabel(room, name, area, scale, measure)
-          : null;
+          ? layoutRoomLabel(room, name, area, paintedWalls, scale, measure)
+          : undefined;
+        return { room, name, area, label };
+      }),
+    [rooms, names, system, paintedWalls, scale, measure],
+  );
+
+  return (
+    <g data-layer="rooms" style={{ pointerEvents: "none" }}>
+      {labels.map(({ room, name, area, label }) => {
+        const points = polygonToPoints(room.polygon);
+        const { x, y } = label?.point ?? room.labelPoint;
         const content = (
           <>
-            {label && (label.shortened || label.nameLines.length > 1) && (
-              <title>{name}</title>
-            )}
+            {name &&
+              (!label || label.shortened || label.nameLines.length > 1) && (
+                <title>{name}</title>
+              )}
             <polygon
               className={styles.roomFill}
               points={points}
@@ -57,7 +68,7 @@ export function RoomsLayer({
               fillOpacity={0.045}
             />
             <text
-              transform={`translate(${room.labelPoint.x} ${room.labelPoint.y}) scale(${(label?.fontScale ?? 1) / scale})`}
+              transform={`translate(${x} ${y}) scale(${(label?.fontScale ?? 1) / scale})`}
               textAnchor="middle"
               dominantBaseline="central"
               fontFamily="var(--sp-font)"

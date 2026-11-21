@@ -13,6 +13,7 @@ import {
   type WallEndpointRef,
 } from "@geometry/connectivity";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
+import { computeWallGeometry } from "@geometry/junction";
 import {
   MIN_OPENING_WIDTH,
   openingPlacementFromOffsets,
@@ -80,6 +81,14 @@ export function FloorPlan() {
   const canvasSize = useApp((s) => s.canvasSize);
 
   const rooms = useMemo(() => detectRooms(plan.walls), [plan.walls]);
+  const wallGeometry = useMemo(
+    () => computeWallGeometry(plan.walls),
+    [plan.walls],
+  );
+  const paintedWalls = useMemo(
+    () => [...wallGeometry.walls.values(), ...wallGeometry.junctions],
+    [wallGeometry],
+  );
   const roomNames = useMemo(
     () => resolveRoomNames(rooms, plan.roomNames),
     [rooms, plan.roomNames],
@@ -882,11 +891,12 @@ export function FloorPlan() {
           <RoomsLayer
             rooms={rooms}
             names={roomNames}
+            paintedWalls={paintedWalls}
             selectedRoom={selectedRoom}
             activateRoom={activateRoom}
             onRoomFocus={setFocusedRoomOutline}
           />
-          <WallsLayer />
+          <WallsLayer geometry={wallGeometry} />
           <ItemsLayer />
           <DimensionsLayer />
           <SelectionLayer />

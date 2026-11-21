@@ -1,13 +1,9 @@
 import { useApp } from "@app/store";
-import { computeWallGeometry, polygonToPoints } from "@geometry/junction";
-import { useMemo } from "react";
+import { polygonToPoints, type WallGeometry } from "@geometry/junction";
 
-export function WallsLayer() {
+export function WallsLayer({ geometry }: { geometry: WallGeometry }) {
   const walls = useApp((s) => s.plan.walls);
-  const { walls: polygons, junctions } = useMemo(
-    () => computeWallGeometry(walls),
-    [walls],
-  );
+  const { walls: polygons, junctions } = geometry;
 
   return (
     <g data-layer="walls">

@@ -220,3 +220,17 @@ it("uses measured glyph widths to wrap labels at their natural proportions", () 
   expect(markup).toContain(">5.76 m²</text>");
   expect(markup).not.toMatch(/textLength=|lengthAdjust=/);
 });
+
+it("preserves the name in the SVG title when walls fill the entire face", () => {
+  const plan = planOf([
+    wall(0, 0, 80, 0, 100, "a"),
+    wall(80, 0, 80, 80, 100, "b"),
+    wall(80, 80, 0, 80, 100, "c"),
+    wall(0, 80, 0, 0, 100, "d"),
+  ]);
+  plan.roomNames = [{ anchor: { x: 40, y: 40 }, name: "Coats & linen" }];
+  const { markup } = buildExportSvg(plan);
+  expect(markup).toContain("<title>Coats &amp; linen</title>");
+  expect(markup).not.toContain('font-weight="600"');
+  expect(markup).toContain(">0.64 m²</text>");
+});

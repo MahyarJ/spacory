@@ -1,15 +1,17 @@
 import { graphemes } from "@app/roomName";
+import type { Point } from "@app/schema";
 import { distToSegment } from "./hit";
-import type { Room } from "./rooms";
+import { findRoomAt, type Room } from "./rooms";
 
 export const ROOM_LABEL_FONT_SIZE = 12;
 const LINE_HEIGHT = 16;
-const PADDING = 10;
+const PADDING = 4;
 const ELLIPSIS = "…";
 
 export type MeasureRoomLabel = (text: string, weight: 400 | 600) => number;
 
 interface RoomLabel {
+  point: Point;
   fontScale: number;
   nameLines: { text: string; y: number }[];
   areaY: number;
@@ -66,23 +68,81 @@ function fitLine(
     : fitPrefix(text, maxWidth, measure, ELLIPSIS) + ELLIPSIS;
 }
 
-/** Width of the largest rectangle centered on the label and staying in the face. */
-function roomWidthAcrossBand(room: Room, halfHeight: number): number {
-  const { x, y } = room.labelPoint;
-  let halfWidth = Number.POSITIVE_INFINITY;
+type Span = [left: number, right: number];
+type Polygon = readonly Point[];
+
+function edgeInBand(
+  a: Point,
+  b: Point,
+  top: number,
+  bottom: number,
+): Span | undefined {
+  const low = Math.max(top, Math.min(a.y, b.y));
+  const high = Math.min(bottom, Math.max(a.y, b.y));
+  if (low > high) return;
+  if (a.y === b.y) return [Math.min(a.x, b.x), Math.max(a.x, b.x)];
+  const dxdy = (b.x - a.x) / (b.y - a.y);
+  const x1 = a.x + (low - a.y) * dxdy;
+  const x2 = a.x + (high - a.y) * dxdy;
+  return [Math.min(x1, x2), Math.max(x1, x2)];
+}
+
+/** Project face edges and solid wall fills across the full height of a label. */
+function visibleBand(
+  room: Room,
+  walls: readonly Polygon[],
+  y: number,
+  halfHeight: number,
+) {
+  const top = y - halfHeight;
+  const bottom = y + halfHeight;
+  const blocked: Span[] = [];
   for (let i = 1; i < room.polygon.length; i++) {
-    const a = room.polygon[i - 1];
-    const b = room.polygon[i];
-    const low = Math.max(y - halfHeight, Math.min(a.y, b.y));
-    const high = Math.min(y + halfHeight, Math.max(a.y, b.y));
-    if (low > high) continue;
-    const xAt = (atY: number) =>
-      a.x + ((atY - a.y) * (b.x - a.x)) / (b.y - a.y);
-    const edge = a.y === b.y ? [a.x, b.x] : [xAt(low), xAt(high)];
-    const distance = Math.max(Math.min(...edge) - x, x - Math.max(...edge), 0);
-    halfWidth = Math.min(halfWidth, distance);
+    const span = edgeInBand(room.polygon[i - 1], room.polygon[i], top, bottom);
+    if (span) blocked.push(span);
   }
-  return halfWidth * 2;
+  for (const wall of walls) {
+    let left = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < wall.length; i++) {
+      const span = edgeInBand(
+        wall[i],
+        wall[(i + 1) % wall.length],
+        top,
+        bottom,
+      );
+      if (span) {
+        left = Math.min(left, span[0]);
+        right = Math.max(right, span[1]);
+      }
+    }
+    if (left <= right) blocked.push([left, right]);
+  }
+  blocked.sort((a, b) => a[0] - b[0]);
+  let farthest = blocked[0]?.[1] ?? 0;
+  let best: { point: Point; width: number } | undefined;
+  for (const [left, right] of blocked) {
+    const width = left - farthest;
+    if (width > (best?.width ?? 0)) {
+      const point = { x: farthest + width / 2, y };
+      if (findRoomAt([room], point)) best = { point, width };
+    }
+    farthest = Math.max(farthest, right);
+  }
+  return best;
+}
+
+function labelClearance(point: Point, polygons: readonly Polygon[]): number {
+  let clearance = Number.POSITIVE_INFINITY;
+  for (const polygon of polygons) {
+    for (let i = 0; i < polygon.length; i++) {
+      clearance = Math.min(
+        clearance,
+        distToSegment(point, polygon[i], polygon[(i + 1) % polygon.length]),
+      );
+    }
+  }
+  return clearance;
 }
 
 function labelHalfHeight(rows: number): number {
@@ -94,43 +154,73 @@ export function layoutRoomLabel(
   room: Room,
   name: string,
   area: string,
+  walls: readonly Polygon[],
   viewScale = 1,
   measure: MeasureRoomLabel = estimateWidth,
-): RoomLabel {
+): RoomLabel | undefined {
   const measureName = (text: string) => measure(text, 600);
+  let y = room.labelPoint.y;
   let fontScale = 1;
-  const widthFor = (rows: number) =>
-    (roomWidthAcrossBand(
+  const band = (rows: number) =>
+    visibleBand(
       room,
+      walls,
+      y,
       (labelHalfHeight(rows) * fontScale) / viewScale,
-    ) *
-      viewScale) /
-      fontScale -
-    PADDING * 2;
+    );
+  const widthFor = (width: number) =>
+    (width * viewScale) / fontScale - PADDING * 2;
   const minWidth = Math.max(measure(area, 400), measureName(ELLIPSIS));
-  if (widthFor(2) < minWidth) {
-    // A box this small needs reduced type even for one name line and the full
-    // area. Fit both inside the circle that reaches the nearest boundary.
-    let clearance = Number.POSITIVE_INFINITY;
-    for (let i = 1; i < room.polygon.length; i++) {
-      clearance = Math.min(
-        clearance,
-        distToSegment(room.labelPoint, room.polygon[i - 1], room.polygon[i]),
-      );
+  let space = band(2);
+  if (!space || widthFor(space.width) < minWidth) {
+    // Try the center in a shallower band. If a wall covers the whole row, try
+    // the gaps between painted vertices elsewhere in the face.
+    let visible = visibleBand(room, walls, y, 0);
+    if (!visible) {
+      const ys = room.polygon.map((point) => point.y);
+      const xs = room.polygon.map((point) => point.x);
+      const top = Math.min(...ys);
+      const bottom = Math.max(...ys);
+      const left = Math.min(...xs);
+      const right = Math.max(...xs);
+      for (const wall of walls) {
+        if (
+          wall.every((point) => point.x < left) ||
+          wall.every((point) => point.x > right)
+        )
+          continue;
+        for (const point of wall) {
+          if (point.y > top && point.y < bottom) ys.push(point.y);
+        }
+      }
+      ys.sort((a, b) => a - b);
+      for (let i = 1; i < ys.length; i++) {
+        if (ys[i] === ys[i - 1]) continue;
+        const candidate = visibleBand(room, walls, (ys[i - 1] + ys[i]) / 2, 0);
+        if (candidate && (!visible || candidate.width > visible.width))
+          visible = candidate;
+      }
     }
+    if (!visible) return;
+    y = visible.point.y;
+    const clearance = labelClearance(visible.point, [room.polygon, ...walls]);
     fontScale = Math.min(
       1,
       (clearance * viewScale) /
         Math.hypot(minWidth / 2 + PADDING, labelHalfHeight(2)),
     );
+    if (fontScale <= 0) return;
+    space = band(2);
+    if (!space) return;
   }
 
-  const single = fitLine(name, widthFor(2), measureName);
+  const single = fitLine(name, widthFor(space.width), measureName);
   let names = [single];
   let shortened = single !== name;
   if (shortened) {
-    const wrappedWidth = widthFor(3);
-    if (wrappedWidth >= minWidth) {
+    const wrappedSpace = band(3);
+    const wrappedWidth = widthFor(wrappedSpace?.width ?? 0);
+    if (wrappedSpace && wrappedWidth >= minWidth) {
       const prefix = fitPrefix(name, wrappedWidth, measureName);
       const wordBreak = prefix.search(/\s+\S*$/u);
       const first =
@@ -143,11 +233,13 @@ export function layoutRoomLabel(
       const second = fitLine(remaining, wrappedWidth, measureName);
       names = [first, second];
       shortened = second !== remaining;
+      space = wrappedSpace;
     }
   }
 
   const areaY = (names.length * LINE_HEIGHT) / 2;
   return {
+    point: space.point,
     fontScale,
     nameLines: names.map((text, index) => ({
       text,
