@@ -844,6 +844,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!history.past.length) return;
     history = undoHistory(history);
     persist();
+    // A history jump replaces the preview and ends its live drag.
     // A held connection-point selection has no reliable meaning across a
     // history jump (the coordinate it was grabbed at may no longer be a
     // junction, or may now match an unrelated one), so drop it rather than
@@ -859,6 +860,8 @@ export const useApp = create<AppState>((set, get) => ({
       selectedLabels: new Set(),
       labelEditor: null,
       selectedConnectionPointEndpoints: [],
+      liveDragItems: null,
+      liveDragConnectionPoint: null,
     });
   },
   redo: () => {
@@ -876,6 +879,8 @@ export const useApp = create<AppState>((set, get) => ({
       selectedLabels: new Set(),
       labelEditor: null,
       selectedConnectionPointEndpoints: [],
+      liveDragItems: null,
+      liveDragConnectionPoint: null,
     });
   },
   marquee: null,

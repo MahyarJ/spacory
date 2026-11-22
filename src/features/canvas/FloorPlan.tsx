@@ -438,13 +438,14 @@ export function FloorPlan() {
     const drag = selectionDrag.current;
     selectionDrag.current = null;
     const state = useApp.getState();
-    if (!drag || !state.liveDragItems) return;
+    if (!drag || !state.liveDragItems) return false;
     if (
       state.tool === "select" &&
       (drag.applied.x !== 0 || drag.applied.y !== 0)
     )
       state.commitPlan();
     else state.cancelLiveDrag();
+    return true;
   };
 
   // Build and commit an opening item from a resolved offset/length. Shared by
@@ -740,6 +741,8 @@ export function FloorPlan() {
     // from the grab anchors so the preview is drift-free even if a tick is
     // rejected by the zero-length guard.
     if (e.buttons === 1 && tool === "select" && movingEndpoint) {
+      const state = useApp.getState();
+      if (!state.liveDragItems) return;
       let tx =
         movingEndpoint.startCoord.x + (world.x - movingEndpoint.grabWorld.x);
       let ty =
@@ -749,14 +752,14 @@ export function FloorPlan() {
         tx = Math.round(tx / grid) * grid;
         ty = Math.round(ty / grid) * grid;
       }
-      useApp
-        .getState()
-        .moveWallEndpointLive(movingEndpoint.ref, { x: tx, y: ty });
+      state.moveWallEndpointLive(movingEndpoint.ref, { x: tx, y: ty });
       return;
     }
 
     // start moving a connection point
     if (e.buttons === 1 && tool === "select" && movingPoint) {
+      const state = useApp.getState();
+      if (!state.liveDragItems) return;
       const world = toWorld(e.clientX, e.clientY);
       const dx = world.x - movingPoint.last.x;
       const dy = world.y - movingPoint.last.y;
@@ -775,7 +778,7 @@ export function FloorPlan() {
           tdy = snappedDy - (movingPoint.last.y - movingPoint.start.y);
         }
 
-        useApp.getState().translateSelectedConnectionPointLive(tdx, tdy);
+        state.translateSelectedConnectionPointLive(tdx, tdy);
         setMovingPoint({
           ...movingPoint,
           last: {
@@ -826,8 +829,7 @@ export function FloorPlan() {
       const moved = Math.hypot(dx, dy) * view.scale > LABEL_DRAG_THRESHOLD;
       if (press.label) {
         if (tool === "select") moveSelectionDrag(world, LABEL_DRAG_THRESHOLD);
-        finishSelectionDrag();
-        if (tool !== "select" || moved) return;
+        if (!finishSelectionDrag() || tool !== "select" || moved) return;
         if (press.editOnTap) {
           const { id, position } = press.label;
           // Mount and focus the editor during the pointer gesture.
@@ -915,6 +917,11 @@ export function FloorPlan() {
     }
     if (selectionDrag.current) {
       finishSelectionDrag();
+      return;
+    }
+    if ((movingPoint || movingEndpoint) && !useApp.getState().liveDragItems) {
+      setMovingPoint(null);
+      setMovingEndpoint(null);
       return;
     }
     if (movingPoint) {

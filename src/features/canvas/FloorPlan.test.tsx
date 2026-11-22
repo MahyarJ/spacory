@@ -470,6 +470,61 @@ describe("FloorPlan touch gestures", () => {
     ]);
   });
 
+  it.each([
+    { modifier: "ctrlKey", release: { x: 460, y: 220 } },
+    { modifier: "metaKey", release: { x: 400, y: 200 } },
+  ] as const)("preserves Redo after $modifier+Z interrupts a label drag", ({
+    modifier,
+    release,
+  }) => {
+    setup({ tool: "label" });
+    down(1, 400, 200);
+    up(1, 400, 200);
+    const field = screen.getByRole("textbox", { name: "Label text" });
+    fireEvent.change(field, { target: { value: "Terrace" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    const original = useApp.getState().plan.labels;
+    expect(original).toHaveLength(1);
+
+    act(() => useApp.getState().setTool("select"));
+    down(1, 400, 200, { pointerType: "mouse" });
+    move(1, 440, 220);
+    expect(useApp.getState().plan.labels?.[0].position).toEqual({
+      x: 440,
+      y: 220,
+    });
+
+    fireEvent.keyDown(window, { key: "z", [modifier]: true });
+    expect(useApp.getState().plan.labels ?? []).toHaveLength(0);
+    up(1, release.x, release.y);
+    expect(useApp.getState().selectedLabels.size).toBe(0);
+
+    fireEvent.keyDown(window, { key: "z", shiftKey: true, [modifier]: true });
+    expect(useApp.getState().plan.labels).toEqual(original);
+  });
+
+  it("discards an endpoint drag when the toolbar redoes a plan change", () => {
+    setup({ tool: "select", plan: cornerPlan() });
+    render(<Toolbar />);
+    const original = walls();
+    const added = wall(0, 350, 400, 350, "w3");
+    act(() => useApp.getState().addWall(added));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    act(() => useApp.getState().selectWall("w1"));
+
+    down(1, 0, 0, { pointerType: "mouse" });
+    move(1, 40, 40);
+    expect(walls()[0].a).toEqual({ x: 40, y: 40 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    move(1, 60, 60);
+    up(1, 60, 60);
+    expect(walls()).toEqual([...original, added]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(walls()).toEqual(original);
+  });
+
   it("marquee-selects labels by their text bounds alongside walls and moves selected labels together", () => {
     const labels = [
       {
