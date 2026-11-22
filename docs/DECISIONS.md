@@ -7,9 +7,14 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ## Image export visibility keeps annotation positions fixed
 
-The image export preview and both download formats use the same SVG. When a
-measurement is hidden, its text is omitted after room name layout. This keeps
-names in the same place and at the same size as measurements toggle.
+The image export preview, both download formats, and clipboard copy use the same
+SVG. When a measurement is hidden, its text is omitted after room name layout.
+This keeps names in the same place and at the same size as measurements toggle.
+
+Copy uses the same PNG rasterizer as the PNG download so the exported plan can
+be pasted into messages and documents. The clipboard write starts during the
+click and receives the PNG as a promise to preserve Safari's user gesture.
+[WebKit clipboard API discussion](https://bugs.webkit.org/show_bug.cgi?id=222262)
 
 ## Plan labels and room names scale with the drawing
 

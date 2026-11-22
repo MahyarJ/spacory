@@ -1,3 +1,22 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--sp-grid);
+  color: var(--sp-text);
+  border: none;
+  padding: 6px 10px;
+  min-height: var(--sp-toolbar-button-height);
+  border-radius: var(--sp-toolbar-button-radius);
+  font-family: inherit;
+  font-size: var(--sp-control-font-size);
+  cursor: pointer;
+}
+
+.button svg {
+  flex: none;
+}
+
 .toolbar {
   display: flex;
   /* Wrap rather than overflow: at tablet widths the row is wider than the
@@ -15,25 +34,6 @@
     font-size: 16px;
     color: var(--sp-accent);
     padding: 0 8px;
-  }
-
-  .button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--sp-grid);
-    color: var(--sp-text);
-    border: none;
-    padding: 6px 10px;
-    min-height: var(--sp-toolbar-button-height);
-    border-radius: var(--sp-toolbar-button-radius);
-    font-family: inherit;
-    font-size: var(--sp-control-font-size);
-    cursor: pointer;
-  }
-
-  .button svg {
-    flex: none;
   }
 
   .active {
@@ -60,20 +60,22 @@
        button comes later in the DOM. This only applies once the row wraps; an
        unwrapped toolbar is exactly as tall as on desktop. */
     row-gap: 16px;
+  }
+}
 
-    .button {
-      position: relative;
-      min-width: var(--sp-touch-target);
-    }
+@media (pointer: coarse) {
+  .button {
+    position: relative;
+    min-width: var(--sp-touch-target);
+  }
 
-    .button::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 50%;
-      height: var(--sp-touch-target);
-      transform: translateY(-50%);
-    }
+  .button::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: var(--sp-touch-target);
+    transform: translateY(-50%);
   }
 }

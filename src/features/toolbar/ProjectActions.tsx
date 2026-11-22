@@ -9,8 +9,16 @@ import {
 import { Menu } from "@ui/Menu";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
-import { Download, FileJson, Image as ImageIcon, Upload } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  Copy,
+  Download,
+  FileJson,
+  FolderOpen,
+  Image as ImageIcon,
+  Upload,
+  X,
+} from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ICON_SIZE } from "./constants";
 import imageStyles from "./ExportImageDialog.module.css";
 import styles from "./Toolbar.module.css";
@@ -61,40 +69,42 @@ function exportSvgBlob(markup: string): Blob {
   return new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
 }
 
-function exportPlanAsPng(
-  { markup, width, height }: ExportSvgResult,
-  filename: string,
-) {
-  const svgBlob = exportSvgBlob(markup);
-  const svgUrl = URL.createObjectURL(svgBlob);
-
+async function buildExportPng({ markup, width, height }: ExportSvgResult) {
+  const svgUrl = URL.createObjectURL(exportSvgBlob(markup));
   const image = new Image();
-  image.onload = () => {
+  try {
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("Could not export PNG."));
+      image.src = svgUrl;
+    });
+
     const canvas = document.createElement("canvas");
     const raster = pngRasterSize(width, height);
     canvas.width = raster.width;
     canvas.height = raster.height;
     const ctx = canvas.getContext("2d");
-    URL.revokeObjectURL(svgUrl);
     if (!ctx) {
-      window.alert("Could not export PNG: canvas is unsupported.");
-      return;
+      throw new Error("Could not export PNG: canvas is unsupported.");
     }
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((pngBlob) => {
-      if (!pngBlob) {
-        window.alert("Could not export PNG.");
-        return;
-      }
-      downloadBlob(pngBlob, filename);
-    }, "image/png");
-  };
-  image.onerror = () => {
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (blob) resolve(blob);
+        else reject(new Error("Could not export PNG."));
+      }, "image/png");
+    });
+  } finally {
     URL.revokeObjectURL(svgUrl);
-    window.alert("Could not export PNG.");
-  };
-  image.src = svgUrl;
+  }
 }
+
+const COPY_MESSAGES = {
+  idle: "",
+  copying: "Copying…",
+  copied: "Image copied.",
+  failed: "Could not copy the image. You can download the PNG.",
+};
 
 function ExportImageDialog({
   plan,
@@ -107,6 +117,8 @@ function ExportImageDialog({
   const titleId = useId();
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
+  const [copyStatus, setCopyStatus] =
+    useState<keyof typeof COPY_MESSAGES>("idle");
 
   useEffect(() => {
     dialogRef.current!.showModal();
@@ -117,14 +129,48 @@ function ExportImageDialog({
     onClose();
   };
 
-  const svg = buildExportSvg(
-    plan,
-    EXPORT_MARGIN,
-    createRoomLabelMeasurer(),
-    plan.labels?.length ? createPlanLabelMeasurer() : undefined,
-    { wallLengths, roomAreas },
+  const svg = useMemo(
+    () =>
+      buildExportSvg(
+        plan,
+        EXPORT_MARGIN,
+        createRoomLabelMeasurer(),
+        plan.labels?.length ? createPlanLabelMeasurer() : undefined,
+        { wallLengths, roomAreas },
+      ),
+    [plan, wallLengths, roomAreas],
   );
   const filename = sanitizeFilename(plan.meta.name);
+  const canCopyImage =
+    typeof ClipboardItem !== "undefined" &&
+    typeof navigator.clipboard?.write === "function";
+
+  const downloadPng = async () => {
+    try {
+      downloadBlob(await buildExportPng(svg), `${filename}.png`);
+    } catch (error) {
+      window.alert(
+        error instanceof Error ? error.message : "Could not export PNG.",
+      );
+    }
+  };
+
+  const copyImage = async () => {
+    if (copyStatus === "copying") return;
+    setCopyStatus("copying");
+    const png = buildExportPng(svg);
+    // The browser can reject the write before it reads the PNG promise.
+    void png.catch(() => {});
+    try {
+      // Safari needs the write to start in the click handler, before PNG encoding.
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": png }),
+      ]);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("failed");
+    }
+  };
 
   return (
     <dialog
@@ -139,9 +185,20 @@ function ExportImageDialog({
       // keeping keyboard events away from the editor's window listener.
       onKeyDown={(e) => e.stopPropagation()}
     >
-      <h2 id={titleId} className={imageStyles.title}>
-        Export image
-      </h2>
+      <header className={imageStyles.header}>
+        <h2 id={titleId} className={imageStyles.title}>
+          Export image
+        </h2>
+        <button
+          type="button"
+          className={`${styles.button} ${imageStyles.close}`}
+          aria-label="Close export dialog"
+          title="Close"
+          onClick={close}
+        >
+          <X size={ICON_SIZE} aria-hidden="true" />
+        </button>
+      </header>
       <div className={imageStyles.body}>
         <img
           className={imageStyles.preview}
@@ -168,24 +225,45 @@ function ExportImageDialog({
         </div>
       </div>
       <div className={imageStyles.actions}>
-        <button type="button" onClick={close}>
-          Cancel
-        </button>
         <button
           type="button"
-          onClick={() => exportPlanAsPng(svg, `${filename}.png`)}
+          className={styles.button}
+          aria-label="Download PNG"
+          title="Download PNG"
+          onClick={downloadPng}
         >
-          Download PNG
+          <Download size={ICON_SIZE} aria-hidden="true" />
+          PNG
         </button>
         <button
           type="button"
+          className={styles.button}
+          aria-label="Download SVG"
+          title="Download SVG"
           onClick={() =>
             downloadBlob(exportSvgBlob(svg.markup), `${filename}.svg`)
           }
         >
-          Download SVG
+          <Download size={ICON_SIZE} aria-hidden="true" />
+          SVG
         </button>
+        {canCopyImage && (
+          <button
+            type="button"
+            className={styles.button}
+            aria-disabled={copyStatus === "copying"}
+            onClick={copyImage}
+          >
+            <Copy size={ICON_SIZE} aria-hidden="true" />
+            Copy to clipboard
+          </button>
+        )}
       </div>
+      {canCopyImage && (
+        <p className={imageStyles.status} role="status">
+          {COPY_MESSAGES[copyStatus]}
+        </p>
+      )}
     </dialog>
   );
 }
@@ -225,7 +303,7 @@ export function ProjectActions() {
   return (
     <>
       <button type="button" className={styles.button} onClick={onImportClick}>
-        <Download size={ICON_SIZE} />
+        <FolderOpen size={ICON_SIZE} aria-hidden="true" />
         Import
       </button>
       <Menu

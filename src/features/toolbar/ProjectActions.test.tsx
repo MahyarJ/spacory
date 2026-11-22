@@ -9,6 +9,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -146,6 +147,7 @@ describe("ProjectActions — Export menu", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     localStorage.clear();
   });
 
@@ -228,12 +230,14 @@ describe("ProjectActions — Export menu", () => {
       within(dialog).getByRole("button", { name: "Download PNG" }),
     );
 
-    expect(
-      downloads.map(({ filename, blob }) => [filename, blob.type]),
-    ).toEqual([
-      ["My-Plan.svg", "image/svg+xml;charset=utf-8"],
-      ["My-Plan.png", "image/png"],
-    ]);
+    await waitFor(() =>
+      expect(
+        downloads.map(({ filename, blob }) => [filename, blob.type]),
+      ).toEqual([
+        ["My-Plan.svg", "image/svg+xml;charset=utf-8"],
+        ["My-Plan.png", "image/png"],
+      ]),
+    );
     expect(await readBlobText(downloads[0].blob)).toBe(markup);
     const [pngSource] = vi.mocked(URL.createObjectURL).mock.calls[1];
     expect(await readBlobText(pngSource as Blob)).toBe(markup);
@@ -241,7 +245,43 @@ describe("ProjectActions — Export menu", () => {
   });
 
   it.each([
-    "Cancel",
+    true,
+    false,
+  ])("copies the preview PNG when clipboard writes are allowed: %s", async (allowed) => {
+    class TestClipboardItem {
+      constructor(readonly data: Record<string, Promise<Blob>>) {}
+    }
+    mockPngRasterizer();
+    const write = vi.fn(async ([item]: TestClipboardItem[]) => {
+      expect(await item.data["image/png"]).toMatchObject({ type: "image/png" });
+      if (!allowed) throw new DOMException("Denied", "NotAllowedError");
+    });
+    vi.stubGlobal("ClipboardItem", TestClipboardItem);
+    vi.stubGlobal("navigator", { clipboard: { write } });
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const controls = within(dialog);
+    fireEvent.click(controls.getByRole("checkbox", { name: "Wall lengths" }));
+
+    fireEvent.click(
+      controls.getByRole("button", { name: "Copy to clipboard" }),
+    );
+
+    expect(write).toHaveBeenCalledOnce();
+    const [pngSource] = vi.mocked(URL.createObjectURL).mock.calls[0];
+    expect(await readBlobText(pngSource as Blob)).toBe(previewMarkup(dialog));
+    await waitFor(() =>
+      expect(controls.getByRole("status").textContent).toBe(
+        allowed
+          ? "Image copied."
+          : "Could not copy the image. You can download the PNG.",
+      ),
+    );
+    expect(downloads).toHaveLength(0);
+  });
+
+  it.each([
+    "Close",
     "Escape",
   ])("closes with %s and starts with both measurements on next time", (action) => {
     const state = useApp.getState();
@@ -274,7 +314,9 @@ describe("ProjectActions — Export menu", () => {
       }
       fireEvent(dialog, new Event("cancel", { cancelable: true }));
     } else {
-      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Close export dialog" }),
+      );
     }
 
     expect(screen.queryByRole("dialog")).toBeNull();
