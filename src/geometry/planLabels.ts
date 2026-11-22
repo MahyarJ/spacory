@@ -7,15 +7,18 @@ export const PLAN_LABEL_STROKE_WIDTH = 3;
 
 export type MeasurePlanLabel = (text: string) => TextMetrics;
 
+export function planLabelAdvance(text: string, metrics?: TextMetrics): number {
+  return metrics?.width ?? Array.from(text).length * PLAN_LABEL_FONT_SIZE * 1.5;
+}
+
 export function planLabelRect(
-  { position, text }: PlanLabel,
+  { position, text }: Pick<PlanLabel, "position" | "text">,
   measure?: MeasurePlanLabel,
 ) {
   // SVG's xml:space="preserve" keeps spaces and treats tabs as spaces.
   const metrics = measure?.(text.replaceAll("\t", " "));
   // Allow extra room for fallback fonts when no browser metrics are available.
-  const width =
-    metrics?.width ?? Array.from(text).length * PLAN_LABEL_FONT_SIZE * 1.5;
+  const width = planLabelAdvance(text, metrics);
   const pad = PLAN_LABEL_STROKE_WIDTH / 2 + 1;
   const left = Math.max(0, metrics?.actualBoundingBoxLeft ?? 0) + pad;
   const right = Math.max(width, metrics?.actualBoundingBoxRight ?? 0) + pad;

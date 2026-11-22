@@ -6,6 +6,7 @@ import {
   ROOM_LABEL_FONT_SIZE,
   ROOM_LABEL_FONT_WEIGHT,
   type RoomAnnotation,
+  roomAnnotationTransform,
 } from "@geometry/roomLabels";
 import type { Room } from "@geometry/rooms";
 import styles from "./FloorPlan.module.css";
@@ -27,9 +28,9 @@ export function RoomsLayer({
 
   return (
     <g data-layer="rooms" style={{ pointerEvents: "none" }}>
-      {annotations.map(({ room, name, area, label }) => {
+      {annotations.map((annotation) => {
+        const { room, name, area, label } = annotation;
         const points = polygonToPoints(room.polygon);
-        const { x, y } = label?.point ?? room.labelPoint;
         const content = (
           <>
             {name &&
@@ -55,7 +56,7 @@ export function RoomsLayer({
               />
             )}
             <text
-              transform={`translate(${x} ${y})`}
+              transform={roomAnnotationTransform(annotation)}
               textAnchor="middle"
               dominantBaseline="central"
               fontFamily={ROOM_LABEL_FONT_FAMILY}

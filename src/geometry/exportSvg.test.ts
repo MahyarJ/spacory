@@ -246,6 +246,26 @@ it("keeps image dimensions independent of room names and abbreviates long visibl
   expect(plan.roomNames[0].name).toBe(name);
 });
 
+it("fits the full saved room name at a smaller size in a 120 cm square", () => {
+  const plan = planOf([
+    wall(0, 0, 120, 0, 10, "a"),
+    wall(120, 0, 120, 120, 10, "b"),
+    wall(120, 120, 0, 120, 10, "c"),
+    wall(0, 120, 0, 0, 10, "d"),
+  ]);
+  plan.roomNames = [{ anchor: { x: 60, y: 60 }, name: "Storage room" }];
+
+  const { markup } = buildExportSvg(plan);
+  const visibleName = [
+    ...markup.matchAll(/font-weight="600"[^>]*>([^<]+)<\/text>/g),
+  ]
+    .map(([, line]) => line)
+    .join(" ");
+  expect(visibleName).toBe("Storage room");
+  expect(markup).toMatch(/<g transform="translate\([^)]+\) scale\(0\.\d+\)"/);
+  expect(markup).toContain(">1.44 m²</text>");
+});
+
 it("uses measured glyph widths to wrap labels at their natural proportions", () => {
   const plan = planOf([
     wall(0, 0, 180, 0, 10, "a"),

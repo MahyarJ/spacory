@@ -6,10 +6,18 @@ import {
   type planLabelRect,
 } from "@geometry/planLabels";
 import { ROOM_LABEL_FONT_WEIGHT } from "@geometry/roomLabels";
+import type { Ref } from "react";
 
-export function PlanLabelText({ text }: { text: string }) {
+export function PlanLabelText({
+  text,
+  textRef,
+}: {
+  text: string;
+  textRef?: Ref<SVGTextElement>;
+}) {
   return (
     <text
+      ref={textRef}
       xmlSpace="preserve"
       textAnchor="start"
       fontSize={PLAN_LABEL_FONT_SIZE}

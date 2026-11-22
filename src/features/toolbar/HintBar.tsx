@@ -64,8 +64,9 @@ export function HintBar() {
   } else if (tool === "label") {
     text = (
       <span>
-        Click or tap to type a label. Press <kbd>Enter</kbd> or tap away to
-        finish.
+        Tap the canvas to place a label. Press <kbd>Enter</kbd> to save, tap
+        another spot to save and place another, or choose{" "}
+        <strong>Select</strong> to finish.
       </span>
     );
   } else if (tool === "wall") {

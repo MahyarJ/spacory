@@ -51,6 +51,7 @@ export function wallDimensions(
 export function dimensionFootprints(
   dimensions: WallDimension[],
   measure?: MeasureRoomLabel,
+  scale = 1,
 ): Point[][] {
   return dimensions.map(({ text, midpoint, angle, offset }) => {
     const metrics = measure?.(text, 400, WALL_DIMENSION_FONT_SIZE);
@@ -77,8 +78,8 @@ export function dimensionFootprints(
       [right, bottom],
       [left, bottom],
     ].map(([x, y]) => ({
-      x: midpoint.x + x * cos - y * sin,
-      y: midpoint.y + x * sin + y * cos,
+      x: midpoint.x + (x * cos - y * sin) / scale,
+      y: midpoint.y + (x * sin + y * cos) / scale,
     }));
   });
 }

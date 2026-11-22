@@ -1,3 +1,4 @@
+import type { Point } from "@app/schema";
 import type { Bounds } from "@geometry/bounds";
 
 /** Canvas viewport (pan/zoom) state. Deliberately not part of `Plan` or the
@@ -33,6 +34,7 @@ export function clampScale(scale: number, minScale = MIN_SCALE): number {
  * plan doesn't sit flush against the edges. ~5% per side ≈ 10% total margin.
  */
 export const FIT_PADDING = 0.05;
+const LABEL_DRAFT_INSET = 16;
 
 /**
  * Compute the viewport that frames a content bounding box within a canvas of the
@@ -77,6 +79,49 @@ export function computeFitView(
     panY: viewport.height / 2 - centerY * scale,
     ...(scale < MIN_SCALE ? { minScale: scale } : {}),
   };
+}
+
+/** Reveal world-space draft bounds, following the caret when the line cannot fit. */
+export function revealLabelDraft(
+  view: ViewState,
+  viewport: { width: number; height: number },
+  bounds: Bounds,
+  caret: Point,
+): ViewState {
+  if (!(viewport.width > 0 && viewport.height > 0)) return view;
+
+  const shiftToReveal = (
+    min: number,
+    max: number,
+    focus: number,
+    size: number,
+  ) => {
+    const inset = Math.min(LABEL_DRAFT_INSET, size / 4);
+    const end = size - inset;
+    if (max - min > end - inset) {
+      min = focus;
+      max = focus;
+    }
+    if (min < inset) return inset - min;
+    if (max > end) return end - max;
+    return 0;
+  };
+
+  const { panX, panY, scale } = view;
+  const dx = shiftToReveal(
+    bounds.minX * scale + panX,
+    bounds.maxX * scale + panX,
+    caret.x * scale + panX,
+    viewport.width,
+  );
+  const dy = shiftToReveal(
+    bounds.minY * scale + panY,
+    bounds.maxY * scale + panY,
+    caret.y * scale + panY,
+    viewport.height,
+  );
+  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return view;
+  return { ...view, panX: panX + dx, panY: panY + dy };
 }
 
 /**

@@ -10,6 +10,7 @@ import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwit
 import { Toolbar } from "@features/toolbar/Toolbar";
 import { getPlanBounds } from "@geometry/bounds";
 import { buildExportSvg } from "@geometry/exportSvg";
+import { planLabelRect } from "@geometry/planLabels";
 import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
   act,
@@ -334,6 +335,115 @@ describe("FloorPlan touch gestures", () => {
     expect(graphic()?.getAttribute("font-weight")).toBe("600");
     expect(graphic()?.parentElement?.getAttribute("transform")).toBe(anchor);
     expect(anchor).toBe("translate(600 400)");
+  });
+
+  it("pans an edge draft into view and keeps its world anchor on Enter", () => {
+    setup({ tool: "label" });
+    const store = useApp.getState();
+    const canvasSize = { width: 400, height: 260 };
+    const initial = { scale: 1.25, panX: 20, panY: 10 };
+    act(() => {
+      store.setCanvasSize(canvasSize);
+      store.setView(() => initial);
+    });
+    down(1, 395, 255);
+    up(1, 395, 255);
+    const position = { x: 300, y: 196 };
+    const field = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Label text",
+    });
+    expect(view().panX).toBeLessThan(initial.panX);
+    expect(view().panY).toBeLessThan(initial.panY);
+    expect(useApp.getState().labelEditor?.position).toEqual(position);
+
+    const text = "Desk";
+    fireEvent.change(field, { target: { value: text } });
+    const { x, y, w, h } = planLabelRect({ position, text });
+    const editingView = view();
+    expect(editingView.scale).toBe(initial.scale);
+    expect(x * editingView.scale + editingView.panX).toBeGreaterThan(0);
+    expect((x + w) * editingView.scale + editingView.panX).toBeLessThan(
+      canvasSize.width,
+    );
+    expect(y * editingView.scale + editingView.panY).toBeGreaterThan(0);
+    expect((y + h) * editingView.scale + editingView.panY).toBeLessThan(
+      canvasSize.height,
+    );
+    expect(useApp.getState().plan.labels).toBeUndefined();
+
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(view()).toEqual(editingView);
+    expect(useApp.getState().plan.labels?.[0]).toMatchObject({
+      position,
+      text,
+    });
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+  });
+
+  it("draws and follows the caret using the rendered glyph positions at the canvas edge", () => {
+    setup({ tool: "label" });
+    act(() => useApp.getState().setCanvasSize({ width: 300, height: 200 }));
+    down(1, 50, 100);
+    up(1, 50, 100);
+    expect(view()).toEqual(DEFAULT_VIEW);
+
+    const field = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Label text",
+    });
+    const draftLayer = canvas.querySelector(
+      '[data-layer="label-edit-preview"]',
+    )!;
+    const svgText = draftLayer.querySelector("text")!;
+    // jsdom has no SVG text layout. Make the actual glyph advance differ from
+    // the fallback width so both the caret and the pan must use the SVG value.
+    const glyphWidth = 46;
+    Object.defineProperties(svgText, {
+      getNumberOfChars: { value: () => svgText.textContent?.length ?? 0 },
+      getStartPositionOfChar: {
+        value: (index: number) => ({ x: index * glyphWidth }),
+      },
+      getEndPositionOfChar: {
+        value: (index: number) => ({ x: (index + 1) * glyphWidth }),
+      },
+    });
+    const caretX = () =>
+      Number(draftLayer.querySelector("line")?.getAttribute("x1"));
+    const text = "A label longer than the canvas";
+    fireEvent.change(field, { target: { value: text } });
+    const endView = view();
+    expect(caretX()).toBe(text.length * glyphWidth);
+    expect(50 + endView.panX + caretX()).toBeCloseTo(284);
+    expect(endView.scale).toBe(1);
+    expect(endView.panY).toBe(0);
+
+    field.setSelectionRange(0, 0);
+    fireEvent.keyUp(field, { key: "Home" });
+    expect(caretX()).toBe(0);
+    expect(50 + view().panX + caretX()).toBeCloseTo(16);
+
+    field.setSelectionRange(text.length, text.length);
+    fireEvent.keyUp(field, { key: "End" });
+    expect(caretX()).toBe(text.length * glyphWidth);
+    expect(view()).toEqual(endView);
+  });
+
+  it("saves the current label and exits entry when switching to Select", () => {
+    setup({ tool: "label" });
+    render(<Toolbar />);
+    down(1, 400, 200);
+    up(1, 400, 200);
+    fireEvent.change(screen.getByRole("textbox", { name: "Label text" }), {
+      target: { value: "Terrace" },
+    });
+    const select = screen.getByRole("button", { name: "Select" });
+    fireEvent(select, pointerEvent("pointerdown", 1, 10, 10));
+    fireEvent.click(select);
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+    expect(useApp.getState().tool).toBe("select");
+    expect(useApp.getState().plan.labels?.[0]).toMatchObject({
+      position: { x: 400, y: 200 },
+      text: "Terrace",
+    });
   });
 
   it("keeps a label at its saved start point while editing", () => {

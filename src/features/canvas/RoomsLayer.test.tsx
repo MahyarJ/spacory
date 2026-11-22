@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { parsePlan, serializePlan } from "@app/io";
 import { createInitialPlan, type Plan } from "@app/schema";
 import { useApp } from "@app/store";
 import { DEFAULT_VIEW } from "@app/viewport";
@@ -103,7 +104,7 @@ it("updates area from live wall arrays, converts units, and scales area with the
   expect(layer.textContent).toBe("258.33 ft²");
 });
 
-it("keeps wrapped room names fixed through pan and zoom and matches export layout", () => {
+it("keeps room wrapping fixed while panning and exports independent of editor zoom", () => {
   const plan = roomPlan();
   const roomNames = [
     { anchor: { x: 90, y: 160 }, name: "Main floor laundry and utility room" },
@@ -139,10 +140,8 @@ it("keeps wrapped room names fixed through pan and zoom and matches export layou
   const { container } = render(<FloorPlan />);
   const labels = [...container.querySelectorAll('[data-layer="rooms"] text')];
   expect(labels).toHaveLength(2);
-  const svg = new DOMParser().parseFromString(
-    buildExportSvg(useApp.getState().plan).markup,
-    "image/svg+xml",
-  );
+  const exportMarkup = buildExportSvg(useApp.getState().plan).markup;
+  const svg = new DOMParser().parseFromString(exportMarkup, "image/svg+xml");
   const exported = [...svg.querySelectorAll('[data-layer="room-areas"] > g')];
   expect(exported).toHaveLength(2);
   for (const [index, { name }] of roomNames.entries()) {
@@ -176,20 +175,72 @@ it("keeps wrapped room names fixed through pan and zoom and matches export layou
       expect(line.hasAttribute("lengthAdjust")).toBe(false);
     }
   }
-  const original = labels.map((label) => label.outerHTML);
-  for (const scale of [0.25, 0.5, 3]) {
+  const renderedLabels = () =>
+    [...container.querySelectorAll('[data-layer="rooms"] text')].map(
+      (label) => label.outerHTML,
+    );
+  const original = renderedLabels();
+  act(() => store.setView((view) => ({ ...view, panX: 30, panY: -40 })));
+  expect(renderedLabels()).toEqual(original);
+  for (const scale of [0.2, 0.25, 0.5, 3]) {
     act(() => store.setView(() => ({ scale, panX: 30, panY: -40 })));
-    expect(
-      [...container.querySelectorAll('[data-layer="rooms"] text')].map(
-        (label) => label.outerHTML,
-      ),
-    ).toEqual(original);
+    expect(buildExportSvg(useApp.getState().plan).markup).toBe(exportMarkup);
     expect(
       labels[0]
         .closest('[data-layer="rooms"]')
         ?.parentElement?.getAttribute("transform"),
     ).toBe(`translate(30 -40) scale(${scale})`);
   }
+  act(() => store.setView(() => DEFAULT_VIEW));
+  expect(renderedLabels()).toEqual(original);
+});
+
+it("keeps a saved closet name visible on the canvas and in SVG", () => {
+  const source = roomPlan();
+  const name = "Coat closet";
+  source.walls = source.walls.map((wall) => ({
+    ...wall,
+    a: { x: wall.a.x * 0.15, y: wall.a.y * 0.2 },
+    b: { x: wall.b.x * 0.15, y: wall.b.y * 0.2 },
+  }));
+  source.items = [];
+  source.roomNames = [{ anchor: { x: 30, y: 30 }, name }];
+  const plan = parsePlan(serializePlan(source));
+  const store = useApp.getState();
+  store.setTool("select");
+  store.loadPlan(plan);
+  store.setView(() => DEFAULT_VIEW);
+
+  render(<FloorPlan />);
+  const room = screen.getByRole("button", { name: `${name}, 0.36 m²` });
+  const label = room.querySelector("text")!;
+  const nameRows = () =>
+    [...label.querySelectorAll('tspan[font-weight="600"]')]
+      .map((row) => row.textContent)
+      .join(" ");
+  expect(nameRows()).toBe(name);
+  expect(label.querySelector("tspan:last-child")?.textContent).toBe("0.36 m²");
+  expect(room.querySelector("title")?.textContent).toBe(name);
+  const transform = label.getAttribute("transform");
+  const svg = new DOMParser().parseFromString(
+    buildExportSvg(plan).markup,
+    "image/svg+xml",
+  );
+  const exported = svg.querySelector('[data-layer="room-areas"] > g')!;
+  expect(exported.getAttribute("transform")).toBe(transform);
+  expect(
+    [...exported.querySelectorAll("text")].map((line) => line.textContent),
+  ).toEqual(
+    [...label.querySelectorAll("tspan")].map((line) => line.textContent),
+  );
+  act(() => store.setView(() => ({ scale: 2, panX: 30, panY: -40 })));
+  const [, scale] = /scale\((0\.\d+)\)$/.exec(
+    label.getAttribute("transform")!,
+  )!;
+  expect(nameRows()).toBe(name);
+  expect(
+    Number(label.getAttribute("font-size")) * Number(scale) * 2,
+  ).toBeGreaterThanOrEqual(12);
 });
 
 it("renders the text hierarchy at 50% zoom", () => {
@@ -236,8 +287,12 @@ it("renders the text hierarchy at 50% zoom", () => {
 });
 
 it.each([
-  40, 110,
-])("fits fixed-size room text and an ellipsis inside a %icm left wall", (leftThickness) => {
+  { leftThickness: 40, shortened: false },
+  { leftThickness: 110, shortened: true },
+])("fits the room label inside a $leftThickness cm left wall (shortened: $shortened)", ({
+  leftThickness,
+  shortened,
+}) => {
   // jsdom cannot measure painted SVG text. Supply deterministic widths to the
   // same canvas measurement path the editor uses, and compare the rendered
   // rows to the inside edges of the wall polygons it actually drew.
@@ -272,7 +327,9 @@ it.each([
   const group = screen.getByRole("button", { name: `${name}, 3.12 m²` });
   const label = group.querySelector("text")!;
   const outline = label.getAttribute("transform")!;
-  const [, x] = /^translate\(([^ ]+) ([^)]+)\)$/.exec(outline)!;
+  const [, x, , factor] =
+    /^translate\(([^ ]+) ([^)]+)\)(?: scale\(([^)]+)\))?$/.exec(outline)!;
+  const scale = Number(factor ?? 1);
   const walls = container.querySelectorAll('[data-layer="walls"] polygon');
   const wallXs = (index: number) =>
     walls[index]
@@ -283,13 +340,22 @@ it.each([
   const rightInnerEdge = Math.min(...wallXs(1));
 
   expect(rightInnerEdge - leftInnerEdge).toBe(110 - leftThickness / 2);
-  expect(label.querySelector('tspan[font-weight="600"]')).not.toBeNull();
+  const visibleName = [...label.querySelectorAll('tspan[font-weight="600"]')]
+    .map((line) => line.textContent)
+    .join(" ");
   expect(label.getAttribute("font-size")).toBe("28");
-  expect(label.textContent).toContain("…");
+  if (shortened) {
+    expect(visibleName).toContain("…");
+    expect(scale).toBe(1);
+  } else {
+    expect(visibleName).toBe(name);
+    expect(scale).toBeLessThan(1);
+  }
   expect(group.querySelector("title")?.textContent).toBe(name);
   expect(label.querySelector("tspan:last-child")?.textContent).toBe("3.12 m²");
   for (const line of label.querySelectorAll("tspan")) {
-    const halfWidth = measureText(line.textContent ?? "").width / 2 + 1.5;
+    const halfWidth =
+      (measureText(line.textContent ?? "").width / 2 + 1.5) * scale;
     expect(Number(x) - halfWidth).toBeGreaterThan(leftInnerEdge);
     expect(Number(x) + halfWidth).toBeLessThan(rightInnerEdge);
   }
@@ -306,24 +372,15 @@ it.each([
     area: "1.62 m²",
     shared: false,
   },
-  {
+  ...[1, 0.5, 0.25, 0.2].map((scale) => ({
     width: 220,
     height: 240,
     thickness: 16,
-    scale: 1,
+    scale,
     name: "Utility room",
     area: "2.64 m²",
     shared: true,
-  },
-  {
-    width: 220,
-    height: 240,
-    thickness: 16,
-    scale: 0.5,
-    name: "Utility room",
-    area: "2.64 m²",
-    shared: true,
-  },
+  })),
 ])("renders $name and retains eligible dimensions at $scale×", ({
   width,
   height,
@@ -369,9 +426,10 @@ it.each([
       thickness,
     });
   store.setTool("select");
-  store.setView(() => ({ ...DEFAULT_VIEW, scale }));
+  store.setView(() => DEFAULT_VIEW);
 
   const { container } = render(<FloorPlan />);
+  act(() => store.setView(() => ({ ...DEFAULT_VIEW, scale })));
   const label = screen
     .getByRole("button", { name: `${name}, ${area}` })
     .querySelector("text")!;
@@ -429,16 +487,6 @@ it.each([
       (line) => line.textContent === (shared ? "240 cm" : "180 cm"),
     ),
   ).toBe(true);
-  if (scale === 0.5) {
-    const before = dimensions.map((line) => line.parentElement?.outerHTML);
-    act(() => store.loadPlan({ ...useApp.getState().plan, roomNames: [] }));
-    expect(
-      [...container.querySelectorAll('[data-layer="dimensions"] text')].map(
-        (line) => line.parentElement?.outerHTML,
-      ),
-    ).toEqual(before);
-    return;
-  }
   for (const line of label.querySelectorAll<SVGTSpanElement>("tspan")) {
     const room = bounds(line, false);
     for (const text of dimensions) {
@@ -450,6 +498,15 @@ it.each([
           room.top > dim.bottom,
       ).toBe(true);
     }
+  }
+  if (scale < 1) {
+    const before = dimensions.map((line) => line.parentElement?.outerHTML);
+    act(() => store.loadPlan({ ...useApp.getState().plan, roomNames: [] }));
+    expect(
+      [...container.querySelectorAll('[data-layer="dimensions"] text')].map(
+        (line) => line.parentElement?.outerHTML,
+      ),
+    ).toEqual(before);
   }
 });
 
@@ -535,9 +592,11 @@ it.each([
     ).toEqual(["0", String(hingeY), "90", String(hingeY)]);
     const hinge = door.querySelector("circle")!;
     const hingeRadius = Number(hinge.getAttribute("r"));
-    const [, labelX, labelY] = /^translate\(([^ ]+) ([^)]+)\)$/.exec(
-      label.getAttribute("transform")!,
-    )!;
+    const [, labelX, labelY, labelScale] =
+      /^translate\(([^ ]+) ([^)]+)\)(?: scale\(([^)]+)\))?$/.exec(
+        label.getAttribute("transform")!,
+      )!;
+    const factor = Number(labelScale ?? 1);
     const lines = [...label.querySelectorAll(rows)];
     expect(lines.map((row) => row.textContent)).toEqual([name, area]);
     for (const line of lines) {
@@ -547,11 +606,13 @@ it.each([
       const glyphHalfHeight =
         (fontSize + Number(label.getAttribute("stroke-width"))) / 2;
       const top =
-        Number(labelY) + Number(line.getAttribute("y")) - glyphHalfHeight;
-      const halfWidth = textWidth(line.textContent ?? "", fontSize) / 2 + 1.5;
+        Number(labelY) +
+        factor * (Number(line.getAttribute("y")) - glyphHalfHeight);
+      const halfWidth =
+        factor * (textWidth(line.textContent ?? "", fontSize) / 2 + 1.5);
       const left = Number(labelX) - halfWidth;
       if (betweenDoorMarks) {
-        const bottom = top + 2 * glyphHalfHeight;
+        const bottom = top + 2 * glyphHalfHeight * factor;
         const right = Number(labelX) + halfWidth;
         expect(left).toBeGreaterThan(6);
         expect(top).toBeGreaterThan(hingeY - 90);

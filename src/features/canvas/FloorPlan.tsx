@@ -122,6 +122,10 @@ export function FloorPlan() {
     [rooms, plan.roomNames],
   );
   const measureRoomText = useMemo(createRoomLabelMeasurer, []);
+  const dimensions = useMemo(
+    () => wallDimensions(plan.walls, measurementSystem, view.scale),
+    [plan.walls, measurementSystem, view.scale],
+  );
   const roomAnnotations = useMemo(
     () =>
       layoutRoomLabels({
@@ -131,6 +135,8 @@ export function FloorPlan() {
         items: plan.items,
         system: measurementSystem,
         paintedWalls,
+        dimensions,
+        dimensionScale: view.scale,
         measure: measureRoomText,
       }),
     [
@@ -140,12 +146,10 @@ export function FloorPlan() {
       plan.items,
       measurementSystem,
       paintedWalls,
+      dimensions,
+      view.scale,
       measureRoomText,
     ],
-  );
-  const dimensions = useMemo(
-    () => wallDimensions(plan.walls, measurementSystem, view.scale),
-    [plan.walls, measurementSystem, view.scale],
   );
   const selectedRoom = selectedRoomPoint
     ? findRoomAt(rooms, selectedRoomPoint)

@@ -34,7 +34,8 @@ connected room structures.
   editor keeps the full name. Areas are measured to wall centrelines, and
   doors and windows preserve enclosure
 - 🏷️ **Plan labels** — choose **Label** in the main toolbar, click or tap anywhere
-  indoors or outdoors, and type in place. Press Enter or tap away to finish.
+  indoors or outdoors, and type in place. Press Enter to save or tap another
+  canvas point to save and place the next label. Choose **Select** to finish.
   In **Select**, drag a label to move it or select it and tap again to edit.
   Use **Remove** in the options bar to delete selected labels. Fit, autosave,
   and exports include labels.

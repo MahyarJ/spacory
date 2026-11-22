@@ -68,12 +68,26 @@
   padding: 0;
   background: transparent;
   color: transparent;
-  caret-color: var(--sp-accent);
+  caret-color: transparent;
   text-align: left;
 
   &::selection {
     color: transparent;
     background-color: var(--sp-text-selection-bg);
+  }
+}
+
+.labelCaret {
+  animation: labelCaretBlink 1s step-end infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes labelCaretBlink {
+  50% {
+    opacity: 0;
   }
 }
 
