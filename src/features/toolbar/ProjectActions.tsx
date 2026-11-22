@@ -16,6 +16,7 @@ import {
   FileJson,
   FolderOpen,
   Image as ImageIcon,
+  LoaderCircle,
   Upload,
   X,
 } from "lucide-react";
@@ -103,12 +104,6 @@ async function buildExportPng({ markup, width, height }: ExportSvgResult) {
 
 type CopyStatus = "idle" | "copying" | "copied" | "failed";
 
-const COPY_LABELS = [
-  { status: "idle", label: "Copy image", Icon: Copy },
-  { status: "copying", label: "Copying…", Icon: Copy },
-  { status: "copied", label: "Copied", Icon: Check },
-] as const;
-
 const COPY_CONFIRMATION_MS = 2000;
 
 function ExportImageDialog({
@@ -125,8 +120,9 @@ function ExportImageDialog({
   const [preparingPng, setPreparingPng] = useState(false);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const copyBusy = copyStatus === "copying";
-  const visibleCopyLabel =
-    copyStatus === "copying" || copyStatus === "copied" ? copyStatus : "idle";
+  const copied = copyStatus === "copied";
+  const PngIcon = preparingPng ? LoaderCircle : Download;
+  const CopyIcon = copyBusy ? LoaderCircle : Copy;
 
   useEffect(() => {
     dialogRef.current!.showModal();
@@ -249,28 +245,18 @@ function ExportImageDialog({
       <div className={imageStyles.actions}>
         <button
           type="button"
-          className={`${styles.button} ${imageStyles.primary} ${imageStyles.statusButton}`}
+          className={`${styles.button} ${imageStyles.primary}`}
           aria-label="Download PNG"
           title="Download PNG"
           disabled={preparingPng}
           onClick={downloadPng}
         >
-          <span
-            className={imageStyles.statusLabel}
-            data-visible={!preparingPng}
+          <PngIcon
+            className={preparingPng ? imageStyles.loader : undefined}
+            size={ICON_SIZE}
             aria-hidden="true"
-          >
-            <Download size={ICON_SIZE} />
-            PNG
-          </span>
-          <span
-            className={imageStyles.statusLabel}
-            data-visible={preparingPng}
-            aria-hidden="true"
-          >
-            <Download size={ICON_SIZE} />
-            Preparing…
-          </span>
+          />
+          PNG
         </button>
         <span
           className={imageStyles.statusAnnouncement}
@@ -298,28 +284,36 @@ function ExportImageDialog({
               className={`${styles.button} ${imageStyles.statusButton}`}
               aria-label="Copy image"
               disabled={copyBusy}
-              data-copied={copyStatus === "copied"}
+              data-copied={copied}
               onClick={copyImage}
             >
-              {COPY_LABELS.map(({ status, label, Icon }) => (
-                <span
-                  key={status}
-                  className={imageStyles.statusLabel}
-                  data-visible={visibleCopyLabel === status}
-                  aria-hidden="true"
-                >
-                  <Icon size={ICON_SIZE} />
-                  {label}
-                </span>
-              ))}
+              <span
+                className={imageStyles.statusLabel}
+                data-visible={!copied}
+                aria-hidden="true"
+              >
+                <CopyIcon
+                  className={copyBusy ? imageStyles.loader : undefined}
+                  size={ICON_SIZE}
+                />
+                Copy image
+              </span>
+              <span
+                className={imageStyles.statusLabel}
+                data-visible={copied}
+                aria-hidden="true"
+              >
+                <Check size={ICON_SIZE} />
+                Copied
+              </span>
             </button>
             <span
               className={imageStyles.statusAnnouncement}
               role="status"
               aria-label="Image copy"
             >
-              {visibleCopyLabel === "copied" && "Image copied."}
-              {visibleCopyLabel === "copying" && "Copying image…"}
+              {copied && "Image copied."}
+              {copyBusy && "Copying image…"}
             </span>
             <div className={imageStyles.copyError} role="alert">
               {copyStatus === "failed" &&

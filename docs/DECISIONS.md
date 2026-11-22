@@ -18,14 +18,15 @@ be pasted into messages and documents. The clipboard write starts during the
 click and receives the PNG as a promise to preserve Safari's user gesture.
 [WebKit clipboard API discussion](https://bugs.webkit.org/show_bug.cgi?id=222262)
 
-Copy feedback stays in the button, with all labels sharing its size. The button
-shows **Copying…** immediately and is disabled until the write completes. A
-failed copy places a notification above the actions so the dialog stays in place.
+Copy and PNG feedback stays in the buttons. A loader replaces the action icon
+while each button is disabled, keeping the label and width stable. The loader
+stays static with reduced motion. Copy confirms success with **Copied** and
+places a failure notification above the actions so the dialog stays in place.
 
-The PNG button shows **Preparing…** during rasterization and encoding. SVG uses
-the markup already prepared for the preview. The browser handles saving each
-file after the editor hands it off. Exports of untitled plans use the
-`floor-plan` filename without changing the plan metadata.
+PNG reports progress during rasterization and encoding. SVG uses the markup
+already prepared for the preview. The browser handles saving each file after
+the editor hands it off. Exports of untitled plans use the `floor-plan`
+filename without changing the plan metadata.
 
 ## Plan labels and room names scale with the drawing
 

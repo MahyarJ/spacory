@@ -220,13 +220,15 @@ describe("ProjectActions — Export menu", () => {
     const button = controls.getByRole<HTMLButtonElement>("button", {
       name: "Download PNG",
     });
-    const visibleLabel = () =>
-      button.querySelector('[data-visible="true"]')?.textContent;
+    const iconWidth = button.querySelector("svg")?.getAttribute("width");
 
     await act(async () => {
       fireEvent.click(button);
     });
-    expect(visibleLabel()).toBe("Preparing…");
+    expect(button.textContent).toBe("PNG");
+    expect(
+      button.querySelector(".lucide-loader-circle")?.getAttribute("width"),
+    ).toBe(iconWidth);
     expect(button.disabled).toBe(true);
     expect(
       controls.getByRole("status", { name: "PNG download" }).textContent,
@@ -240,7 +242,7 @@ describe("ProjectActions — Export menu", () => {
 
     expect(encode).toHaveBeenCalledOnce();
     expect(button.disabled).toBe(false);
-    expect(visibleLabel()).toBe("PNG");
+    expect(button.querySelector(".lucide-download")).not.toBeNull();
     if (success) {
       expect(downloads).toEqual([{ filename: "My-Plan.png", blob: png }]);
       expect(alert).not.toHaveBeenCalled();
@@ -383,22 +385,34 @@ describe("ProjectActions — Export menu", () => {
     const button = controls.getByRole<HTMLButtonElement>("button", {
       name: "Copy image",
     });
-    const visibleLabel = () =>
-      button.querySelector('[data-visible="true"]')?.textContent;
+    const visibleContent = () => button.querySelector('[data-visible="true"]');
+    const iconWidth = visibleContent()
+      ?.querySelector("svg")
+      ?.getAttribute("width");
     fireEvent.click(button);
-    expect(visibleLabel()).toBe("Copying…");
+    expect(visibleContent()?.textContent).toBe("Copy image");
+    expect(
+      visibleContent()
+        ?.querySelector(".lucide-loader-circle")
+        ?.getAttribute("width"),
+    ).toBe(iconWidth);
+    expect(
+      controls.getByRole("status", { name: "Image copy" }).textContent,
+    ).toBe("Copying image…");
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(write).toHaveBeenCalledOnce();
 
     await act(async () => finishWrite());
-    expect(visibleLabel()).toBe("Copied");
+    expect(visibleContent()?.textContent).toBe("Copied");
+    expect(visibleContent()?.querySelector(".lucide-check")).not.toBeNull();
     expect(button.disabled).toBe(false);
 
     act(() => vi.advanceTimersByTime(1999));
-    expect(visibleLabel()).toBe("Copied");
+    expect(visibleContent()?.textContent).toBe("Copied");
     act(() => vi.advanceTimersByTime(1));
-    expect(visibleLabel()).toBe("Copy image");
+    expect(visibleContent()?.textContent).toBe("Copy image");
+    expect(visibleContent()?.querySelector(".lucide-copy")).not.toBeNull();
   });
 
   it("keeps the same light plan preview across editor themes", () => {
