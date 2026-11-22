@@ -151,6 +151,51 @@ it("uses the plan's system for measurements in shared SVG/PNG markup", () => {
   expect(imperial.height).toBe(metric.height);
 });
 
+it.each([
+  { wallLengths: true, roomAreas: true },
+  { wallLengths: true, roomAreas: false },
+  { wallLengths: false, roomAreas: true },
+  { wallLengths: false, roomAreas: false },
+])("toggles only measurement text (lengths $wallLengths, areas $roomAreas)", (visibility) => {
+  const plan = planOf(
+    [
+      wall(0, 0, 400, 0, 10, "a"),
+      wall(400, 0, 400, 300, 10, "b"),
+      wall(400, 300, 0, 300, 10, "c"),
+      wall(0, 300, 0, 0, 10, "d"),
+      wall(400, 0, 600, 0, 10, "e"),
+      wall(600, 0, 600, 300, 10, "f"),
+      wall(600, 300, 400, 300, 10, "g"),
+    ],
+    [doorItem("a")],
+  );
+  plan.roomNames = [{ anchor: { x: 200, y: 150 }, name: "Kitchen & dining" }];
+  plan.labels = [
+    { id: "terrace", position: { x: 50, y: -50 }, text: "Terrace" },
+  ];
+
+  const expected = buildExportSvg(plan);
+  const result = buildExportSvg(
+    plan,
+    undefined,
+    undefined,
+    undefined,
+    visibility,
+  );
+  let markup = expected.markup;
+  if (!visibility.wallLengths) {
+    markup = markup.replace(/(<g data-layer="dimensions">).*?(<\/g>)/, "$1$2");
+  }
+  if (!visibility.roomAreas) {
+    markup = markup.replaceAll(/<text [^>]*>(?:12|6) m²<\/text>/g, "");
+  }
+  expect(result).toEqual({ ...expected, markup });
+  expect(result.markup.includes(">400 cm</text>")).toBe(visibility.wallLengths);
+  expect(result.markup.includes(">12 m²</text>")).toBe(visibility.roomAreas);
+  expect(result.markup.includes(">6 m²</text>")).toBe(visibility.roomAreas);
+  expect(result.markup).toContain(">Kitchen &amp; dining</text>");
+});
+
 it("exports visible names as escaped Unicode text next to the area", () => {
   const plan = planOf([
     wall(0, 0, 400, 0, 10, "a"),

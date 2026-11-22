@@ -1,19 +1,18 @@
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
 import type { Plan } from "@app/schema";
 import { useApp } from "@app/store";
-import { buildExportSvg, EXPORT_MARGIN } from "@geometry/exportSvg";
+import {
+  buildExportSvg,
+  EXPORT_MARGIN,
+  type ExportSvgResult,
+} from "@geometry/exportSvg";
 import { Menu } from "@ui/Menu";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
-import {
-  Download,
-  FileJson,
-  Image as ImageIcon,
-  Shapes,
-  Upload,
-} from "lucide-react";
-import { useRef } from "react";
+import { Download, FileJson, Image as ImageIcon, Upload } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ICON_SIZE } from "./constants";
+import imageStyles from "./ExportImageDialog.module.css";
 import styles from "./Toolbar.module.css";
 
 function sanitizeFilename(name: string): string {
@@ -58,18 +57,15 @@ function pngRasterSize(width: number, height: number) {
   };
 }
 
-function buildProjectExportSvg(plan: Plan) {
-  return buildExportSvg(
-    plan,
-    EXPORT_MARGIN,
-    createRoomLabelMeasurer(),
-    plan.labels?.length ? createPlanLabelMeasurer() : undefined,
-  );
+function exportSvgBlob(markup: string): Blob {
+  return new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
 }
 
-function exportPlanAsPng(plan: Plan) {
-  const { markup, width, height } = buildProjectExportSvg(plan);
-  const svgBlob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
+function exportPlanAsPng(
+  { markup, width, height }: ExportSvgResult,
+  filename: string,
+) {
+  const svgBlob = exportSvgBlob(markup);
   const svgUrl = URL.createObjectURL(svgBlob);
 
   const image = new Image();
@@ -90,7 +86,7 @@ function exportPlanAsPng(plan: Plan) {
         window.alert("Could not export PNG.");
         return;
       }
-      downloadBlob(pngBlob, `${sanitizeFilename(plan.meta.name)}.png`);
+      downloadBlob(pngBlob, filename);
     }, "image/png");
   };
   image.onerror = () => {
@@ -100,24 +96,108 @@ function exportPlanAsPng(plan: Plan) {
   image.src = svgUrl;
 }
 
+function ExportImageDialog({
+  plan,
+  onClose,
+}: {
+  plan: Plan;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const [wallLengths, setWallLengths] = useState(true);
+  const [roomAreas, setRoomAreas] = useState(true);
+
+  useEffect(() => {
+    dialogRef.current!.showModal();
+  }, []);
+
+  const close = () => {
+    dialogRef.current!.close();
+    onClose();
+  };
+
+  const svg = buildExportSvg(
+    plan,
+    EXPORT_MARGIN,
+    createRoomLabelMeasurer(),
+    plan.labels?.length ? createPlanLabelMeasurer() : undefined,
+    { wallLengths, roomAreas },
+  );
+  const filename = sanitizeFilename(plan.meta.name);
+
+  return (
+    <dialog
+      className={imageStyles.dialog}
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault();
+        close();
+      }}
+      // Preserve native control navigation and Escape's cancel event while
+      // keeping keyboard events away from the editor's window listener.
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <h2 id={titleId} className={imageStyles.title}>
+        Export image
+      </h2>
+      <div className={imageStyles.body}>
+        <img
+          className={imageStyles.preview}
+          alt="Floor plan preview"
+          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.markup)}`}
+        />
+        <div className={imageStyles.options}>
+          <label>
+            <input
+              type="checkbox"
+              checked={wallLengths}
+              onChange={(e) => setWallLengths(e.target.checked)}
+            />
+            Wall lengths
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={roomAreas}
+              onChange={(e) => setRoomAreas(e.target.checked)}
+            />
+            Room areas
+          </label>
+        </div>
+      </div>
+      <div className={imageStyles.actions}>
+        <button type="button" onClick={close}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => exportPlanAsPng(svg, `${filename}.png`)}
+        >
+          Download PNG
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            downloadBlob(exportSvgBlob(svg.markup), `${filename}.svg`)
+          }
+        >
+          Download SVG
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export function ProjectActions() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [imagePlan, setImagePlan] = useState<Plan | null>(null);
 
   const onExport = () => {
     const plan = useApp.getState().plan;
     const blob = new Blob([serializePlan(plan)], { type: "application/json" });
     downloadBlob(blob, `${sanitizeFilename(plan.meta.name)}.json`);
-  };
-
-  const onExportPng = () => exportPlanAsPng(useApp.getState().plan);
-
-  // The vector export is the same markup PNG rasterizes, saved verbatim — so it
-  // skips the canvas step entirely.
-  const onExportSvg = () => {
-    const plan = useApp.getState().plan;
-    const { markup } = buildProjectExportSvg(plan);
-    const blob = new Blob([markup], { type: "image/svg+xml;charset=utf-8" });
-    downloadBlob(blob, `${sanitizeFilename(plan.meta.name)}.svg`);
   };
 
   const onImportClick = () => fileInputRef.current?.click();
@@ -154,25 +234,25 @@ export function ProjectActions() {
         triggerClassName={styles.button}
         items={[
           {
+            key: "image",
+            label: "Image…",
+            icon: <ImageIcon size={ICON_SIZE} />,
+            onSelect: () => setImagePlan(useApp.getState().plan),
+          },
+          {
             key: "json",
             label: "JSON",
             icon: <FileJson size={ICON_SIZE} />,
             onSelect: onExport,
           },
-          {
-            key: "png",
-            label: "PNG",
-            icon: <ImageIcon size={ICON_SIZE} />,
-            onSelect: onExportPng,
-          },
-          {
-            key: "svg",
-            label: "SVG",
-            icon: <Shapes size={ICON_SIZE} />,
-            onSelect: onExportSvg,
-          },
         ]}
       />
+      {imagePlan && (
+        <ExportImageDialog
+          plan={imagePlan}
+          onClose={() => setImagePlan(null)}
+        />
+      )}
       <input
         ref={fileInputRef}
         type="file"

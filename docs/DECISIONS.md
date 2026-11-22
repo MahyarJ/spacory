@@ -5,6 +5,12 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Image export visibility keeps annotation positions fixed
+
+The image export preview and both download formats use the same SVG. When a
+measurement is hidden, its text is omitted after room name layout. This keeps
+names in the same place and at the same size as measurements toggle.
+
 ## Plan labels and room names scale with the drawing
 
 Plan labels store a plain text line and the start of its baseline in world

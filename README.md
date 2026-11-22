@@ -48,9 +48,9 @@ connected room structures.
 - 🔄 **Undo / redo** — diff-based history that also **survives a page refresh**
 - ♻️ **Autosave** — the working plan and the viewport (pan/zoom) are persisted to
   `localStorage` and restored on reload
-- 💾 **Import / export** — load a plan from JSON, and get it back out through the
-  toolbar's **Export** menu, which groups the available formats (JSON plan file,
-  PNG image and SVG vector image)
+- 💾 **Import / export** — load a plan from JSON or download it from **Export → JSON**.
+  Choose **Export → Image…** to preview a PNG or SVG and independently show or
+  hide **Wall lengths** and **Room areas** before downloading.
 - 🧭 **Canvas** — pan (right-drag, two-finger drag, or the Pan tool) and zoom
   (wheel or pinch); "Fit" frames the whole plan in one click
 - 🎨 **Theming** — dark / light / system, via CSS variables
