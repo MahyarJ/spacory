@@ -33,6 +33,12 @@ connected room structures.
   the canvas and in SVG and PNG exports wrap or abbreviate to fit, and the
   editor keeps the full name. Areas are measured to wall centrelines, and
   doors and windows preserve enclosure
+- 🏷️ **Plan labels** — choose **Label** in the main toolbar, click or tap anywhere
+  indoors or outdoors, and type in place. Press Enter to save or tap another
+  canvas point to save and place the next label. Choose **Select** to finish.
+  In **Select**, drag a label to move it or select it and tap again to edit.
+  Use **Remove** in the options bar to delete selected labels. Fit, autosave,
+  and exports include labels.
 - 📏 **Dimensions** — every wall shows its length on-canvas; select a wall and
   type an exact length to resize it, or select a single door/window to read its
   current width and type a new one
@@ -99,9 +105,9 @@ Then open the printed local URL.
 | `Cmd/Ctrl+Shift+Z` / `Cmd/Ctrl+Y` | Redo |
 | `Esc` | Cancel the current draw / drag |
 | `Delete` / `Backspace` | Remove the selection |
-| `[` / `]` | Decrease / increase selected wall thickness |
+| `[` / `]` | Decrease / increase thickness for wall-only selections |
 | `H` / `S` | Toggle selected door hinge / swing |
-| Arrows | Nudge selected walls (Shift = ×10, Alt = raw 1 unit) |
+| Arrows | Nudge selected walls, labels, or a junction (Shift = ×10, Alt = raw 1 unit) |
 
 ---
 

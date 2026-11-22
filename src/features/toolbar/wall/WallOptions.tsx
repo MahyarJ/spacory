@@ -1,4 +1,8 @@
-import { type SelectionAction, selectionActions } from "@app/selection";
+import {
+  type SelectionAction,
+  selectionActions,
+  selectionCount,
+} from "@app/selection";
 import { useApp } from "@app/store";
 import { ICON_SIZE } from "@features/toolbar/constants";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
@@ -17,34 +21,28 @@ export function WallOptions() {
   const tool = useApp((s) => s.tool);
   const selectedWalls = useApp((s) => s.selectedWalls);
   const selectedItems = useApp((s) => s.selectedItems);
+  const selectedLabels = useApp((s) => s.selectedLabels);
   const plan = useApp((s) => s.plan);
   const { walls, items } = plan;
   const system = plan.meta.measurementSystem;
   const setWallLength = useApp((s) => s.setSelectedWallLength);
   const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
 
-  // Length editing is a single-wall affair (see issue scope) and walls are only
-  // selectable with the select tool. Gate on that tool too: a selection
-  // persists across tool switches, so without it the field would leak into the
-  // window/door/pan toolbars.
+  const canEditMeasurement =
+    tool === "select" &&
+    selectionCount(selectedWalls, selectedItems, selectedLabels) === 1;
   const selectedWall =
-    tool === "select" && selectedWalls.size === 1
+    canEditMeasurement && selectedWalls.size === 1
       ? walls.find((w) => selectedWalls.has(w.id))
       : undefined;
-
-  // Width editing mirrors wall-length editing, but for a single selected opening
-  // (door/window). Same tool gate as above, for the same reason.
   const selectedOpening =
-    tool === "select" && selectedItems.size === 1
+    canEditMeasurement && selectedItems.size === 1
       ? items.find((i) => selectedItems.has(i.id))
       : undefined;
 
-  // Same tool gate again: a selection outlives a tool switch, so without it the
-  // action buttons would follow it into the wall/door/window/pan toolbars. The
-  // keyboard shortcuts stay tool-independent — predictability beats parity.
   const actions =
     tool === "select"
-      ? selectionActions(plan, selectedWalls, selectedItems)
+      ? selectionActions(plan, selectedWalls, selectedItems, selectedLabels)
       : [];
 
   return (

@@ -4,6 +4,7 @@
 // a selection and that its buttons are *wired* to the store. These mount the
 // real bar and click the real buttons, so dropping an `onClick` — or narrowing
 // the bar back to a single-item selection — fails them.
+import { loadPersistedHistory } from "@app/persistence";
 import {
   createInitialPlan,
   type DoorItem,
@@ -13,7 +14,13 @@ import {
   type WindowItem,
 } from "@app/schema";
 import { useApp } from "@app/store";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { WallOptionsBar } from "./WallOptionsBar";
 
@@ -63,6 +70,69 @@ afterEach(() => {
 });
 
 describe("WallOptionsBar — on-screen selection actions", () => {
+  it.each([
+    { selection: "a label", includeWall: false },
+    { selection: "a label and wall", includeWall: true },
+  ])("removes $selection in one undo step", ({ includeWall }) => {
+    const original = {
+      ...plan(),
+      labels: [
+        { id: "l1", text: "Kitchen", position: { x: 80, y: 50 } },
+        { id: "l2", text: "Terrace", position: { x: 500, y: 0 } },
+      ],
+    };
+    const state = useApp.getState;
+    state().loadPlan(original);
+    state().selectLabels(["l1"]);
+    if (includeWall) state().selectWall("w1", true);
+    render(<WallOptionsBar />);
+
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    if (!includeWall) {
+      expect(screen.queryByRole("textbox")).toBeNull();
+      act(() =>
+        state().setLabelEditor({
+          id: "l1",
+          position: original.labels[0].position,
+        }),
+      );
+      expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
+      act(() => state().finishLabelEdit());
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    expect(state().plan.labels).toEqual([original.labels[1]]);
+    expect(state().plan.walls.map(({ id }) => id)).toEqual(
+      includeWall ? ["w2"] : ["w1", "w2"],
+    );
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(state().plan).toEqual(original);
+  });
+
+  it.each([
+    "wall",
+    "label",
+  ] as const)("shows actions and hides measurements for a door and %s selection", (kind) => {
+    const state = useApp.getState;
+    state().loadPlan({
+      ...plan([door()]),
+      labels: [{ id: "l1", text: "Kitchen", position: { x: 80, y: 50 } }],
+    });
+    state().selectItem("d1");
+    render(<WallOptionsBar />);
+    expect(screen.getByRole("spinbutton", { name: "Width" })).toBeTruthy();
+    act(() => {
+      if (kind === "wall") state().selectWall("w1", true);
+      else state().selectLabels(["l1"], true);
+    });
+
+    expect(screen.queryAllByRole("spinbutton")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Toggle hinge" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Toggle swing" })).toBeTruthy();
+  });
+
   it("removes a multi-selection of walls, the case a marquee produces", () => {
     useApp.getState().loadPlan(plan());
     useApp.setState({ selectedWalls: new Set(["w1", "w2"]) });

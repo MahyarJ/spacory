@@ -5,6 +5,42 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Plan labels and room names scale with the drawing
+
+Plan labels store a plain text line and the start of its baseline in world
+coordinates. Plan labels and room names use a 28-unit semibold font, and room
+areas use a 24-unit regular font.
+This gives 14 px names and 12 px areas at a typical 50% Fit zoom. The canvas
+and exports share a world-space room layout. The layout tries the full name
+on one or two lines at the default size, then at 75% before using an ellipsis.
+This preserves more names in tight rooms while keeping abbreviations readable.
+The full name stays in the plan. Where a room cannot fit an ellipsis and its
+area at the default size, the available clearance determines their scale.
+Room labels use world-space text sizes. On the canvas, the layout uses the
+wall measurements visible at the current zoom, so a label may move to keep
+both readable. SVG and PNG lay out against the exported measurements in
+plan coordinates.
+
+Fit uses the world-space label bounds. On very wide labeled plans, Fit can
+lower the zoom limit. Wheel and pinch can return to that scale,
+and the viewport preserves the limit on reload. The grid is hidden if its
+lines would be too dense to draw. PNG export scales the entire SVG to fit
+within an 8192-pixel side limit and the 16-megapixel canvas limit of older
+iOS WebKit versions.
+
+The preview and saved label use the same SVG text renderer. The visible
+caret uses the SVG glyph positions while the native field handles editing.
+The canvas pans to reveal the draft and follows the caret on lines wider
+than the viewport. The chosen world anchor and zoom stay fixed, and the view
+stays where it is on commit.
+Leaving the field commits its text
+before canvas selection can change, and Escape cancels the edit. The shared
+Remove action is available for selected labels after inline editing ends.
+Clearing an existing label also removes it. The marquee uses each label's
+text bounds and can select labels alongside walls and openings. Dragging
+a selected wall or label moves both together in one undo step. Openings follow
+their host walls, and the whole group uses wall snapping when walls are selected.
+
 ## Keep measurement inputs compact with larger native tap areas
 
 The floating options bar paints each measurement field at the toolbar's
@@ -143,7 +179,7 @@ placement. The area reading still measures each room's centreline outline.
 Named labels fit between the painted wall polygons, junction fills, wall
 dimensions, and the door hinge, leaf, and arc. Open space within the swing can
 hold a label. Labels can shift within the same face to stay clear, wrap
-to a second line when needed and abbreviate with an ellipsis when space runs out.
+to a second line, or use a smaller size before abbreviating with an ellipsis.
 The visible position can shift as wall thickness changes, while the stored name
 anchor stays fixed. Font measurement preserves the letters' natural proportions.
 The full name stays in the document and is available in the editor and the SVG's title. Image

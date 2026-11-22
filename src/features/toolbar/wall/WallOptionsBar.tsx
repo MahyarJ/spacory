@@ -1,4 +1,4 @@
-import { anySelection } from "@app/selection";
+import { selectionCount } from "@app/selection";
 import { useApp } from "@app/store";
 import { WallOptions } from "./WallOptions";
 import styles from "./WallOptions.module.css";
@@ -16,15 +16,16 @@ import { WallResizeStatus } from "./WallResizeControls";
  */
 export function WallOptionsBar() {
   const tool = useApp((s) => s.tool);
-  const selectedWalls = useApp((s) => s.selectedWalls);
-  const selectedItems = useApp((s) => s.selectedItems);
+  const hasSelection = useApp(
+    (s) =>
+      selectionCount(s.selectedWalls, s.selectedItems, s.selectedLabels) > 0,
+  );
+  const isEditingLabel = useApp((s) => s.labelEditor !== null);
 
-  // Any non-empty selection, not just a single wall/item: the action controls
-  // are the only way to delete without a keyboard, so a marquee or shift
-  // multi-selection has to get a bar too.
+  // Keep the bar available for groups. During inline editing, a press outside
+  // the field saves the draft, so Remove is available after the edit finishes.
   const show =
-    tool === "wall" ||
-    (tool === "select" && anySelection(selectedWalls, selectedItems));
+    tool === "wall" || (tool === "select" && hasSelection && !isEditingLabel);
   if (!show) return null;
 
   return (

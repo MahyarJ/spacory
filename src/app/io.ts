@@ -1,7 +1,9 @@
+import { isPlanLabelText } from "./planLabel";
 import {
   createInitialPlan,
   type Item,
   type Plan,
+  type PlanLabel,
   type Point,
   type RoomName,
   type Wall,
@@ -46,6 +48,22 @@ function asRoomName(v: unknown, i: number): RoomName {
     throw new PlanParseError(`roomNames[${i}].name must be a non-blank string`);
   }
   return { anchor: asPoint(v.anchor, `roomNames[${i}].anchor`), name: v.name };
+}
+
+function asLabel(v: unknown, i: number): PlanLabel {
+  const where = `labels[${i}]`;
+  if (!isObject(v)) throw new PlanParseError(`${where} must be an object`);
+  if (typeof v.id !== "string" || !v.id) {
+    throw new PlanParseError(`${where}.id must be a non-empty string`);
+  }
+  if (typeof v.text !== "string" || !isPlanLabelText(v.text)) {
+    throw new PlanParseError(`${where}.text must be a non-blank single line`);
+  }
+  return {
+    id: v.id,
+    position: asPoint(v.position, `${where}.position`),
+    text: v.text,
+  };
 }
 
 function asWall(v: unknown, i: number): Wall {
@@ -147,6 +165,17 @@ export function coercePlan(raw: unknown): Plan {
 
   const walls = raw.walls.map(asWall);
   const items = raw.items.map(asItem);
+  const labels = raw.labels;
+  if (labels !== undefined && !Array.isArray(labels)) {
+    throw new PlanParseError('"labels" must be an array.');
+  }
+  const planLabels = labels?.map(asLabel);
+  if (
+    planLabels &&
+    new Set(planLabels.map(({ id }) => id)).size !== planLabels.length
+  ) {
+    throw new PlanParseError("Label ids must be unique.");
+  }
 
   // Drop items whose wall no longer exists to keep the renderer safe.
   const wallIds = new Set(walls.map((w) => w.id));
@@ -178,5 +207,6 @@ export function coercePlan(raw: unknown): Plan {
     ...(roomNames === undefined
       ? {}
       : { roomNames: roomNames.map(asRoomName) }),
+    ...(planLabels === undefined ? {} : { labels: planLabels }),
   };
 }

@@ -50,11 +50,11 @@ export function wallDimensions(
 /** Painted text bounds including the halo, rotated back into world coordinates. */
 export function dimensionFootprints(
   dimensions: WallDimension[],
-  scale: number,
   measure?: MeasureRoomLabel,
+  scale = 1,
 ): Point[][] {
   return dimensions.map(({ text, midpoint, angle, offset }) => {
-    const metrics = measure?.(text, 400);
+    const metrics = measure?.(text, 400, WALL_DIMENSION_FONT_SIZE);
     const width =
       (typeof metrics === "number" ? metrics : metrics?.width) ??
       text.length * 7;

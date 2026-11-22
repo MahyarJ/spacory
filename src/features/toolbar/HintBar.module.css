@@ -2,12 +2,10 @@
   background: var(--sp-panel);
   border-top: 1px solid var(--sp-bg);
   font-size: 12px;
+  line-height: 1.4;
   color: var(--sp-text);
   opacity: 0.9;
-  padding: 4px 10px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  padding: 4px var(--sp-toolbar-padding-x);
 
   kbd {
     background: var(--sp-accent);

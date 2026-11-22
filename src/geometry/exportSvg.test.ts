@@ -164,7 +164,8 @@ it("exports visible names as escaped Unicode text next to the area", () => {
     { anchor: { x: 500, y: 150 }, name: "Unenclosed" },
   ];
   const { markup } = buildExportSvg(plan);
-  expect(markup).toContain('Cuisine &amp; 茶室 &lt;🏠&gt; "special"</text>');
+  expect(markup).toContain(">Cuisine &amp; 茶室 &lt;🏠&gt;</text>");
+  expect(markup).toContain('>"special"</text>');
   expect(markup).toContain(">12 m²</text>");
   expect(markup).not.toContain("Hidden while merged");
   expect(markup).not.toContain("Unenclosed");
@@ -181,6 +182,49 @@ it("replaces XML-invalid display characters while preserving the saved text", ()
   plan.roomNames = [{ anchor: { x: 100, y: 150 }, name }];
   expect(buildExportSvg(plan).markup).toContain("Room���🏠&#13;</text>");
   expect(plan.roomNames[0].name).toBe(name);
+});
+
+it("exports an outdoor label with room for the full glyph extents and stroke", () => {
+  const plan = planOf([wall(0, 0, 100, 0)]);
+  const text = '  Terrace & 茶室 <🌿> "outside"  ';
+  plan.labels = [{ id: "terrace", position: { x: 500, y: -200 }, text }];
+  const measure = (line: string) => {
+    expect(line).toBe(text);
+    return {
+      width: 240,
+      actualBoundingBoxLeft: -10,
+      actualBoundingBoxRight: 260,
+      actualBoundingBoxAscent: 35,
+      actualBoundingBoxDescent: 20,
+    } as TextMetrics;
+  };
+  // Use zero margin to ensure the label's own bounds are sufficient.
+  const { markup, width, height } = buildExportSvg(plan, 0, undefined, measure);
+  expect(width).toBe(767.5);
+  expect(height).toBe(242.5);
+  expect(markup).toContain('viewBox="-5 -237.5 767.5 242.5"');
+  expect(markup).toContain(
+    '<g data-layer="plan-labels"><text x="500" y="-200" xml:space="preserve" font-family="system-ui, sans-serif" font-size="28" font-weight="600" text-anchor="start"',
+  );
+  expect(markup).toContain(
+    '>  Terrace &amp; 茶室 &lt;🌿&gt; "outside"  </text>',
+  );
+});
+
+it("frames a label-only plan around the label", () => {
+  const plan = planOf([]);
+  plan.labels = [
+    {
+      id: "terrace",
+      position: { x: 500, y: 500 },
+      text: "Terrace",
+    },
+  ];
+  const { markup, width, height } = buildExportSvg(plan, 0);
+  expect(width).toBe(299);
+  expect(height).toBe(47);
+  expect(markup).toContain('viewBox="497.5 469.5 299 47"');
+  expect(markup).toContain('text-anchor="start"');
 });
 
 it("keeps image dimensions independent of room names and abbreviates long visible labels", () => {
@@ -200,6 +244,26 @@ it("keeps image dimensions independent of room names and abbreviates long visibl
   expect(markup).toMatch(/font-weight="600"[^>]*>A+…<\/text>/);
   expect(markup).toContain(">5.76 m²</text>");
   expect(plan.roomNames[0].name).toBe(name);
+});
+
+it("fits the full saved room name at a smaller size in a 120 cm square", () => {
+  const plan = planOf([
+    wall(0, 0, 120, 0, 10, "a"),
+    wall(120, 0, 120, 120, 10, "b"),
+    wall(120, 120, 0, 120, 10, "c"),
+    wall(0, 120, 0, 0, 10, "d"),
+  ]);
+  plan.roomNames = [{ anchor: { x: 60, y: 60 }, name: "Storage room" }];
+
+  const { markup } = buildExportSvg(plan);
+  const visibleName = [
+    ...markup.matchAll(/font-weight="600"[^>]*>([^<]+)<\/text>/g),
+  ]
+    .map(([, line]) => line)
+    .join(" ");
+  expect(visibleName).toBe("Storage room");
+  expect(markup).toMatch(/<g transform="translate\([^)]+\) scale\(0\.\d+\)"/);
+  expect(markup).toContain(">1.44 m²</text>");
 });
 
 it("uses measured glyph widths to wrap labels at their natural proportions", () => {

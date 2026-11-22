@@ -1,5 +1,6 @@
 import { isDoor, type Plan } from "@app/schema";
 import { getDoorGeometry, getDoorSweepPoints } from "./itemGeometry";
+import { type MeasurePlanLabel, planLabelRect } from "./planLabels";
 import { getPointOnWall } from "./wall";
 
 /** Axis-aligned world-space bounding box, in cm. */
@@ -22,11 +23,14 @@ export interface Bounds {
  * though — its swing arc sweeps perpendicular to the wall with a radius equal to
  * the opening's own length — so a door also contributes the exact extent of that
  * arc and its leaf lines (`getDoorSweepPoints`), which are already-drawn points
- * and so need no further padding. Returns null for an empty plan (no walls and
- * no resolvable items) so callers can fall back to a default view instead of
+ * and so need no further padding. A plan label contributes its full text box.
+ * Returns null for an empty plan so callers can fall back to a default view instead of
  * trying to frame nothing.
  */
-export function getPlanBounds(plan: Plan): Bounds | null {
+export function getPlanBounds(
+  plan: Plan,
+  measureLabel?: MeasurePlanLabel,
+): Bounds | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -65,6 +69,12 @@ export function getPlanBounds(plan: Plan): Bounds | null {
         include(p.x, p.y, 0);
       }
     }
+  }
+
+  for (const label of plan.labels ?? []) {
+    const { x, y, w, h } = planLabelRect(label, measureLabel);
+    include(x, y, 0);
+    include(x + w, y + h, 0);
   }
 
   if (!has) return null;

@@ -5,9 +5,12 @@ import { MAX_ROOM_NAME_LENGTH } from "@app/roomName";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import type { Tool } from "@app/store";
 import { useApp } from "@app/store";
-import { DEFAULT_VIEW } from "@app/viewport";
+import { DEFAULT_VIEW, MIN_SCALE } from "@app/viewport";
 import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwitch";
+import { Toolbar } from "@features/toolbar/Toolbar";
+import { getPlanBounds } from "@geometry/bounds";
 import { buildExportSvg } from "@geometry/exportSvg";
+import { planLabelRect } from "@geometry/planLabels";
 import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
   act,
@@ -58,7 +61,7 @@ function pointerEvent(
   id: number,
   x: number,
   y: number,
-  init: { button?: number; buttons?: number } = {},
+  init: { button?: number; buttons?: number; pointerType?: string } = {},
 ): Event {
   const event = new MouseEvent(type, {
     bubbles: true,
@@ -69,6 +72,9 @@ function pointerEvent(
     buttons: init.buttons ?? (type === "pointerup" ? 0 : 1),
   });
   Object.defineProperty(event, "pointerId", { value: id });
+  Object.defineProperty(event, "pointerType", {
+    value: init.pointerType ?? "touch",
+  });
   return event;
 }
 
@@ -97,7 +103,7 @@ describe("FloorPlan touch gestures", () => {
     id: number,
     x: number,
     y: number,
-    init?: { button?: number; buttons?: number },
+    init?: { button?: number; buttons?: number; pointerType?: string },
   ) => fireEvent(canvas, pointerEvent("pointerdown", id, x, y, init));
   const move = (
     id: number,
@@ -160,6 +166,638 @@ describe("FloorPlan touch gestures", () => {
     act(() => useApp.getState().undo());
     expect(walls()).toEqual(original);
     expect(useApp.getState().plan.meta.measurementSystem).toBe("metric");
+  });
+
+  it("uses the toolbar to label three areas of one room and the terrace independently", () => {
+    setup({ plan: enclosedPlan() });
+    render(<Toolbar />);
+    const rooms = detectRooms(walls());
+    expect(rooms.map((room) => room.area)).toEqual([120000]);
+    const labels = () => useApp.getState().plan.labels;
+    const input = () => screen.getByRole("textbox", { name: "Label text" });
+    const labelGraphics = () => [
+      ...canvas.querySelectorAll('[data-layer="plan-labels"] text'),
+    ];
+    const selectTool = (name: string) =>
+      fireEvent.click(screen.getByRole("button", { name }));
+    // The test uses client positions, so the result also checks the inverse view transform.
+    act(() =>
+      useApp.getState().setView(() => ({ scale: 2, panX: 20, panY: 40 })),
+    );
+    const tap = (x: number, y: number, pointerType = "touch") => {
+      down(1, x, y, { pointerType });
+      up(1, x, y);
+    };
+
+    selectTool("Label");
+    for (const [text, x, y] of [
+      ["Kitchen", 100, 80],
+      ["Dining", 220, 240],
+      ["Living", 70, 180],
+      ["Terrace & 茶室 <🌿>", 555.5, 330],
+    ] as const) {
+      tap(x * 2 + 20, y * 2 + 40);
+      expect(document.activeElement).toBe(input());
+      fireEvent.change(input(), { target: { value: text } });
+      fireEvent.keyDown(input(), { key: "Enter" });
+      expect(labels()?.at(-1)).toMatchObject({ text, position: { x, y } });
+    }
+    const original = labels();
+    expect(
+      original?.map(({ position }) => findRoomAt(rooms, position)?.area),
+    ).toEqual([120000, 120000, 120000, undefined]);
+    expect(labelGraphics().map((label) => label.textContent)).toEqual(
+      original?.map((label) => label.text),
+    );
+
+    selectTool("Select");
+    down(1, 1131, 700, { pointerType: "mouse" });
+    move(1, 1171, 720);
+    expect(
+      labelGraphics().at(-1)?.parentElement?.getAttribute("transform"),
+    ).toBe("translate(575.5 340)");
+    expect(loadPersistedHistory()?.present.labels).toEqual(original);
+    up(1, 1181, 730);
+    expect(labels()?.at(-1)?.position).toEqual({ x: 580.5, y: 345 });
+    selectTool("Undo");
+    expect(labels()).toEqual(original);
+    selectTool("Redo");
+    expect(labels()?.at(-1)?.position).toEqual({ x: 580.5, y: 345 });
+
+    tap(1181, 730);
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+    tap(1181, 730);
+    expect(input()).toBe(document.activeElement);
+    expect(labelGraphics()).toHaveLength(3);
+    for (const key of ["Backspace", "ArrowLeft", "[", "h", "s"]) {
+      expect(fireEvent.keyDown(input(), { key })).toBe(true);
+    }
+    expect(fireEvent.keyDown(input(), { key: "z", ctrlKey: true })).toBe(true);
+    expect(labels()?.at(-1)?.text).toBe("Terrace & 茶室 <🌿>");
+    fireEvent.change(input(), { target: { value: "Terrace & Patio <🌿>" } });
+    fireEvent.keyDown(input(), { key: "Enter" });
+    const edited = labels();
+    expect(edited?.at(-1)?.text).toBe("Terrace & Patio <🌿>");
+    expect(loadPersistedHistory()?.present.labels).toEqual(edited);
+    expect(parsePlan(serializePlan(useApp.getState().plan)).labels).toEqual(
+      edited,
+    );
+
+    tap(1181, 730);
+    fireEvent.change(input(), { target: { value: "" } });
+    tap(1300, 800);
+    expect(labelGraphics()).toHaveLength(3);
+    selectTool("Undo");
+    expect(labels()).toEqual(edited);
+    tap(220, 200);
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(labelGraphics().map((label) => label.textContent)).toEqual([
+      "Dining",
+      "Living",
+      "Terrace & Patio <🌿>",
+    ]);
+    expect(detectRooms(walls())).toEqual(rooms);
+  });
+
+  it("starts with an empty caret at the placement point and commits inline text on click-away", () => {
+    setup({ tool: "label", plan: enclosedPlan() });
+    act(() =>
+      useApp.getState().setView(() => ({ ...DEFAULT_VIEW, scale: 0.25 })),
+    );
+    const graphic = () =>
+      canvas.querySelector('[data-layer="plan-labels"] text');
+    const draftGraphic = () =>
+      canvas.querySelector('[data-layer="label-edit-preview"] text');
+    const place = (x = 150) => {
+      down(1, x, 100);
+      up(1, x, 100);
+      return screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Label text",
+      });
+    };
+    const field = place();
+    expect(field.value).toBe("");
+    expect(document.activeElement).toBe(field);
+    expect([field.selectionStart, field.selectionEnd]).toEqual([0, 0]);
+    expect(field.style.left).toBe("150px");
+    expect(Number.parseFloat(field.style.top)).toBeCloseTo(93.525);
+    expect(field.style.fontSize).toBe("7px");
+    expect(field.style.fontWeight).toBe("600");
+    expect(graphic()).toBeNull();
+    fireEvent.change(field, { target: { value: "Terrace" } });
+    expect(field.value).toBe("Terrace");
+    expect(draftGraphic()?.textContent).toBe("Terrace");
+    expect(draftGraphic()?.getAttribute("text-anchor")).toBe("start");
+    expect(draftGraphic()?.parentElement?.getAttribute("transform")).toBe(
+      "translate(600 400)",
+    );
+    fireEvent.keyDown(field, { key: "Enter", isComposing: true });
+    expect(useApp.getState().plan.labels).toBeUndefined();
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(graphic()).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    const placed = place();
+    fireEvent.change(placed, { target: { value: "T" } });
+    const draftPosition =
+      draftGraphic()?.parentElement?.getAttribute("transform");
+    fireEvent.change(placed, { target: { value: "Terrace  & 茶室" } });
+    const draft = draftGraphic()?.outerHTML;
+    expect(draftGraphic()?.parentElement?.getAttribute("transform")).toBe(
+      draftPosition,
+    );
+    fireEvent.keyDown(placed, { key: "Enter" });
+    expect(graphic()?.outerHTML).toBe(draft);
+    expect(graphic()?.parentElement?.getAttribute("transform")).toBe(
+      draftPosition,
+    );
+    act(() => useApp.getState().undo());
+
+    fireEvent.change(place(), { target: { value: "Terrace" } });
+    const next = place(250);
+    expect(next.value).toBe("");
+    expect(document.activeElement).toBe(next);
+    expect(graphic()?.textContent).toBe("Terrace");
+    expect(useApp.getState().plan.labels?.[0]).toMatchObject({
+      position: { x: 600, y: 400 },
+      text: "Terrace",
+    });
+    fireEvent.blur(next);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    expect(Number(graphic()?.getAttribute("font-size")) * view().scale).toBe(7);
+    const anchor = graphic()?.parentElement?.getAttribute("transform");
+    act(() =>
+      useApp.getState().setView(() => ({ scale: 2, panX: 20, panY: 40 })),
+    );
+    expect(graphic()?.getAttribute("font-size")).toBe("28");
+    expect(graphic()?.getAttribute("font-weight")).toBe("600");
+    expect(graphic()?.parentElement?.getAttribute("transform")).toBe(anchor);
+    expect(anchor).toBe("translate(600 400)");
+  });
+
+  it("pans an edge draft into view and keeps its world anchor on Enter", () => {
+    setup({ tool: "label" });
+    const store = useApp.getState();
+    const canvasSize = { width: 400, height: 260 };
+    const initial = { scale: 1.25, panX: 20, panY: 10 };
+    act(() => {
+      store.setCanvasSize(canvasSize);
+      store.setView(() => initial);
+    });
+    down(1, 395, 255);
+    up(1, 395, 255);
+    const position = { x: 300, y: 196 };
+    const field = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Label text",
+    });
+    expect(view().panX).toBeLessThan(initial.panX);
+    expect(view().panY).toBeLessThan(initial.panY);
+    expect(useApp.getState().labelEditor?.position).toEqual(position);
+
+    const text = "Desk";
+    fireEvent.change(field, { target: { value: text } });
+    const { x, y, w, h } = planLabelRect({ position, text });
+    const editingView = view();
+    expect(editingView.scale).toBe(initial.scale);
+    expect(x * editingView.scale + editingView.panX).toBeGreaterThan(0);
+    expect((x + w) * editingView.scale + editingView.panX).toBeLessThan(
+      canvasSize.width,
+    );
+    expect(y * editingView.scale + editingView.panY).toBeGreaterThan(0);
+    expect((y + h) * editingView.scale + editingView.panY).toBeLessThan(
+      canvasSize.height,
+    );
+    expect(useApp.getState().plan.labels).toBeUndefined();
+
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(view()).toEqual(editingView);
+    expect(useApp.getState().plan.labels?.[0]).toMatchObject({
+      position,
+      text,
+    });
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+  });
+
+  it("draws and follows the caret using the rendered glyph positions at the canvas edge", () => {
+    setup({ tool: "label" });
+    act(() => useApp.getState().setCanvasSize({ width: 300, height: 200 }));
+    down(1, 50, 100);
+    up(1, 50, 100);
+    expect(view()).toEqual(DEFAULT_VIEW);
+
+    const field = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Label text",
+    });
+    const draftLayer = canvas.querySelector(
+      '[data-layer="label-edit-preview"]',
+    )!;
+    const svgText = draftLayer.querySelector("text")!;
+    // jsdom has no SVG text layout. Make the actual glyph advance differ from
+    // the fallback width so both the caret and the pan must use the SVG value.
+    const glyphWidth = 46;
+    Object.defineProperties(svgText, {
+      getNumberOfChars: { value: () => svgText.textContent?.length ?? 0 },
+      getStartPositionOfChar: {
+        value: (index: number) => ({ x: index * glyphWidth }),
+      },
+      getEndPositionOfChar: {
+        value: (index: number) => ({ x: (index + 1) * glyphWidth }),
+      },
+    });
+    const caretX = () =>
+      Number(draftLayer.querySelector("line")?.getAttribute("x1"));
+    const text = "A label longer than the canvas";
+    fireEvent.change(field, { target: { value: text } });
+    const endView = view();
+    expect(caretX()).toBe(text.length * glyphWidth);
+    expect(50 + endView.panX + caretX()).toBeCloseTo(284);
+    expect(endView.scale).toBe(1);
+    expect(endView.panY).toBe(0);
+
+    field.setSelectionRange(0, 0);
+    fireEvent.keyUp(field, { key: "Home" });
+    expect(caretX()).toBe(0);
+    expect(50 + view().panX + caretX()).toBeCloseTo(16);
+
+    field.setSelectionRange(text.length, text.length);
+    fireEvent.keyUp(field, { key: "End" });
+    expect(caretX()).toBe(text.length * glyphWidth);
+    expect(view()).toEqual(endView);
+  });
+
+  it("saves the current label and exits entry when switching to Select", () => {
+    setup({ tool: "label" });
+    render(<Toolbar />);
+    down(1, 400, 200);
+    up(1, 400, 200);
+    fireEvent.change(screen.getByRole("textbox", { name: "Label text" }), {
+      target: { value: "Terrace" },
+    });
+    const select = screen.getByRole("button", { name: "Select" });
+    fireEvent(select, pointerEvent("pointerdown", 1, 10, 10));
+    fireEvent.click(select);
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+    expect(useApp.getState().tool).toBe("select");
+    expect(useApp.getState().plan.labels?.[0]).toMatchObject({
+      position: { x: 400, y: 200 },
+      text: "Terrace",
+    });
+  });
+
+  it("keeps a label at its saved start point while editing", () => {
+    const label = { id: "l1", position: { x: 500, y: 300 }, text: "Terrace" };
+    setup({
+      tool: "select",
+      plan: { ...createInitialPlan(), labels: [label] },
+    });
+    for (let i = 0; i < 2; i++) {
+      down(1, 500, 300);
+      up(1, 500, 300);
+    }
+    const field = screen.getByRole("textbox", { name: "Label text" });
+    const draft = canvas.querySelector(
+      '[data-layer="label-edit-preview"] text',
+    )!;
+    expect(draft.parentElement?.getAttribute("transform")).toBe(
+      "translate(500 300)",
+    );
+    fireEvent.change(field, { target: { value: "Longer label" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(useApp.getState().plan.labels).toEqual([
+      { ...label, text: "Longer label" },
+    ]);
+  });
+
+  it.each([
+    { modifier: "ctrlKey", release: { x: 460, y: 220 } },
+    { modifier: "metaKey", release: { x: 400, y: 200 } },
+  ] as const)("preserves Redo after $modifier+Z interrupts a label drag", ({
+    modifier,
+    release,
+  }) => {
+    setup({ tool: "label" });
+    down(1, 400, 200);
+    up(1, 400, 200);
+    const field = screen.getByRole("textbox", { name: "Label text" });
+    fireEvent.change(field, { target: { value: "Terrace" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    const original = useApp.getState().plan.labels;
+    expect(original).toHaveLength(1);
+
+    act(() => useApp.getState().setTool("select"));
+    down(1, 400, 200, { pointerType: "mouse" });
+    move(1, 440, 220);
+    expect(useApp.getState().plan.labels?.[0].position).toEqual({
+      x: 440,
+      y: 220,
+    });
+
+    fireEvent.keyDown(window, { key: "z", [modifier]: true });
+    expect(useApp.getState().plan.labels ?? []).toHaveLength(0);
+    up(1, release.x, release.y);
+    expect(useApp.getState().selectedLabels.size).toBe(0);
+
+    fireEvent.keyDown(window, { key: "z", shiftKey: true, [modifier]: true });
+    expect(useApp.getState().plan.labels).toEqual(original);
+  });
+
+  it("discards an endpoint drag when the toolbar redoes a plan change", () => {
+    setup({ tool: "select", plan: cornerPlan() });
+    render(<Toolbar />);
+    const original = walls();
+    const added = wall(0, 350, 400, 350, "w3");
+    act(() => useApp.getState().addWall(added));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    act(() => useApp.getState().selectWall("w1"));
+
+    down(1, 0, 0, { pointerType: "mouse" });
+    move(1, 40, 40);
+    expect(walls()[0].a).toEqual({ x: 40, y: 40 });
+
+    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
+    move(1, 60, 60);
+    up(1, 60, 60);
+    expect(walls()).toEqual([...original, added]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(walls()).toEqual(original);
+  });
+
+  it("marquee-selects labels by their text bounds alongside walls and moves selected labels together", () => {
+    const labels = [
+      {
+        id: "terrace",
+        text: "Terrace",
+        position: { x: 100, y: 90 },
+      },
+      {
+        id: "garden",
+        text: "Garden",
+        position: { x: 175, y: 160 },
+      },
+      {
+        id: "outside",
+        text: "Outside",
+        position: { x: 175, y: 250 },
+      },
+    ] as const;
+    const plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 0, 400, 0, "w1")],
+      labels: [...labels],
+    };
+    setup({ plan, tool: "select" });
+    const selectRegion = (top: number) => {
+      down(1, 170, top);
+      move(1, 190, 200);
+      up(1, 190, 200);
+    };
+    const state = useApp.getState;
+    selectRegion(-25);
+    expect(state().selectedWalls).toEqual(new Set(["w1"]));
+    expect(state().selectedLabels).toEqual(new Set(["terrace", "garden"]));
+    expect(
+      canvas.querySelectorAll('[data-layer="plan-labels"] rect'),
+    ).toHaveLength(2);
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(state().plan.walls).toEqual([]);
+    expect(state().plan.labels).toEqual([labels[2]]);
+    act(() => state().undo());
+    expect(state().plan.walls).toEqual(plan.walls);
+    expect(state().plan.labels).toEqual(labels);
+
+    selectRegion(30);
+    down(1, 101, 90);
+    move(1, 121, 120);
+    expect(loadPersistedHistory()?.present.labels).toEqual(labels);
+    up(1, 121, 120);
+    expect(state().plan.labels?.map(({ position }) => position)).toEqual([
+      { x: 120, y: 120 },
+      { x: 195, y: 190 },
+      labels[2].position,
+    ]);
+    expect(state().plan.walls).toEqual(plan.walls);
+    act(() => state().undo());
+    expect(state().plan.labels).toEqual(labels);
+  });
+
+  it.each([
+    "wall",
+    "label",
+  ] as const)("moves a marquee selection together when dragging its %s", (grab) => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 0, 400, 0, "w1")],
+      items: [
+        {
+          id: "window",
+          type: "window",
+          wallAttach: { wallId: "w1", offset: 90, length: 80 },
+          thickness: 10,
+          props: {},
+        },
+      ],
+      labels: [
+        { id: "inside", text: "Kitchen", position: { x: 100, y: 90 } },
+        { id: "outside", text: "Terrace", position: { x: 600, y: 150 } },
+      ],
+    };
+    setup({ plan, tool: "select" });
+    const state = useApp.getState;
+    down(1, 55, -25);
+    move(1, 250, 130);
+    up(1, 250, 130);
+    expect(state().selectedWalls).toEqual(new Set(["w1"]));
+    expect(state().selectedItems).toEqual(new Set(["window"]));
+    expect(state().selectedLabels).toEqual(new Set(["inside"]));
+
+    const [x, y] = grab === "wall" ? [220, 0] : [100, 90];
+    const movedWalls = [wall(40, 40, 440, 40, "w1")];
+    const movedLabels = [
+      { ...plan.labels![0], position: { x: 140, y: 130 } },
+      plan.labels![1],
+    ];
+    down(1, x, y);
+    move(1, x + 37, y + 43);
+    expect(walls()).toEqual(movedWalls);
+    expect(state().plan.labels).toEqual(movedLabels);
+    expect(state().plan.items).toEqual(plan.items);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+    cancel(1, x + 37, y + 43);
+    expect(walls()).toEqual(plan.walls);
+    expect(state().plan.labels).toEqual(plan.labels);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    down(1, x, y);
+    move(1, x + 37, y + 43);
+    up(1, x + 37, y + 43);
+    expect(walls()).toEqual(movedWalls);
+    expect(state().plan.labels).toEqual(movedLabels);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(walls()).toEqual(plan.walls);
+    expect(state().plan.labels).toEqual(plan.labels);
+    act(() => state().redo());
+    expect(walls()).toEqual(movedWalls);
+    expect(state().plan.labels).toEqual(movedLabels);
+  });
+
+  it("nudges selected walls and labels together with the arrow keys", () => {
+    const labels = [
+      { id: "l1", text: "Kitchen", position: { x: 100, y: 90 } },
+      { id: "l2", text: "Dining", position: { x: 175, y: 160 } },
+      { id: "l3", text: "Terrace", position: { x: 600, y: 150 } },
+    ];
+    const original = {
+      ...createInitialPlan(),
+      walls: [wall(0, 0, 400, 0, "w1")],
+      labels,
+    };
+    setup({ plan: original, tool: "select" });
+    const state = useApp.getState;
+    act(() => {
+      state().selectLabels(["l1", "l2"]);
+      state().selectWall("w1", true);
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(walls()).toEqual([wall(20, 0, 420, 0, "w1")]);
+    expect(state().plan.labels?.map(({ position }) => position)).toEqual([
+      { x: 120, y: 90 },
+      { x: 195, y: 160 },
+      labels[2].position,
+    ]);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(state().plan).toEqual(original);
+
+    act(() => state().selectLabels(["l1", "l2"]));
+    fireEvent.keyDown(window, { key: "ArrowUp", altKey: true });
+    expect(walls()).toEqual(original.walls);
+    expect(state().plan.labels?.map(({ position }) => position)).toEqual([
+      { x: 100, y: 89 },
+      { x: 175, y: 159 },
+      labels[2].position,
+    ]);
+  });
+
+  it("adjusts thickness with bracket keys only for wall-only selections", () => {
+    const original: Plan = {
+      ...cornerPlan(),
+      items: [
+        {
+          id: "window",
+          type: "window",
+          wallAttach: { wallId: "w1", offset: 90, length: 80 },
+          thickness: 10,
+          props: {},
+        },
+      ],
+      labels: [{ id: "l1", text: "Kitchen", position: { x: 100, y: 90 } }],
+    };
+    setup({ plan: original, tool: "select" });
+    const state = useApp.getState;
+
+    act(() => {
+      state().selectWall("w1");
+      state().selectLabels(["l1"], true);
+    });
+    fireEvent.keyDown(window, { key: "]" });
+    expect(state().plan).toEqual(original);
+
+    act(() => {
+      state().selectWall("w1");
+      state().selectItem("window", true);
+    });
+    fireEvent.keyDown(window, { key: "[" });
+    expect(state().plan).toEqual(original);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    act(() => {
+      state().selectWall("w1");
+      state().selectWall("w2", true);
+    });
+    fireEvent.keyDown(window, { key: "]" });
+    expect(walls().map(({ thickness }) => thickness)).toEqual([11, 11]);
+    fireEvent.keyDown(window, { key: "[" });
+    expect(walls().map(({ thickness }) => thickness)).toEqual([10, 10]);
+  });
+
+  it("abandons a placement or label drag when touch becomes a pinch", () => {
+    const label = {
+      id: "terrace",
+      text: "Terrace",
+      position: { x: 500, y: 350 },
+    };
+    setup({ plan: { ...enclosedPlan(), labels: [label] }, tool: "label" });
+    down(1, 500, 350);
+    down(2, 550, 350);
+    up(2, 550, 350);
+    up(1, 500, 350);
+    expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
+
+    act(() => useApp.getState().setTool("select"));
+    down(1, 500, 350);
+    move(1, 540, 370);
+    down(2, 550, 350);
+    up(2, 550, 350);
+    up(1, 540, 370);
+    expect(useApp.getState().plan.labels).toEqual([label]);
+    expect(
+      canvas
+        .querySelector('[data-layer="plan-labels"] > g')
+        ?.getAttribute("transform"),
+    ).toBe("translate(500 350)");
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+  });
+
+  it("fits a distant outdoor label and returns to that zoom with wheel and pinch", () => {
+    const plan = {
+      ...enclosedPlan(),
+      labels: [
+        {
+          id: "terrace",
+          text: "Outdoor Terrace",
+          position: { x: 9500, y: -400 },
+        },
+      ],
+    };
+    setup({ plan });
+    render(<Toolbar />);
+    act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    const { scale, panX, panY } = view();
+    const bounds = getPlanBounds(plan)!;
+    expect(scale).toBeLessThan(MIN_SCALE);
+    expect(bounds.minX * scale + panX).toBeGreaterThan(0);
+    expect(bounds.minY * scale + panY).toBeGreaterThan(0);
+    expect(bounds.maxX * scale + panX).toBeLessThan(800);
+    expect(bounds.maxY * scale + panY).toBeLessThan(600);
+
+    fireEvent.wheel(canvas, { deltaY: -250, clientX: 400, clientY: 300 });
+    expect(view().scale).toBeGreaterThan(scale);
+    fireEvent.wheel(canvas, { deltaY: 250, clientX: 400, clientY: 300 });
+    expect(view().scale).toBeCloseTo(scale, 8);
+    expect(view().panX).toBeCloseTo(panX);
+    expect(view().panY).toBeCloseTo(panY);
+
+    down(1, 200, 300);
+    down(2, 600, 300);
+    move(2, 700, 300);
+    up(2, 700, 300);
+    up(1, 200, 300);
+    expect(view().scale).toBeGreaterThan(scale);
+
+    down(1, 200, 300);
+    down(2, 700, 300);
+    move(2, 600, 300);
+    up(2, 600, 300);
+    up(1, 200, 300);
+    expect(view().scale).toBeCloseTo(scale, 8);
+    expect(view().panX).toBeCloseTo(panX);
+    expect(view().panY).toBeCloseTo(panY);
   });
 
   describe("one finger runs the active tool's gesture", () => {

@@ -1,25 +1,29 @@
-import { formatSystemArea } from "@app/format";
 import { isDoor, type Plan } from "@app/schema";
 import { getPlanBounds } from "./bounds";
 import {
   DOOR_HINGE_RADIUS,
-  doorSwingFootprints,
   getDoorArcPath,
   getDoorGeometry,
   getWindowGeometry,
 } from "./itemGeometry";
 import { computeWallGeometry, polygonToPoints } from "./junction";
 import {
-  layoutRoomLabel,
+  type MeasurePlanLabel,
+  PLAN_LABEL_FONT_FAMILY,
+  PLAN_LABEL_FONT_SIZE,
+  PLAN_LABEL_STROKE_WIDTH,
+} from "./planLabels";
+import {
+  layoutRoomLabels,
   type MeasureRoomLabel,
+  ROOM_AREA_FONT_SIZE,
+  ROOM_LABEL_FONT_FAMILY,
   ROOM_LABEL_FONT_SIZE,
+  ROOM_LABEL_FONT_WEIGHT,
+  roomAnnotationTransform,
 } from "./roomLabels";
 import { detectRooms, resolveRoomNames } from "./rooms";
-import {
-  dimensionFootprints,
-  WALL_DIMENSION_FONT_SIZE,
-  wallDimensions,
-} from "./wallDimensions";
+import { WALL_DIMENSION_FONT_SIZE, wallDimensions } from "./wallDimensions";
 
 /** Margin (cm) left around the plan's content on every side of the export. */
 export const EXPORT_MARGIN = 40;
@@ -30,7 +34,6 @@ export const EXPORT_EMPTY_PLACEHOLDER_SIZE = 200;
 /** Fixed, theme-independent export colors — chosen for print/share legibility. */
 export const EXPORT_BACKGROUND = "#ffffff";
 export const EXPORT_WALL_COLOR = "#0f172a";
-const LABEL_FONT_SIZE = 12;
 
 export interface ExportSvgResult {
   /** Standalone, self-contained SVG markup (no external stylesheet or theme). */
@@ -65,8 +68,9 @@ export function buildExportSvg(
   plan: Plan,
   margin = EXPORT_MARGIN,
   measure?: MeasureRoomLabel,
+  measureLabel?: MeasurePlanLabel,
 ): ExportSvgResult {
-  const bounds = getPlanBounds(plan);
+  const bounds = getPlanBounds(plan, measureLabel);
   const half = EXPORT_EMPTY_PLACEHOLDER_SIZE / 2;
   const { minX, minY, maxX, maxY } = bounds ?? {
     minX: -half,
@@ -127,34 +131,30 @@ export function buildExportSvg(
     })
     .join("");
 
-  const textStyle = `font-family="sans-serif" text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
-  const dimensionLabels = wallDimensions(
-    plan.walls,
-    plan.meta.measurementSystem,
-  );
-  const dimensions = dimensionLabels
+  const textStyle = `text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
+  const measurements = wallDimensions(plan.walls, plan.meta.measurementSystem);
+  const annotations = layoutRoomLabels({
+    rooms,
+    names: roomNames,
+    walls: plan.walls,
+    items: plan.items,
+    system: plan.meta.measurementSystem,
+    paintedWalls,
+    dimensions: measurements,
+    measure,
+  });
+  const dimensions = measurements
     .map(
       ({ midpoint, angle, offset, text }) =>
-        `<text transform="translate(${midpoint.x} ${midpoint.y}) rotate(${angle})" y="${-offset}" font-size="${WALL_DIMENSION_FONT_SIZE}" ${textStyle}>${text}</text>`,
+        `<text transform="translate(${midpoint.x} ${midpoint.y}) rotate(${angle})" y="${-offset}" font-size="${WALL_DIMENSION_FONT_SIZE}" font-family="sans-serif" ${textStyle}>${text}</text>`,
     )
     .join("");
-  const obstacles = roomNames.size
-    ? [
-        ...paintedWalls,
-        ...dimensionFootprints(dimensionLabels, 1, measure),
-        ...doorSwingFootprints(plan.items, wallsById),
-      ]
-    : paintedWalls;
-  const roomLabels = rooms
-    .map((room) => {
-      const name = roomNames.get(room)?.name;
-      const area = formatSystemArea(room.area, plan.meta.measurementSystem);
-      const label = name
-        ? layoutRoomLabel(room, name, area, obstacles, 1, measure)
-        : undefined;
-      const { x, y } = label?.point ?? room.labelPoint;
+  const roomLabels = annotations
+    .map((annotation) => {
+      const { room, name, area, label } = annotation;
       if (!name || !label) {
-        const areaText = `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${LABEL_FONT_SIZE}" ${textStyle}>${area}</text>`;
+        const { x, y } = room.labelPoint;
+        const areaText = `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${ROOM_AREA_FONT_SIZE}" font-weight="400" font-family="${ROOM_LABEL_FONT_FAMILY}" ${textStyle}>${area}</text>`;
         return name
           ? `<g><title>${escapeSvgText(name)}</title>${areaText}</g>`
           : areaText;
@@ -162,17 +162,23 @@ export function buildExportSvg(
       const lines = label.nameLines
         .map(
           (line) =>
-            `<text x="0" y="${line.y}" font-weight="600" xml:space="preserve">${escapeSvgText(line.text)}</text>`,
+            `<text x="0" y="${line.y}" font-weight="${ROOM_LABEL_FONT_WEIGHT}" xml:space="preserve">${escapeSvgText(line.text)}</text>`,
         )
         .join("");
       const title =
         label.shortened || label.nameLines.length > 1
           ? `<title>${escapeSvgText(name)}</title>`
           : "";
-      return `<g transform="translate(${x} ${y}) scale(${label.fontScale})" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" ${textStyle}>${title}${lines}<text x="0" y="${label.areaY}">${area}</text></g>`;
+      return `<g transform="${roomAnnotationTransform(annotation)}" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" font-weight="400" font-family="${ROOM_LABEL_FONT_FAMILY}" ${textStyle}>${title}${lines}<text x="0" y="${label.areaY}" font-size="${ROOM_AREA_FONT_SIZE}">${area}</text></g>`;
     })
     .join("");
 
+  const planLabels = plan.labels
+    ?.map(
+      ({ position: { x, y }, text }) =>
+        `<text x="${x}" y="${y}" xml:space="preserve" font-family="${PLAN_LABEL_FONT_FAMILY}" font-size="${PLAN_LABEL_FONT_SIZE}" font-weight="${ROOM_LABEL_FONT_WEIGHT}" text-anchor="start" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="${PLAN_LABEL_STROKE_WIDTH}" paint-order="stroke">${escapeSvgText(text)}</text>`,
+    )
+    .join("");
   const markup =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${width} ${height}">` +
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${EXPORT_BACKGROUND}" />` +
@@ -180,6 +186,7 @@ export function buildExportSvg(
     `<g data-layer="items">${itemShapes}</g>` +
     `<g data-layer="dimensions">${dimensions}</g>` +
     `<g data-layer="room-areas">${roomLabels}</g>` +
+    (planLabels ? `<g data-layer="plan-labels">${planLabels}</g>` : "") +
     "</svg>";
 
   return { markup, width, height };
