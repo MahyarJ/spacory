@@ -6,7 +6,10 @@ import {
   EXPORT_MARGIN,
   type ExportSvgResult,
 } from "@geometry/exportSvg";
+import buttons from "@ui/Button.module.css";
+import { ICON_SIZE } from "@ui/constants";
 import { Menu } from "@ui/Menu";
+import { Modal } from "@ui/Modal";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
 import {
@@ -18,12 +21,9 @@ import {
   Image as ImageIcon,
   LoaderCircle,
   Upload,
-  X,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { ICON_SIZE } from "./constants";
+import { useEffect, useMemo, useRef, useState } from "react";
 import imageStyles from "./ExportImageDialog.module.css";
-import styles from "./Toolbar.module.css";
 
 const DEFAULT_EXPORT_FILENAME = "floor-plan";
 
@@ -102,46 +102,29 @@ async function buildExportPng({ markup, width, height }: ExportSvgResult) {
   }
 }
 
-type CopyStatus = "idle" | "copying" | "copied" | "failed";
+type CopyStatus = "idle" | "copied" | "failed";
 
 const COPY_CONFIRMATION_MS = 2000;
-
-function isBackdropEvent(event: React.MouseEvent<HTMLDialogElement>): boolean {
-  // The backdrop and the dialog's padding both target the dialog itself.
-  if (event.target !== event.currentTarget) return false;
-  const { left, right, top, bottom } =
-    event.currentTarget.getBoundingClientRect();
-  return (
-    event.clientX < left ||
-    event.clientX >= right ||
-    event.clientY < top ||
-    event.clientY >= bottom
-  );
-}
 
 function ExportImageDialog({
   plan,
   onClose,
+  copyBusy,
+  onCopy,
 }: {
   plan: Plan;
   onClose: () => void;
+  copyBusy: boolean;
+  onCopy: (svg: ExportSvgResult) => Promise<boolean>;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const backdropPress = useRef(false);
-  const titleId = useId();
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
   const [preparingPng, setPreparingPng] = useState(false);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
-  const copyBusy = copyStatus === "copying";
   const exportBusy = preparingPng || copyBusy;
   const copied = copyStatus === "copied";
   const PngIcon = preparingPng ? LoaderCircle : Download;
   const CopyIcon = copyBusy ? LoaderCircle : Copy;
-
-  useEffect(() => {
-    dialogRef.current!.showModal();
-  }, []);
 
   useEffect(() => {
     if (copyStatus !== "copied") return;
@@ -150,11 +133,6 @@ function ExportImageDialog({
     }, COPY_CONFIRMATION_MS);
     return () => window.clearTimeout(timer);
   }, [copyStatus]);
-
-  const close = () => {
-    dialogRef.current!.close();
-    onClose();
-  };
 
   const svg = useMemo(
     () =>
@@ -190,60 +168,21 @@ function ExportImageDialog({
   };
 
   const copyImage = async () => {
-    setCopyStatus("copying");
-    const png = buildExportPng(svg);
-    // The browser can reject the write before it reads the PNG promise.
-    void png.catch(() => {});
+    setCopyStatus("idle");
     try {
-      // Safari needs the write to start in the click handler, before PNG encoding.
-      await navigator.clipboard.write([
-        new ClipboardItem({ "image/png": png }),
-      ]);
-      setCopyStatus("copied");
+      if (await onCopy(svg)) setCopyStatus("copied");
     } catch {
       setCopyStatus("failed");
     }
   };
 
   return (
-    <dialog
-      className={imageStyles.dialog}
-      ref={dialogRef}
-      aria-labelledby={titleId}
-      onCancel={(e) => {
-        e.preventDefault();
-        close();
-      }}
-      onPointerDown={(e) => {
-        backdropPress.current =
-          e.isPrimary && e.button === 0 && !exportBusy && isBackdropEvent(e);
-      }}
-      onPointerCancel={() => {
-        backdropPress.current = false;
-      }}
-      onClick={(e) => {
-        const startedOnBackdrop = backdropPress.current;
-        backdropPress.current = false;
-        if (startedOnBackdrop && !exportBusy && isBackdropEvent(e)) close();
-      }}
-      // Preserve native control navigation and Escape's cancel event while
-      // keeping keyboard events away from the editor's window listener.
-      onKeyDown={(e) => e.stopPropagation()}
+    <Modal
+      title="Export image"
+      closeLabel="Close export dialog"
+      onClose={onClose}
+      dismissOnBackdrop={!exportBusy}
     >
-      <header className={imageStyles.header}>
-        <h2 id={titleId} className={imageStyles.title}>
-          Export image
-        </h2>
-        <button
-          type="button"
-          className={`${styles.button} ${imageStyles.close}`}
-          aria-label="Close export dialog"
-          title="Close"
-          onClick={close}
-        >
-          <X size={ICON_SIZE} aria-hidden="true" />
-        </button>
-      </header>
       <div className={imageStyles.body}>
         <img
           className={imageStyles.preview}
@@ -272,7 +211,7 @@ function ExportImageDialog({
       <div className={imageStyles.actions}>
         <button
           type="button"
-          className={`${styles.button} ${imageStyles.primary}`}
+          className={`${buttons.button} ${imageStyles.primary}`}
           aria-label="Download PNG"
           title="Download PNG"
           disabled={preparingPng}
@@ -294,7 +233,7 @@ function ExportImageDialog({
         </span>
         <button
           type="button"
-          className={styles.button}
+          className={buttons.button}
           aria-label="Download SVG"
           title="Download SVG"
           onClick={() =>
@@ -308,7 +247,7 @@ function ExportImageDialog({
           <>
             <button
               type="button"
-              className={`${styles.button} ${imageStyles.statusButton}`}
+              className={`${buttons.button} ${imageStyles.statusButton}`}
               aria-label="Copy image"
               disabled={copyBusy}
               data-copied={copied}
@@ -349,13 +288,35 @@ function ExportImageDialog({
           </>
         )}
       </div>
-    </dialog>
+    </Modal>
   );
 }
 
 export function ProjectActions() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [imagePlan, setImagePlan] = useState<Plan | null>(null);
+  const copyInFlight = useRef(false);
+  const [copyBusy, setCopyBusy] = useState(false);
+
+  const copyExportImage = async (svg: ExportSvgResult) => {
+    // The clipboard write can finish after the export dialog is dismissed.
+    if (copyInFlight.current) return false;
+    copyInFlight.current = true;
+    setCopyBusy(true);
+    try {
+      const png = buildExportPng(svg);
+      // The browser can reject the write before it reads the PNG promise.
+      void png.catch(() => {});
+      // Start the write in the click handler to preserve Safari's user gesture.
+      await navigator.clipboard.write([
+        new ClipboardItem({ "image/png": png }),
+      ]);
+      return true;
+    } finally {
+      copyInFlight.current = false;
+      setCopyBusy(false);
+    }
+  };
 
   const onExport = () => {
     const plan = useApp.getState().plan;
@@ -387,14 +348,14 @@ export function ProjectActions() {
 
   return (
     <>
-      <button type="button" className={styles.button} onClick={onImportClick}>
+      <button type="button" className={buttons.button} onClick={onImportClick}>
         <FolderOpen size={ICON_SIZE} aria-hidden="true" />
         Import
       </button>
       <Menu
         label="Export"
         icon={<Upload size={ICON_SIZE} />}
-        triggerClassName={styles.button}
+        triggerClassName={buttons.button}
         items={[
           {
             key: "image",
@@ -414,6 +375,8 @@ export function ProjectActions() {
         <ExportImageDialog
           plan={imagePlan}
           onClose={() => setImagePlan(null)}
+          copyBusy={copyBusy}
+          onCopy={copyExportImage}
         />
       )}
       <input

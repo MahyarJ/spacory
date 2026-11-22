@@ -18,6 +18,9 @@ be pasted into messages and documents. The clipboard write starts during the
 click and receives the PNG as a promise to preserve Safari's user gesture.
 [WebKit clipboard API discussion](https://bugs.webkit.org/show_bug.cgi?id=222262)
 
+Project actions allow one clipboard write at a time, including across dialog
+sessions. This prevents an older image from overwriting a newer copy.
+
 Copy and PNG feedback stays in the buttons. A loader replaces the action icon
 while each button is disabled, keeping the label and width stable. The loader
 stays static with reduced motion. Copy confirms success with **Copied** and
@@ -28,9 +31,10 @@ already prepared for the preview. The browser handles saving each file after
 the editor hands it off. Exports of untitled plans use the `floor-plan`
 filename without changing the plan metadata.
 
-A backdrop click dismisses the dialog when the press starts and ends outside
-it and neither export action is busy. The close button and Escape also work
-while PNG preparation or copying is in progress.
+The shared modal handles the close button, Escape and backdrop clicks. The
+export dialog enables backdrop dismissal while both export actions are idle.
+An eligible click starts and ends on the backdrop. The close button and Escape
+also work while PNG preparation or copying is in progress.
 
 ## Plan labels and room names scale with the drawing
 

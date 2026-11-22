@@ -441,6 +441,57 @@ describe("ProjectActions — Export menu", () => {
     expect(visibleContent()?.querySelector(".lucide-copy")).not.toBeNull();
   });
 
+  it("prevents overlapping clipboard writes when the export dialog is reopened", async () => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    const write = vi.fn(async ([item]: TestClipboardItem[]) => {
+      await item.data["image/png"];
+    });
+    mockClipboard(write);
+    render(<ProjectActions />);
+    const firstDialog = within(openImageDialog());
+
+    await act(async () => {
+      fireEvent.click(firstDialog.getByRole("button", { name: "Copy image" }));
+    });
+    fireEvent.click(
+      firstDialog.getByRole("button", { name: "Close export dialog" }),
+    );
+
+    const reopened = openImageDialog();
+    const controls = within(reopened);
+    fireEvent.click(controls.getByRole("checkbox", { name: "Wall lengths" }));
+    const copy = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Copy image",
+    });
+    expect(copy.disabled).toBe(true);
+    fireEvent.click(copy);
+    expect(write).toHaveBeenCalledOnce();
+    expect(encode).toHaveBeenCalledOnce();
+
+    const png = new Blob([], { type: "image/png" });
+    const [[finishFirst]] = encode.mock.calls;
+    await act(async () => finishFirst(png));
+    expect(copy.disabled).toBe(false);
+    expect(
+      controls.getByRole("status", { name: "Image copy" }).textContent,
+    ).toBe("");
+
+    await act(async () => {
+      fireEvent.click(copy);
+    });
+    expect(write).toHaveBeenCalledTimes(2);
+    const [svg] = vi.mocked(URL.createObjectURL).mock.calls[1];
+    expect(await readBlobText(svg as Blob)).toBe(previewMarkup(reopened));
+    const [, [finishSecond]] = encode.mock.calls;
+    await act(async () => finishSecond(png));
+    expect(
+      controls.getByRole("status", { name: "Image copy" }).textContent,
+    ).toBe("Image copied.");
+  });
+
   it("requires the press and click to be outside the dialog bounds", () => {
     render(<ProjectActions />);
     const dialog = openImageDialog();
