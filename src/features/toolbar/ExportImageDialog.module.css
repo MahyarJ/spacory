@@ -89,7 +89,7 @@
 }
 
 .actions .copyButton:disabled {
-  cursor: wait;
+  cursor: default;
   opacity: 0.8;
 }
 
