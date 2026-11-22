@@ -57,7 +57,7 @@ function loadWithSelection(walls: Wall[], selected: string[]) {
   useApp.setState({ selectedWalls: new Set(selected) });
 }
 
-describe("translateSelectedWalls", () => {
+describe("translateSelection", () => {
   it("moves a connected non-selected wall's shared endpoint along", () => {
     // w1: (0,0)-(100,0), w2 joined at (100,0): (100,0)-(100,100)
     loadWithSelection(
@@ -65,7 +65,7 @@ describe("translateSelectedWalls", () => {
       ["w1"],
     );
 
-    useApp.getState().translateSelectedWalls(10, 5);
+    useApp.getState().translateSelection(10, 5);
 
     const walls = useApp.getState().plan.walls;
     const w1 = walls.find((w) => w.id === "w1");
@@ -88,7 +88,7 @@ describe("translateSelectedWalls", () => {
       ["w1"],
     );
 
-    useApp.getState().translateSelectedWalls(10, 5);
+    useApp.getState().translateSelection(10, 5);
 
     const w3 = useApp.getState().plan.walls.find((w) => w.id === "w3");
     // w3 is only joined to w2's far endpoint, not to the moved endpoint — untouched.
@@ -100,7 +100,7 @@ describe("translateSelectedWalls", () => {
     // endpoint must not be re-matched and moved again on the second pass.
     loadWithSelection([wall("w1", 0, 0, 100, 0)], ["w1"]);
 
-    useApp.getState().translateSelectedWalls(100, 0);
+    useApp.getState().translateSelection(100, 0);
 
     const w1 = useApp.getState().plan.walls.find((w) => w.id === "w1");
     expect(w1).toEqual(wall("w1", 100, 0, 200, 0));
@@ -112,7 +112,7 @@ describe("translateSelectedWalls", () => {
       ["w1"],
     );
 
-    useApp.getState().translateSelectedWalls(10, 5);
+    useApp.getState().translateSelection(10, 5);
 
     expect(useApp.getState().plan.walls.find((w) => w.id === "w2")).toEqual(
       wall("w2", 500, 500, 600, 500),
@@ -381,7 +381,7 @@ describe("live drag item reconciliation", () => {
     };
   }
 
-  it("translateSelectedWallsLive clamps an item on a following wall as it shrinks", () => {
+  it("translateSelectionLive clamps an item on a following wall as it shrinks", () => {
     // w1 selected: (0,0)-(100,0). w2 not selected, joined at (100,0):
     // (100,0)-(100,100), length 100, with a door flush at its far end.
     // Translating w1 down by 50 drags the shared endpoint to (100,50),
@@ -397,7 +397,7 @@ describe("live drag item reconciliation", () => {
       );
     useApp.setState({ selectedWalls: new Set(["w1"]) });
 
-    useApp.getState().translateSelectedWallsLive(0, 50);
+    useApp.getState().translateSelectionLive(0, 50);
 
     const w2 = useApp.getState().plan.walls.find((w) => w.id === "w2");
     expect(w2?.a).toEqual({ x: 100, y: 50 });
@@ -1282,7 +1282,7 @@ describe("measurement system changes during a live drag", () => {
     if (kind === "wall") useApp.getState().selectWall("w1");
     else useApp.getState().selectConnectionPoint({ x: 100, y: 0 });
     useApp.getState().beginLiveDrag();
-    if (kind === "wall") useApp.getState().translateSelectedWallsLive(20, 20);
+    if (kind === "wall") useApp.getState().translateSelectionLive(20, 20);
     else if (kind === "junction")
       useApp.getState().translateSelectedConnectionPointLive(-70, 0);
     else

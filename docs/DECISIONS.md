@@ -5,21 +5,31 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
-## Plan labels use world coordinates and shared text bounds
+## Plan labels and room names scale with the drawing
 
-Plan labels store a plain text line and a world position at the horizontal
-center of its baseline. The canvas and image exports share a base world font
-size. The canvas enlarges the text to at least 16 pixels at normal zoom levels
-and Fit reserves space for the enlarged glyph bounds. On very wide labeled
-plans, Fit can lower the zoom limit. Wheel and pinch can return to that scale,
+Plan labels store a plain text line and the start of its baseline in world
+coordinates. Plan labels and room names use a 28-unit semibold font, and room
+areas use a 24-unit regular font.
+This gives 14 px names and 12 px areas at a typical 50% Fit zoom. The canvas
+and exports share a fixed-size world-space room layout. Names wrap at word
+boundaries or use an ellipsis in tight spaces, with the full name preserved.
+If there's no space for a name and area together, the room displays its area.
+
+Fit uses the world-space label bounds. On very wide labeled plans, Fit can
+lower the zoom limit. Wheel and pinch can return to that scale,
 and the viewport preserves the limit on reload. The grid is hidden if its
 lines would be too dense to draw. PNG export scales the entire SVG to fit
 within an 8192-pixel side limit and the 16-megapixel canvas limit of older
 iOS WebKit versions.
 
-The inline editor anchors a native text field to the label baseline. Leaving
-the field commits its text before canvas selection can change, and Escape
-cancels the edit. Clearing an existing label removes it, including on touch.
+The preview and saved label use the same SVG text renderer. The native caret
+tracks the baseline origin while typing. Leaving the field commits its text
+before canvas selection can change, and Escape cancels the edit. The shared
+Remove action is available for selected labels after inline editing ends.
+Clearing an existing label also removes it. The marquee uses each label's
+text bounds and can select labels alongside walls and openings. Dragging
+a selected wall or label moves both together in one undo step. Openings follow
+their host walls, and the whole group uses wall snapping when walls are selected.
 
 ## Keep measurement inputs compact with larger native tap areas
 

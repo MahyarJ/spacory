@@ -12,6 +12,7 @@ export interface RoomName {
 
 export interface PlanLabel {
   id: string;
+  /** World coordinates at the start of the text baseline. */
   position: Point;
   text: string;
 }

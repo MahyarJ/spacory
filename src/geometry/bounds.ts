@@ -30,7 +30,6 @@ export interface Bounds {
 export function getPlanBounds(
   plan: Plan,
   measureLabel?: MeasurePlanLabel,
-  labelScale = 1,
 ): Bounds | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -73,7 +72,7 @@ export function getPlanBounds(
   }
 
   for (const label of plan.labels ?? []) {
-    const { x, y, w, h } = planLabelRect(label, measureLabel, labelScale);
+    const { x, y, w, h } = planLabelRect(label, measureLabel);
     include(x, y, 0);
     include(x + w, y + h, 0);
   }

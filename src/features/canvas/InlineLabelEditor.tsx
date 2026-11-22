@@ -3,25 +3,27 @@ import { useApp } from "@app/store";
 import type { ViewState } from "@app/viewport";
 import {
   type MeasurePlanLabel,
-  MIN_PLAN_LABEL_SCREEN_SIZE,
   PLAN_LABEL_FONT_FAMILY,
   PLAN_LABEL_FONT_SIZE,
-  planLabelCanvasScale,
 } from "@geometry/planLabels";
+import { ROOM_LABEL_FONT_WEIGHT } from "@geometry/roomLabels";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import styles from "./FloorPlan.module.css";
+import { PlanLabelText } from "./PlanLabelsLayer";
 
 export function InlineLabelEditor({
   position,
   text = "",
   view,
   measure,
+  previewLayer,
 }: {
   position: Point;
   text?: string;
   view: ViewState;
   measure?: MeasurePlanLabel;
+  previewLayer: SVGGElement | null;
 }) {
   const finishLabelEdit = useApp((state) => state.finishLabelEdit);
   const input = useRef<HTMLInputElement>(null);
@@ -39,7 +41,7 @@ export function InlineLabelEditor({
   useLayoutEffect(() => {
     const field = input.current;
     if (!field) return;
-    field.focus();
+    field.focus({ preventScroll: true });
     field.setSelectionRange(field.value.length, field.value.length);
 
     // A canvas press can replace the selection before a removed input blurs.
@@ -52,12 +54,9 @@ export function InlineLabelEditor({
       document.removeEventListener("pointerdown", onPointerDown, true);
   }, [finish]);
 
-  const fontSize = Math.max(
-    MIN_PLAN_LABEL_SCREEN_SIZE,
-    PLAN_LABEL_FONT_SIZE * planLabelCanvasScale(view.scale) * view.scale,
-  );
+  const fontSize = PLAN_LABEL_FONT_SIZE * view.scale;
   const metrics = measure?.(draft);
-  const factor = fontSize / PLAN_LABEL_FONT_SIZE;
+  const factor = view.scale;
   const ascent =
     (metrics?.fontBoundingBoxAscent ?? PLAN_LABEL_FONT_SIZE * 0.8) * factor;
   const descent =
@@ -69,32 +68,47 @@ export function InlineLabelEditor({
   );
 
   return (
-    <input
-      ref={input}
-      aria-label="Label text"
-      type="text"
-      enterKeyHint="done"
-      className={styles.inlineLabel}
-      style={{
-        left: position.x * view.scale + view.panX,
-        top:
-          position.y * view.scale + view.panY - (height + ascent - descent) / 2,
-        width,
-        height,
-        fontFamily: PLAN_LABEL_FONT_FAMILY,
-        fontSize,
-        lineHeight: `${height}px`,
-      }}
-      value={draft}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={(event) => finish(event.currentTarget.value)}
-      onKeyDown={(event) => {
-        if (event.nativeEvent.isComposing) return;
-        if (event.key === "Enter" || event.key === "Escape") {
-          event.preventDefault();
-          finish(event.key === "Enter" ? event.currentTarget.value : undefined);
-        }
-      }}
-    />
+    <>
+      {previewLayer &&
+        createPortal(
+          <g transform={`translate(${position.x} ${position.y})`}>
+            <PlanLabelText text={draft} />
+          </g>,
+          previewLayer,
+        )}
+      <input
+        ref={input}
+        aria-label="Label text"
+        type="text"
+        enterKeyHint="done"
+        spellCheck={false}
+        className={styles.inlineLabel}
+        style={{
+          left: position.x * view.scale + view.panX,
+          top:
+            position.y * view.scale +
+            view.panY -
+            (height + ascent - descent) / 2,
+          width,
+          height,
+          fontFamily: PLAN_LABEL_FONT_FAMILY,
+          fontSize,
+          fontWeight: ROOM_LABEL_FONT_WEIGHT,
+          lineHeight: `${height}px`,
+        }}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={(event) => finish(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) return;
+          if (event.key === "Enter" || event.key === "Escape") {
+            event.preventDefault();
+            finish(
+              event.key === "Enter" ? event.currentTarget.value : undefined,
+            );
+          }
+        }}
+      />
+    </>
   );
 }

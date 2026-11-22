@@ -1,38 +1,48 @@
-import type { PlanLabel, Point } from "@app/schema";
+import type { PlanLabel } from "@app/schema";
 import {
   PLAN_LABEL_FONT_FAMILY,
   PLAN_LABEL_FONT_SIZE,
   PLAN_LABEL_STROKE_WIDTH,
-  planLabelCanvasScale,
   type planLabelRect,
 } from "@geometry/planLabels";
+import { ROOM_LABEL_FONT_WEIGHT } from "@geometry/roomLabels";
+
+export function PlanLabelText({ text }: { text: string }) {
+  return (
+    <text
+      xmlSpace="preserve"
+      textAnchor="start"
+      fontSize={PLAN_LABEL_FONT_SIZE}
+      fontFamily={PLAN_LABEL_FONT_FAMILY}
+      fontWeight={ROOM_LABEL_FONT_WEIGHT}
+      fill="var(--sp-text)"
+      stroke="var(--sp-bg)"
+      strokeWidth={PLAN_LABEL_STROKE_WIDTH}
+      paintOrder="stroke"
+    >
+      {text}
+    </text>
+  );
+}
 
 export function PlanLabelsLayer({
   frames,
-  selectedId,
-  preview,
+  selectedIds,
   editingId,
-  scale,
 }: {
   frames: { label: PlanLabel; rect: ReturnType<typeof planLabelRect> }[];
-  selectedId?: string;
-  preview: { id: string; position: Point } | null;
+  selectedIds: ReadonlySet<string>;
   editingId?: string;
-  scale: number;
 }) {
-  const fontScale = planLabelCanvasScale(scale);
   return (
     <g data-layer="plan-labels" pointerEvents="none">
       {frames.map(({ label, rect }) => {
         if (label.id === editingId) return null;
-        const position =
-          preview?.id === label.id ? preview.position : label.position;
+        const selected = selectedIds.has(label.id);
+        const { x, y } = label.position;
         return (
-          <g
-            key={label.id}
-            transform={`translate(${position.x} ${position.y})`}
-          >
-            {selectedId === label.id && (
+          <g key={label.id} transform={`translate(${x} ${y})`}>
+            {selected && (
               <rect
                 x={rect.x - label.position.x}
                 y={rect.y - label.position.y}
@@ -43,18 +53,7 @@ export function PlanLabelsLayer({
                 vectorEffect="non-scaling-stroke"
               />
             )}
-            <text
-              xmlSpace="preserve"
-              textAnchor="middle"
-              fontSize={PLAN_LABEL_FONT_SIZE * fontScale}
-              fontFamily={PLAN_LABEL_FONT_FAMILY}
-              fill="var(--sp-text)"
-              stroke="var(--sp-bg)"
-              strokeWidth={PLAN_LABEL_STROKE_WIDTH * fontScale}
-              paintOrder="stroke"
-            >
-              {label.text}
-            </text>
+            <PlanLabelText text={label.text} />
           </g>
         );
       })}

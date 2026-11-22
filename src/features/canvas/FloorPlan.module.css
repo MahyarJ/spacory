@@ -60,21 +60,21 @@
 .inlineLabel {
   position: absolute;
   z-index: 3;
-  transform: translateX(-50%);
-  max-width: 100%;
   box-sizing: border-box;
   appearance: none;
   border: 0;
   border-radius: 0;
   outline: none;
-  padding: 0 2px;
+  padding: 0;
   background: transparent;
-  color: var(--sp-text);
+  color: transparent;
   caret-color: var(--sp-accent);
-  text-align: center;
-  text-shadow:
-    0 0 2px var(--sp-bg),
-    0 0 3px var(--sp-bg);
+  text-align: left;
+
+  &::selection {
+    color: transparent;
+    background-color: var(--sp-text-selection-bg);
+  }
 }
 
 .textOptions {

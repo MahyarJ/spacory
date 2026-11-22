@@ -23,8 +23,14 @@ import {
   MIN_OPENING_WIDTH,
   openingPlacementFromOffsets,
 } from "@geometry/opening";
-import { planLabelCanvasScale, planLabelRect } from "@geometry/planLabels";
-import { pointInRect, rectFrom, segmentIntersectsRect } from "@geometry/rect";
+import { planLabelRect } from "@geometry/planLabels";
+import {
+  pointInRect,
+  rectFrom,
+  rectsIntersect,
+  segmentIntersectsRect,
+} from "@geometry/rect";
+import { layoutRoomLabels } from "@geometry/roomLabels";
 import {
   detectRooms,
   findRoomAt,
@@ -41,6 +47,7 @@ import {
 } from "@geometry/wall";
 import { wallDimensions } from "@geometry/wallDimensions";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
+import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
 import clsx from "clsx";
 import type React from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -74,6 +81,7 @@ const LABEL_DRAG_THRESHOLD = 5; // CSS pixels, regardless of zoom
 
 export function FloorPlan() {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const labelDraftLayer = useRef<SVGGElement>(null);
   const addWall = useApp((s) => s.addWall);
   const addItem = useApp((s) => s.addItem);
   const plan = useApp((s) => s.plan);
@@ -83,24 +91,24 @@ export function FloorPlan() {
   const isPanning = useApp((s) => s.isPanning);
   const setIsPanning = useApp((s) => s.setIsPanning);
   const selectedWalls = useApp((s) => s.selectedWalls);
+  const selectedItems = useApp((s) => s.selectedItems);
   const selectWall = useApp((s) => s.selectWall);
   const selectItem = useApp((s) => s.selectItem);
   const selectConnectionPoint = useApp((s) => s.selectConnectionPoint);
   const selectNone = useApp((s) => s.selectNone);
   const selectRoom = useApp((s) => s.selectRoom);
   const selectedRoomPoint = useApp((s) => s.selectedRoomPoint);
-  const labelSelection = useApp((s) => s.labelSelection);
-  const selectLabel = useApp((s) => s.selectLabel);
+  const selectedLabels = useApp((s) => s.selectedLabels);
+  const labelEditor = useApp((s) => s.labelEditor);
+  const selectLabels = useApp((s) => s.selectLabels);
+  const setLabelEditor = useApp((s) => s.setLabelEditor);
   const marquee = useApp((s) => s.marquee);
   const setMarquee = useApp((s) => s.setMarquee);
   const canvasSize = useApp((s) => s.canvasSize);
+  const hasLiveDrag = useApp((s) => s.liveDragItems !== null);
 
   const rooms = useMemo(() => detectRooms(plan.walls), [plan.walls]);
   const measurementSystem = plan.meta.measurementSystem;
-  const dimensions = useMemo(
-    () => wallDimensions(plan.walls, measurementSystem, view.scale),
-    [plan.walls, measurementSystem, view.scale],
-  );
   const wallGeometry = useMemo(
     () => computeWallGeometry(plan.walls),
     [plan.walls],
@@ -112,6 +120,32 @@ export function FloorPlan() {
   const roomNames = useMemo(
     () => resolveRoomNames(rooms, plan.roomNames),
     [rooms, plan.roomNames],
+  );
+  const measureRoomText = useMemo(createRoomLabelMeasurer, []);
+  const roomAnnotations = useMemo(
+    () =>
+      layoutRoomLabels({
+        rooms,
+        names: roomNames,
+        walls: plan.walls,
+        items: plan.items,
+        system: measurementSystem,
+        paintedWalls,
+        measure: measureRoomText,
+      }),
+    [
+      rooms,
+      roomNames,
+      plan.walls,
+      plan.items,
+      measurementSystem,
+      paintedWalls,
+      measureRoomText,
+    ],
+  );
+  const dimensions = useMemo(
+    () => wallDimensions(plan.walls, measurementSystem, view.scale),
+    [plan.walls, measurementSystem, view.scale],
   );
   const selectedRoom = selectedRoomPoint
     ? findRoomAt(rooms, selectedRoomPoint)
@@ -125,39 +159,20 @@ export function FloorPlan() {
     start: Point;
     label?: PlanLabel;
     editOnTap?: boolean;
-  } | null>(null);
-  const [labelPreview, setLabelPreview] = useState<{
-    id: string;
-    position: Point;
+    additive?: boolean;
   } | null>(null);
   const measureLabel = useMemo(createPlanLabelMeasurer, []);
-  const labelScale = planLabelCanvasScale(view.scale);
   const labelFrames = useMemo(
     () =>
       plan.labels?.map((label) => ({
         label,
-        rect: planLabelRect(label, measureLabel, labelScale),
+        rect: planLabelRect(label, measureLabel),
       })) ?? [],
-    [plan.labels, measureLabel, labelScale],
+    [plan.labels, measureLabel],
   );
-  const selectedLabel =
-    tool === "select" && labelSelection && "id" in labelSelection
-      ? plan.labels?.find((label) => label.id === labelSelection.id)
-      : undefined;
-  const newLabel =
-    tool === "label" && labelSelection && "position" in labelSelection
-      ? labelSelection
-      : null;
-  const editingLabel =
-    selectedLabel &&
-    labelSelection &&
-    "id" in labelSelection &&
-    labelSelection.editing
-      ? selectedLabel
-      : undefined;
-  const labelToEdit = editingLabel ?? newLabel;
-  const movingLabel =
-    labelPreview?.id === selectedLabel?.id ? labelPreview : null;
+  const editingLabel = labelEditor?.id
+    ? plan.labels?.find((label) => label.id === labelEditor.id)
+    : undefined;
   const roomNameInput = useRef<HTMLInputElement>(null);
   const focusRoomName = useRef(false);
 
@@ -180,11 +195,11 @@ export function FloorPlan() {
   const [cursor, setCursor] = useState<Point | null>(null);
   const [opening, setOpening] = useState<Opening | null>(null);
   const [dragging, setDragging] = useState<boolean>(false);
-  const [moving, setMoving] = useState<null | {
-    start: Point; // where drag began
-    last: Point; // last applied position
-    snap: boolean; // snap-to-grid on this drag
-  }>(null);
+  const selectionDrag = useRef<{
+    start: Point;
+    applied: Point;
+    snap: boolean;
+  } | null>(null);
   const [movingPoint, setMovingPoint] = useState<null | {
     start: Point; // pointer position where drag began
     last: Point; // last applied pointer position
@@ -235,9 +250,14 @@ export function FloorPlan() {
     const toggleHinge = useApp.getState().toggleSelectedDoorHingeEdge;
     const toggleSwing = useApp.getState().toggleSelectedDoorSwingSide;
 
-    const nudgeWalls = useApp.getState().translateSelectedWalls;
-    const nudgeConnectionPoint =
-      useApp.getState().translateSelectedConnectionPoint;
+    const nudgeSelection = (dx: number, dy: number) => {
+      const state = useApp.getState();
+      if (state.selectedConnectionPoint) {
+        state.translateSelectedConnectionPoint(dx, dy);
+      } else {
+        state.translateSelection(dx, dy);
+      }
+    };
 
     const onKey = (e: KeyboardEvent) => {
       // Don't hijack keys while typing into a form field.
@@ -279,15 +299,17 @@ export function FloorPlan() {
         case "escape":
           if (
             useApp.getState().selectedRoomPoint ||
-            useApp.getState().labelSelection
+            useApp.getState().selectedLabels.size ||
+            useApp.getState().labelEditor
           )
             useApp.getState().selectNone();
           labelPress.current = null;
-          setLabelPreview(null);
+          if (selectionDrag.current && useApp.getState().liveDragItems)
+            useApp.getState().cancelLiveDrag();
+          selectionDrag.current = null;
           setDrawingWall(null);
           setOpening(null);
           setDragging(false);
-          setMoving(null);
           setMovingPoint(null);
           setMovingEndpoint(null);
           break;
@@ -308,32 +330,16 @@ export function FloorPlan() {
           toggleSwing();
           break;
         case "arrowup":
-          if (useApp.getState().selectedConnectionPoint) {
-            nudgeConnectionPoint(0, -base * step);
-          } else {
-            nudgeWalls(0, -base * step);
-          }
+          nudgeSelection(0, -base * step);
           break;
         case "arrowdown":
-          if (useApp.getState().selectedConnectionPoint) {
-            nudgeConnectionPoint(0, base * step);
-          } else {
-            nudgeWalls(0, base * step);
-          }
+          nudgeSelection(0, base * step);
           break;
         case "arrowleft":
-          if (useApp.getState().selectedConnectionPoint) {
-            nudgeConnectionPoint(-base * step, 0);
-          } else {
-            nudgeWalls(-base * step, 0);
-          }
+          nudgeSelection(-base * step, 0);
           break;
         case "arrowright":
-          if (useApp.getState().selectedConnectionPoint) {
-            nudgeConnectionPoint(base * step, 0);
-          } else {
-            nudgeWalls(base * step, 0);
-          }
+          nudgeSelection(base * step, 0);
           break;
         default:
           return;
@@ -388,8 +394,7 @@ export function FloorPlan() {
     if (useApp.getState().liveDragItems) useApp.getState().cancelLiveDrag();
     roomTap.current = false;
     labelPress.current = null;
-    setLabelPreview(null);
-    setMoving(null);
+    selectionDrag.current = null;
     setMovingPoint(null);
     setMovingEndpoint(null);
     setDrawingWall(null);
@@ -397,6 +402,45 @@ export function FloorPlan() {
     setDragging(false);
     setMarquee(null);
     setIsPanning(false);
+  };
+
+  const startSelectionDrag = (world: Point, snap: boolean) => {
+    selectionDrag.current = { start: world, applied: { x: 0, y: 0 }, snap };
+    useApp.getState().beginLiveDrag();
+  };
+
+  const moveSelectionDrag = (world: Point, threshold = 0) => {
+    const drag = selectionDrag.current;
+    const state = useApp.getState();
+    if (!drag || !state.liveDragItems) return;
+    const delta = {
+      x: world.x - drag.start.x,
+      y: world.y - drag.start.y,
+    };
+    const target =
+      Math.hypot(delta.x, delta.y) * view.scale <= threshold
+        ? { x: 0, y: 0 }
+        : drag.snap
+          ? snapToGrid(delta, plan.meta.gridSize)
+          : delta;
+    const dx = target.x - drag.applied.x;
+    const dy = target.y - drag.applied.y;
+    if (dx === 0 && dy === 0) return;
+    state.translateSelectionLive(dx, dy);
+    drag.applied = target;
+  };
+
+  const finishSelectionDrag = () => {
+    const drag = selectionDrag.current;
+    selectionDrag.current = null;
+    const state = useApp.getState();
+    if (!drag || !state.liveDragItems) return;
+    if (
+      state.tool === "select" &&
+      (drag.applied.x !== 0 || drag.applied.y !== 0)
+    )
+      state.commitPlan();
+    else state.cancelLiveDrag();
   };
 
   // Build and commit an opening item from a resolved offset/length. Shared by
@@ -485,14 +529,25 @@ export function FloorPlan() {
         });
       if (hitLabel) {
         const { label } = hitLabel;
-        const editOnTap = selectedLabel?.id === label.id;
-        if (!editOnTap) selectLabel({ id: label.id });
+        const alreadySelected = selectedLabels.has(label.id);
+        const editOnTap =
+          alreadySelected &&
+          !additive &&
+          selectedLabels.size === 1 &&
+          selectedWalls.size === 0 &&
+          selectedItems.size === 0;
+        if (!alreadySelected) selectLabels([label.id], additive);
         labelPress.current = {
           pointerId: e.pointerId,
           start: world,
           label,
           editOnTap,
+          additive,
         };
+        startSelectionDrag(
+          world,
+          !e.altKey && useApp.getState().selectedWalls.size > 0,
+        );
         return;
       }
 
@@ -563,18 +618,13 @@ export function FloorPlan() {
       // then walls
       const hitW = [...plan.walls].findLast((w) => hitWall(world, w, 6));
       if (hitW) {
-        setMoving({
-          start: world,
-          last: world,
-          snap: !e.altKey,
-        });
         // Select first, then snapshot: `selectWall` clears any connection-point
         // selection, and `beginLiveDrag` records the selection as it stands so
         // an abandoned drag restores *this* gesture's state — snapshotting first
         // would resurrect the junction on top of the wall selection.
         // (`beginLiveDrag` only reads `plan.items`, which `selectWall` leaves alone.)
         if (!selectedWalls.has(hitW.id)) selectWall(hitW.id, additive);
-        useApp.getState().beginLiveDrag();
+        startSelectionDrag(world, !e.altKey);
         return;
       }
 
@@ -654,21 +704,12 @@ export function FloorPlan() {
     setCursor(world);
     const press = labelPress.current;
     if (press?.pointerId === e.pointerId) {
-      if (press.label && tool === "select") {
-        const dx = world.x - press.start.x;
-        const dy = world.y - press.start.y;
-        setLabelPreview(
-          Math.hypot(dx, dy) * view.scale > LABEL_DRAG_THRESHOLD
-            ? {
-                id: press.label.id,
-                position: {
-                  x: press.label.position.x + dx,
-                  y: press.label.position.y + dy,
-                },
-              }
-            : null,
-        );
-      }
+      if (press.label && tool === "select")
+        moveSelectionDrag(world, LABEL_DRAG_THRESHOLD);
+      return;
+    }
+    if (e.buttons === 1 && tool === "select" && selectionDrag.current) {
+      moveSelectionDrag(world);
       return;
     }
     if (marquee) {
@@ -742,40 +783,6 @@ export function FloorPlan() {
       return;
     }
 
-    // start moving wall
-    if (e.buttons === 1 && tool === "select" && moving) {
-      const world = toWorld(e.clientX, e.clientY);
-      const dx = world.x - moving.last.x;
-      const dy = world.y - moving.last.y;
-
-      if (dx !== 0 || dy !== 0) {
-        let tdx = dx,
-          tdy = dy;
-
-        if (moving.snap) {
-          const grid = plan.meta.gridSize;
-          // accumulate drag in world, then snap delta in grid quanta
-          // We snap relative to start to prevent drift
-          const totalDx = world.x - moving.start.x;
-          const totalDy = world.y - moving.start.y;
-          const snappedDx = Math.round(totalDx / grid) * grid;
-          const snappedDy = Math.round(totalDy / grid) * grid;
-          tdx = snappedDx - (moving.last.x - moving.start.x);
-          tdy = snappedDy - (moving.last.y - moving.start.y);
-        }
-
-        useApp.getState().translateSelectedWallsLive(tdx, tdy);
-        setMoving({
-          ...moving,
-          last: {
-            x: moving.last.x + tdx,
-            y: moving.last.y + tdy,
-          },
-        });
-      }
-      return;
-    }
-
     // update preview for openings
     if (opening && (tool === "window" || tool === "door")) {
       const near = findNearestWall(world, plan.walls, 30);
@@ -809,24 +816,23 @@ export function FloorPlan() {
     const press = labelPress.current;
     if (press?.pointerId === e.pointerId) {
       labelPress.current = null;
-      setLabelPreview(null);
       const world = toWorld(e.clientX, e.clientY);
       const dx = world.x - press.start.x;
       const dy = world.y - press.start.y;
       const moved = Math.hypot(dx, dy) * view.scale > LABEL_DRAG_THRESHOLD;
-      if (press.label && moved) {
-        useApp.getState().moveSelectedLabel(press.label.id, {
-          x: press.label.position.x + dx,
-          y: press.label.position.y + dy,
-        });
-      } else if (!moved) {
-        if (press.label && press.editOnTap && tool === "select") {
-          const id = press.label.id;
+      if (press.label) {
+        if (tool === "select") moveSelectionDrag(world, LABEL_DRAG_THRESHOLD);
+        finishSelectionDrag();
+        if (tool !== "select" || moved) return;
+        if (press.editOnTap) {
+          const { id, position } = press.label;
           // Mount and focus the editor during the pointer gesture.
-          flushSync(() => selectLabel({ id, editing: true }));
-        } else if (!press.label && tool === "label") {
-          flushSync(() => selectLabel({ position: world }));
+          flushSync(() => setLabelEditor({ id, position }));
+        } else if (!press.additive) {
+          selectLabels([press.label.id]);
         }
+      } else if (!moved && tool === "label") {
+        flushSync(() => setLabelEditor({ position: world }));
       }
       return;
     }
@@ -865,8 +871,8 @@ export function FloorPlan() {
     if (marquee) {
       const canSelectRoom = roomTap.current;
       roomTap.current = false;
+      const world = toWorld(e.clientX, e.clientY);
       if (canSelectRoom) {
-        const world = toWorld(e.clientX, e.clientY);
         const room = findRoomAt(rooms, { x: marquee.x0, y: marquee.y0 });
         if (
           tool === "select" &&
@@ -881,7 +887,7 @@ export function FloorPlan() {
         }
         selectNone();
       }
-      const r = rectFrom(marquee.x0, marquee.y0, marquee.x1, marquee.y1);
+      const r = rectFrom(marquee.x0, marquee.y0, world.x, world.y);
       // select items
       for (const item of plan.items) {
         const wall = plan.walls.find((w) => w.id === item.wallAttach.wallId);
@@ -894,19 +900,17 @@ export function FloorPlan() {
       for (const wall of plan.walls) {
         if (segmentIntersectsRect(wall.a, wall.b, r)) selectWall(wall.id, true);
       }
+      const labels = labelFrames.filter(({ rect }) => rectsIntersect(rect, r));
+      if (labels.length)
+        selectLabels(
+          labels.map(({ label }) => label.id),
+          true,
+        );
       setMarquee(null);
       return;
     }
-    if (moving) {
-      // The drag updated the plan live (no history writes); commit it as a
-      // single undo step, but only if the walls actually moved.
-      const moved =
-        moving.last.x !== moving.start.x || moving.last.y !== moving.start.y;
-      // `commitPlan` clears the pre-drag snapshot; a no-op drag never committed,
-      // so clear it explicitly to avoid a stale snapshot leaking into the next.
-      if (moved) useApp.getState().commitPlan();
-      else useApp.getState().endLiveDrag();
-      setMoving(null);
+    if (selectionDrag.current) {
+      finishSelectionDrag();
       return;
     }
     if (movingPoint) {
@@ -1011,8 +1015,10 @@ export function FloorPlan() {
       <svg
         className={clsx(
           styles.floorplan,
-          (moving || movingLabel) && styles.moving,
-          tool === "select" && !moving && !movingLabel && styles.select,
+          tool === "select" &&
+            (hasLiveDrag && selectionDrag.current
+              ? styles.moving
+              : styles.select),
         )}
         ref={svgRef}
         onContextMenu={(e) => e.preventDefault()}
@@ -1026,10 +1032,7 @@ export function FloorPlan() {
         <g transform={viewTransform}>
           <GridLayer width={canvasSize.width} height={canvasSize.height} />
           <RoomsLayer
-            rooms={rooms}
-            names={roomNames}
-            paintedWalls={paintedWalls}
-            dimensions={dimensions}
+            annotations={roomAnnotations}
             selectedRoom={selectedRoom}
             activateRoom={activateRoom}
             onRoomFocus={setFocusedRoomOutline}
@@ -1046,10 +1049,16 @@ export function FloorPlan() {
           <WallResizePreview />
           <PlanLabelsLayer
             frames={labelFrames}
-            selectedId={selectedLabel?.id}
-            preview={movingLabel}
+            selectedIds={selectedLabels}
             editingId={editingLabel?.id}
-            scale={view.scale}
+          />
+          {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: The SVG preview has no tab stop or pointer events. The editor exposes its text. */}
+          <g
+            ref={labelDraftLayer}
+            data-layer="label-edit-preview"
+            pointerEvents="none"
+            focusable="false"
+            aria-hidden="true"
           />
           <MarqueeLayer />
           {wallPreview}
@@ -1063,13 +1072,14 @@ export function FloorPlan() {
           inputRef={roomNameInput}
         />
       )}
-      {labelToEdit && (
+      {labelEditor && (
         <InlineLabelEditor
           key={editingLabel ? `edit:${editingLabel.id}` : "new"}
-          position={labelToEdit.position}
+          position={labelEditor.position}
           text={editingLabel?.text}
           view={view}
           measure={measureLabel}
+          previewLayer={labelDraftLayer.current}
         />
       )}
       <div className={styles.badge}>

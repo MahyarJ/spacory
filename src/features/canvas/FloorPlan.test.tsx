@@ -10,7 +10,6 @@ import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwit
 import { Toolbar } from "@features/toolbar/Toolbar";
 import { getPlanBounds } from "@geometry/bounds";
 import { buildExportSvg } from "@geometry/exportSvg";
-import { planLabelCanvasScale } from "@geometry/planLabels";
 import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
   act,
@@ -216,7 +215,7 @@ describe("FloorPlan touch gestures", () => {
     expect(
       labelGraphics().at(-1)?.parentElement?.getAttribute("transform"),
     ).toBe("translate(575.5 340)");
-    expect(labels()).toEqual(original);
+    expect(loadPersistedHistory()?.present.labels).toEqual(original);
     up(1, 1181, 730);
     expect(labels()?.at(-1)?.position).toEqual({ x: 580.5, y: 345 });
     selectTool("Undo");
@@ -266,6 +265,8 @@ describe("FloorPlan touch gestures", () => {
     );
     const graphic = () =>
       canvas.querySelector('[data-layer="plan-labels"] text');
+    const draftGraphic = () =>
+      canvas.querySelector('[data-layer="label-edit-preview"] text');
     const place = (x = 150) => {
       down(1, x, 100);
       up(1, x, 100);
@@ -278,10 +279,17 @@ describe("FloorPlan touch gestures", () => {
     expect(document.activeElement).toBe(field);
     expect([field.selectionStart, field.selectionEnd]).toEqual([0, 0]);
     expect(field.style.left).toBe("150px");
-    expect(Number.parseFloat(field.style.top)).toBeCloseTo(85.2);
+    expect(Number.parseFloat(field.style.top)).toBeCloseTo(93.525);
+    expect(field.style.fontSize).toBe("7px");
+    expect(field.style.fontWeight).toBe("600");
     expect(graphic()).toBeNull();
     fireEvent.change(field, { target: { value: "Terrace" } });
     expect(field.value).toBe("Terrace");
+    expect(draftGraphic()?.textContent).toBe("Terrace");
+    expect(draftGraphic()?.getAttribute("text-anchor")).toBe("start");
+    expect(draftGraphic()?.parentElement?.getAttribute("transform")).toBe(
+      "translate(600 400)",
+    );
     fireEvent.keyDown(field, { key: "Enter", isComposing: true });
     expect(useApp.getState().plan.labels).toBeUndefined();
 
@@ -289,6 +297,22 @@ describe("FloorPlan touch gestures", () => {
     expect(graphic()).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Label text" })).toBeNull();
     expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    const placed = place();
+    fireEvent.change(placed, { target: { value: "T" } });
+    const draftPosition =
+      draftGraphic()?.parentElement?.getAttribute("transform");
+    fireEvent.change(placed, { target: { value: "Terrace  & 茶室" } });
+    const draft = draftGraphic()?.outerHTML;
+    expect(draftGraphic()?.parentElement?.getAttribute("transform")).toBe(
+      draftPosition,
+    );
+    fireEvent.keyDown(placed, { key: "Enter" });
+    expect(graphic()?.outerHTML).toBe(draft);
+    expect(graphic()?.parentElement?.getAttribute("transform")).toBe(
+      draftPosition,
+    );
+    act(() => useApp.getState().undo());
 
     fireEvent.change(place(), { target: { value: "Terrace" } });
     const next = place(250);
@@ -301,10 +325,239 @@ describe("FloorPlan touch gestures", () => {
     });
     fireEvent.blur(next);
     expect(loadPersistedHistory()?.past).toHaveLength(1);
-    const dimension = canvas.querySelector('[data-layer="dimensions"] text');
+    expect(Number(graphic()?.getAttribute("font-size")) * view().scale).toBe(7);
+    const anchor = graphic()?.parentElement?.getAttribute("transform");
+    act(() =>
+      useApp.getState().setView(() => ({ scale: 2, panX: 20, panY: 40 })),
+    );
+    expect(graphic()?.getAttribute("font-size")).toBe("28");
+    expect(graphic()?.getAttribute("font-weight")).toBe("600");
+    expect(graphic()?.parentElement?.getAttribute("transform")).toBe(anchor);
+    expect(anchor).toBe("translate(600 400)");
+  });
+
+  it("keeps a label at its saved start point while editing", () => {
+    const label = { id: "l1", position: { x: 500, y: 300 }, text: "Terrace" };
+    setup({
+      tool: "select",
+      plan: { ...createInitialPlan(), labels: [label] },
+    });
+    for (let i = 0; i < 2; i++) {
+      down(1, 500, 300);
+      up(1, 500, 300);
+    }
+    const field = screen.getByRole("textbox", { name: "Label text" });
+    const draft = canvas.querySelector(
+      '[data-layer="label-edit-preview"] text',
+    )!;
+    expect(draft.parentElement?.getAttribute("transform")).toBe(
+      "translate(500 300)",
+    );
+    fireEvent.change(field, { target: { value: "Longer label" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(useApp.getState().plan.labels).toEqual([
+      { ...label, text: "Longer label" },
+    ]);
+  });
+
+  it("marquee-selects labels by their text bounds alongside walls and moves selected labels together", () => {
+    const labels = [
+      {
+        id: "terrace",
+        text: "Terrace",
+        position: { x: 100, y: 90 },
+      },
+      {
+        id: "garden",
+        text: "Garden",
+        position: { x: 175, y: 160 },
+      },
+      {
+        id: "outside",
+        text: "Outside",
+        position: { x: 175, y: 250 },
+      },
+    ] as const;
+    const plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 0, 400, 0, "w1")],
+      labels: [...labels],
+    };
+    setup({ plan, tool: "select" });
+    const selectRegion = (top: number) => {
+      down(1, 170, top);
+      move(1, 190, 200);
+      up(1, 190, 200);
+    };
+    const state = useApp.getState;
+    selectRegion(-25);
+    expect(state().selectedWalls).toEqual(new Set(["w1"]));
+    expect(state().selectedLabels).toEqual(new Set(["terrace", "garden"]));
     expect(
-      Number(graphic()?.getAttribute("font-size")) * view().scale,
-    ).toBeGreaterThan(Number(dimension?.getAttribute("font-size")));
+      canvas.querySelectorAll('[data-layer="plan-labels"] rect'),
+    ).toHaveLength(2);
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(state().plan.walls).toEqual([]);
+    expect(state().plan.labels).toEqual([labels[2]]);
+    act(() => state().undo());
+    expect(state().plan.walls).toEqual(plan.walls);
+    expect(state().plan.labels).toEqual(labels);
+
+    selectRegion(30);
+    down(1, 101, 90);
+    move(1, 121, 120);
+    expect(loadPersistedHistory()?.present.labels).toEqual(labels);
+    up(1, 121, 120);
+    expect(state().plan.labels?.map(({ position }) => position)).toEqual([
+      { x: 120, y: 120 },
+      { x: 195, y: 190 },
+      labels[2].position,
+    ]);
+    expect(state().plan.walls).toEqual(plan.walls);
+    act(() => state().undo());
+    expect(state().plan.labels).toEqual(labels);
+  });
+
+  it.each([
+    "wall",
+    "label",
+  ] as const)("moves a marquee selection together when dragging its %s", (grab) => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 0, 400, 0, "w1")],
+      items: [
+        {
+          id: "window",
+          type: "window",
+          wallAttach: { wallId: "w1", offset: 90, length: 80 },
+          thickness: 10,
+          props: {},
+        },
+      ],
+      labels: [
+        { id: "inside", text: "Kitchen", position: { x: 100, y: 90 } },
+        { id: "outside", text: "Terrace", position: { x: 600, y: 150 } },
+      ],
+    };
+    setup({ plan, tool: "select" });
+    const state = useApp.getState;
+    down(1, 55, -25);
+    move(1, 250, 130);
+    up(1, 250, 130);
+    expect(state().selectedWalls).toEqual(new Set(["w1"]));
+    expect(state().selectedItems).toEqual(new Set(["window"]));
+    expect(state().selectedLabels).toEqual(new Set(["inside"]));
+
+    const [x, y] = grab === "wall" ? [220, 0] : [100, 90];
+    const movedWalls = [wall(40, 40, 440, 40, "w1")];
+    const movedLabels = [
+      { ...plan.labels![0], position: { x: 140, y: 130 } },
+      plan.labels![1],
+    ];
+    down(1, x, y);
+    move(1, x + 37, y + 43);
+    expect(walls()).toEqual(movedWalls);
+    expect(state().plan.labels).toEqual(movedLabels);
+    expect(state().plan.items).toEqual(plan.items);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+    cancel(1, x + 37, y + 43);
+    expect(walls()).toEqual(plan.walls);
+    expect(state().plan.labels).toEqual(plan.labels);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    down(1, x, y);
+    move(1, x + 37, y + 43);
+    up(1, x + 37, y + 43);
+    expect(walls()).toEqual(movedWalls);
+    expect(state().plan.labels).toEqual(movedLabels);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(walls()).toEqual(plan.walls);
+    expect(state().plan.labels).toEqual(plan.labels);
+    act(() => state().redo());
+    expect(walls()).toEqual(movedWalls);
+    expect(state().plan.labels).toEqual(movedLabels);
+  });
+
+  it("nudges selected walls and labels together with the arrow keys", () => {
+    const labels = [
+      { id: "l1", text: "Kitchen", position: { x: 100, y: 90 } },
+      { id: "l2", text: "Dining", position: { x: 175, y: 160 } },
+      { id: "l3", text: "Terrace", position: { x: 600, y: 150 } },
+    ];
+    const original = {
+      ...createInitialPlan(),
+      walls: [wall(0, 0, 400, 0, "w1")],
+      labels,
+    };
+    setup({ plan: original, tool: "select" });
+    const state = useApp.getState;
+    act(() => {
+      state().selectLabels(["l1", "l2"]);
+      state().selectWall("w1", true);
+    });
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(walls()).toEqual([wall(20, 0, 420, 0, "w1")]);
+    expect(state().plan.labels?.map(({ position }) => position)).toEqual([
+      { x: 120, y: 90 },
+      { x: 195, y: 160 },
+      labels[2].position,
+    ]);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(state().plan).toEqual(original);
+
+    act(() => state().selectLabels(["l1", "l2"]));
+    fireEvent.keyDown(window, { key: "ArrowUp", altKey: true });
+    expect(walls()).toEqual(original.walls);
+    expect(state().plan.labels?.map(({ position }) => position)).toEqual([
+      { x: 100, y: 89 },
+      { x: 175, y: 159 },
+      labels[2].position,
+    ]);
+  });
+
+  it("adjusts thickness with bracket keys only for wall-only selections", () => {
+    const original: Plan = {
+      ...cornerPlan(),
+      items: [
+        {
+          id: "window",
+          type: "window",
+          wallAttach: { wallId: "w1", offset: 90, length: 80 },
+          thickness: 10,
+          props: {},
+        },
+      ],
+      labels: [{ id: "l1", text: "Kitchen", position: { x: 100, y: 90 } }],
+    };
+    setup({ plan: original, tool: "select" });
+    const state = useApp.getState;
+
+    act(() => {
+      state().selectWall("w1");
+      state().selectLabels(["l1"], true);
+    });
+    fireEvent.keyDown(window, { key: "]" });
+    expect(state().plan).toEqual(original);
+
+    act(() => {
+      state().selectWall("w1");
+      state().selectItem("window", true);
+    });
+    fireEvent.keyDown(window, { key: "[" });
+    expect(state().plan).toEqual(original);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    act(() => {
+      state().selectWall("w1");
+      state().selectWall("w2", true);
+    });
+    fireEvent.keyDown(window, { key: "]" });
+    expect(walls().map(({ thickness }) => thickness)).toEqual([11, 11]);
+    fireEvent.keyDown(window, { key: "[" });
+    expect(walls().map(({ thickness }) => thickness)).toEqual([10, 10]);
   });
 
   it("abandons a placement or label drag when touch becomes a pinch", () => {
@@ -351,7 +604,7 @@ describe("FloorPlan touch gestures", () => {
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
     fireEvent.click(screen.getByRole("button", { name: "Fit" }));
     const { scale, panX, panY } = view();
-    const bounds = getPlanBounds(plan, undefined, planLabelCanvasScale(scale))!;
+    const bounds = getPlanBounds(plan)!;
     expect(scale).toBeLessThan(MIN_SCALE);
     expect(bounds.minX * scale + panX).toBeGreaterThan(0);
     expect(bounds.minY * scale + panY).toBeGreaterThan(0);

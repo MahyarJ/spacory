@@ -1,11 +1,19 @@
 import type { Plan } from "@app/schema";
 
-export function anySelection(selWalls: Set<string>, selItems: Set<string>) {
-  return selWalls.size > 0 || selItems.size > 0;
+export function selectionCount(
+  selWalls: ReadonlySet<string>,
+  selItems: ReadonlySet<string>,
+  selLabels?: ReadonlySet<string>,
+) {
+  return selWalls.size + selItems.size + (selLabels?.size ?? 0);
 }
 
-export function hasSelectedWalls(selWalls: Set<string>) {
-  return selWalls.size > 0;
+export function isWallOnlySelection(
+  selWalls: ReadonlySet<string>,
+  selItems: ReadonlySet<string>,
+  selLabels: ReadonlySet<string>,
+) {
+  return selWalls.size > 0 && selItems.size === 0 && selLabels.size === 0;
 }
 
 export function hasSelectedDoor(plan: Plan, selItems: Set<string>) {
@@ -24,16 +32,15 @@ export type SelectionAction = "remove" | "hinge" | "swing";
  * testable without a DOM.
  *
  * Mirrors what the keyboard already does: `Delete` removes whatever is
- * selected (so `remove` needs only a non-empty selection, walls and openings
- * alike), while `H`/`S` retarget every selected door (so hinge/swing need at
- * least one door in the selection — a window has neither).
+ * selected, including labels. `H`/`S` apply when a door is selected.
  */
 export function selectionActions(
   plan: Plan,
   selWalls: Set<string>,
   selItems: Set<string>,
+  selLabels?: ReadonlySet<string>,
 ): SelectionAction[] {
-  if (!anySelection(selWalls, selItems)) return [];
+  if (selectionCount(selWalls, selItems, selLabels) === 0) return [];
   return hasSelectedDoor(plan, selItems)
     ? ["remove", "hinge", "swing"]
     : ["remove"];

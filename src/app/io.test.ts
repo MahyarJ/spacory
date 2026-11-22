@@ -219,8 +219,9 @@ describe("plan labels", () => {
   };
 
   it("round-trips outdoor text and world coordinates", () => {
-    const imported = parsePlan(serializePlan({ ...plan, labels: [terrace] }));
-    expect(imported.labels).toEqual([terrace]);
+    const labels = [terrace];
+    const imported = parsePlan(serializePlan({ ...plan, labels }));
+    expect(imported.labels).toEqual(labels);
     expect(imported.walls).toEqual(plan.walls);
   });
 

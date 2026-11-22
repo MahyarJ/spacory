@@ -97,54 +97,48 @@ describe("WallOptions — click-away commits the typed value", () => {
     expect(useApp.getState().plan.items[0].wallAttach.length).toBe(100);
   });
 
-  it("keeps Move in place while a tap transfers focus to Width", () => {
+  it("keeps Move in place while a tap transfers focus to Remove", () => {
     const scheduleFrame = vi.fn<(callback: FrameRequestCallback) => number>();
     vi.stubGlobal("requestAnimationFrame", scheduleFrame);
-    useApp.getState().loadPlan(cornerPlan([door("w1", 80)]));
-    useApp.setState({
-      selectedWalls: new Set(["w1"]),
-      selectedItems: new Set(["d1"]),
-    });
+    useApp.getState().loadPlan(cornerPlan());
+    useApp.getState().selectWall("w1");
     render(<WallOptionsBar />);
 
     const length = screen.getByLabelText("Length");
-    const width = screen.getByLabelText("Width");
+    const remove = screen.getByRole("button", { name: "Remove" });
     act(() => length.focus());
     fireEvent.change(length, { target: { value: "320" } });
 
     // jsdom has no PointerEvent constructor.
     const touchDown = new Event("pointerdown", { bubbles: true });
     Object.defineProperty(touchDown, "pointerType", { value: "touch" });
-    fireEvent(width, touchDown);
+    fireEvent(remove, touchDown);
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(250);
     expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
 
-    act(() => width.focus());
+    act(() => remove.focus());
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(320);
     expect(screen.getByRole("group", { name: "Move" })).toBeTruthy();
 
     const [closeMove] = scheduleFrame.mock.calls[0];
     act(() => closeMove(0));
     expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
-    expect(document.activeElement).toBe(width);
+    expect(document.activeElement).toBe(remove);
   });
 
   it("still commits immediately on mouse press outside the length field", () => {
-    useApp.getState().loadPlan(cornerPlan([door("w1", 80)]));
-    useApp.setState({
-      selectedWalls: new Set(["w1"]),
-      selectedItems: new Set(["d1"]),
-    });
+    useApp.getState().loadPlan(cornerPlan());
+    useApp.getState().selectWall("w1");
     render(<WallOptionsBar />);
 
     const length = screen.getByLabelText("Length");
-    const width = screen.getByLabelText("Width");
+    const remove = screen.getByRole("button", { name: "Remove" });
     act(() => length.focus());
     fireEvent.change(length, { target: { value: "320" } });
 
     const mouseDown = new Event("pointerdown", { bubbles: true });
     Object.defineProperty(mouseDown, "pointerType", { value: "mouse" });
-    fireEvent(width, mouseDown);
+    fireEvent(remove, mouseDown);
     expect(getWallLength(useApp.getState().plan.walls[0])).toBe(320);
     expect(screen.queryByRole("group", { name: "Move" })).toBeNull();
   });

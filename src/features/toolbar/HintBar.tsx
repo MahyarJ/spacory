@@ -1,27 +1,27 @@
 import {
-  anySelection,
   hasSelectedDoor,
-  hasSelectedWalls,
+  isWallOnlySelection,
+  selectionCount,
 } from "@app/selection";
 import { useApp } from "@app/store";
-import { useMemo } from "react";
 import styles from "./HintBar.module.css";
 
 export function HintBar() {
   const tool = useApp((s) => s.tool);
   const selW = useApp((s) => s.selectedWalls);
   const selI = useApp((s) => s.selectedItems);
-  const labelSelection = useApp((s) => s.labelSelection);
+  const selectedLabels = useApp((s) => s.selectedLabels);
+  const labelEditor = useApp((s) => s.labelEditor);
   const plan = useApp((s) => s.plan);
 
-  const anySel = useMemo(() => anySelection(selW, selI), [selW, selI]);
-
-  const isWallSelected = hasSelectedWalls(selW);
+  const count = selectionCount(selW, selI, selectedLabels);
+  const labelsOnly = count === selectedLabels.size;
+  const wallsOnly = isWallOnlySelection(selW, selI, selectedLabels);
   const isDoorSelected = hasSelectedDoor(plan, selI);
 
   let text: React.ReactNode = null;
 
-  if (labelSelection && "id" in labelSelection && labelSelection.editing) {
+  if (labelEditor?.id) {
     text = (
       <span>
         Press <kbd>Enter</kbd> or tap away to finish. Clear the text to remove
@@ -29,40 +29,35 @@ export function HintBar() {
       </span>
     );
   } else if (tool === "select") {
-    if (labelSelection) {
+    if (count > 0) {
       text = (
         <span>
-          Drag to move, click or tap again to edit, or press <kbd>Delete</kbd>{" "}
-          to remove.
+          {labelsOnly && (
+            <>
+              Drag to move. {count === 1 && "Click or tap again to edit. "}
+              Choose <strong>Remove</strong> or press{" "}
+            </>
+          )}
+          {wallsOnly && (
+            <>
+              <kbd>[</kbd> <kbd>]</kbd> adjust wall thickness{" · "}
+            </>
+          )}
+          {isDoorSelected && (
+            <>
+              <kbd>H</kbd> toggle hinge{" · "}
+              <kbd>S</kbd> toggle swing{" · "}
+            </>
+          )}
+          <kbd>Delete</kbd>
+          {labelsOnly ? "." : " remove selection"}
         </span>
-      );
-    } else if (anySel) {
-      text = (
-        <>
-          <span>Shortcuts:</span>
-          {isWallSelected && (
-            <>
-              <kbd>[</kbd> <kbd>]</kbd> adjust wall thickness &nbsp;•&nbsp;
-            </>
-          )}
-          {isDoorSelected && (
-            <>
-              <kbd>H</kbd> toggle hinge &nbsp;•&nbsp;
-            </>
-          )}
-          {isDoorSelected && (
-            <>
-              <kbd>S</kbd> toggle swing &nbsp;•&nbsp;
-            </>
-          )}
-          <kbd>Delete</kbd> remove selection
-        </>
       );
     } else {
       text = (
         <span>
           Select a wall, opening, or label to edit it, or choose a room to name
-          it. Shift-click to multi-select walls and items.
+          it. Shift-click or drag to select multiple objects.
         </span>
       );
     }

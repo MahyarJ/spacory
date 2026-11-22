@@ -50,11 +50,10 @@ export function wallDimensions(
 /** Painted text bounds including the halo, rotated back into world coordinates. */
 export function dimensionFootprints(
   dimensions: WallDimension[],
-  scale: number,
   measure?: MeasureRoomLabel,
 ): Point[][] {
   return dimensions.map(({ text, midpoint, angle, offset }) => {
-    const metrics = measure?.(text, 400);
+    const metrics = measure?.(text, 400, WALL_DIMENSION_FONT_SIZE);
     const width =
       (typeof metrics === "number" ? metrics : metrics?.width) ??
       text.length * 7;
@@ -78,8 +77,8 @@ export function dimensionFootprints(
       [right, bottom],
       [left, bottom],
     ].map(([x, y]) => ({
-      x: midpoint.x + (x * cos - y * sin) / scale,
-      y: midpoint.y + (x * sin + y * cos) / scale,
+      x: midpoint.x + x * cos - y * sin,
+      y: midpoint.y + x * sin + y * cos,
     }));
   });
 }

@@ -39,6 +39,15 @@ export const pointInRect = (
   r: { x: number; y: number; w: number; h: number },
 ) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
 
+export function rectsIntersect(
+  a: ReturnType<typeof rectFrom>,
+  b: ReturnType<typeof rectFrom>,
+) {
+  return (
+    a.x <= b.x + b.w && a.x + a.w >= b.x && a.y <= b.y + b.h && a.y + a.h >= b.y
+  );
+}
+
 // segment/rect intersection (coarse but effective for walls)
 export function segmentIntersectsRect(
   a: Point,
