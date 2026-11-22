@@ -71,6 +71,7 @@
 }
 
 .actions {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -78,13 +79,57 @@
   margin-top: 1rem;
 }
 
-.status {
-  margin: 0;
-  text-align: end;
+.actions .primary {
+  background: var(--sp-accent);
+  color: var(--sp-bg);
 }
 
-.status:not(:empty) {
-  margin-top: 0.5rem;
+.actions .copyButton {
+  display: inline-grid;
+}
+
+.actions .copyButton[data-copied="true"] {
+  background: color-mix(in srgb, var(--sp-grid) 85%, #22c55e);
+}
+
+/* Each label contributes to the button's size even when hidden. */
+.copyLabel {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.copyLabel[data-visible="false"] {
+  visibility: hidden;
+}
+
+.copyAnnouncement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.copyError {
+  position: absolute;
+  z-index: 1;
+  inset-inline-end: 0;
+  inset-block-end: calc(100% + 0.5rem);
+  max-width: 100%;
+  pointer-events: none;
+}
+
+.copyError:not(:empty) {
+  padding: 0.5rem 0.75rem;
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-toolbar-button-radius);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
 }
 
 .dialog button:focus-visible,

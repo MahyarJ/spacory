@@ -5,6 +5,7 @@ import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
 import { buildExportSvg } from "@geometry/exportSvg";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -127,6 +128,15 @@ function mockPngRasterizer() {
   return drawImage;
 }
 
+class TestClipboardItem {
+  constructor(readonly data: Record<string, Promise<Blob>>) {}
+}
+
+function mockClipboard(write: (items: TestClipboardItem[]) => Promise<void>) {
+  vi.stubGlobal("ClipboardItem", TestClipboardItem);
+  vi.stubGlobal("navigator", { clipboard: { write } });
+}
+
 // jsdom omits the native modal methods. Model the open state; Escape's cancel
 // event is dispatched explicitly in the dialog test.
 HTMLDialogElement.prototype.showModal = function () {
@@ -146,6 +156,7 @@ describe("ProjectActions — Export menu", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     localStorage.clear();
@@ -247,37 +258,98 @@ describe("ProjectActions — Export menu", () => {
   it.each([
     true,
     false,
-  ])("copies the preview PNG when clipboard writes are allowed: %s", async (allowed) => {
-    class TestClipboardItem {
-      constructor(readonly data: Record<string, Promise<Blob>>) {}
-    }
+  ])("uses the preview PNG and reports the write result (allowed: %s)", async (allowed) => {
     mockPngRasterizer();
-    const write = vi.fn(async ([item]: TestClipboardItem[]) => {
-      expect(await item.data["image/png"]).toMatchObject({ type: "image/png" });
+    const write = vi.fn(async ([_item]: TestClipboardItem[]) => {
       if (!allowed) throw new DOMException("Denied", "NotAllowedError");
     });
-    vi.stubGlobal("ClipboardItem", TestClipboardItem);
-    vi.stubGlobal("navigator", { clipboard: { write } });
+    mockClipboard(write);
     render(<ProjectActions />);
     const dialog = openImageDialog();
     const controls = within(dialog);
     fireEvent.click(controls.getByRole("checkbox", { name: "Wall lengths" }));
 
-    fireEvent.click(
-      controls.getByRole("button", { name: "Copy to clipboard" }),
-    );
+    const button = controls.getByRole("button", { name: "Copy image" });
+    fireEvent.click(button);
 
     expect(write).toHaveBeenCalledOnce();
+    const [[[item]]] = write.mock.calls;
+    await expect(item.data["image/png"]).resolves.toMatchObject({
+      type: "image/png",
+    });
     const [pngSource] = vi.mocked(URL.createObjectURL).mock.calls[0];
     expect(await readBlobText(pngSource as Blob)).toBe(previewMarkup(dialog));
     await waitFor(() =>
-      expect(controls.getByRole("status").textContent).toBe(
+      expect(controls.getByRole(allowed ? "status" : "alert").textContent).toBe(
         allowed
           ? "Image copied."
-          : "Could not copy the image. You can download the PNG.",
+          : "Couldn’t copy. Try again or download the PNG.",
       ),
     );
+    expect(button.querySelector('[data-visible="true"]')?.textContent).toBe(
+      allowed ? "Copied" : "Copy image",
+    );
+    expect(button.getAttribute("aria-disabled")).toBe("false");
     expect(downloads).toHaveLength(0);
+  });
+
+  it("shows progress only for a slow copy and restores the label after confirmation", async () => {
+    vi.useFakeTimers();
+    mockPngRasterizer();
+    let finishWrite!: () => void;
+    const clipboardWrite = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    const write = vi.fn(() => clipboardWrite);
+    mockClipboard(write);
+    render(<ProjectActions />);
+    const controls = within(openImageDialog());
+    const button = controls.getByRole("button", { name: "Copy image" });
+    const visibleLabel = () =>
+      button.querySelector('[data-visible="true"]')?.textContent;
+    button.focus();
+
+    fireEvent.click(button);
+    expect(visibleLabel()).toBe("Copy image");
+    expect(button.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button);
+    expect(write).toHaveBeenCalledOnce();
+
+    act(() => vi.advanceTimersByTime(250));
+    expect(visibleLabel()).toBe("Copying…");
+    await act(async () => finishWrite());
+    expect(visibleLabel()).toBe("Copied");
+    expect(document.activeElement).toBe(button);
+
+    act(() => vi.advanceTimersByTime(1999));
+    expect(visibleLabel()).toBe("Copied");
+    act(() => vi.advanceTimersByTime(1));
+    expect(visibleLabel()).toBe("Copy image");
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("keeps the same light plan preview across editor themes", () => {
+    const { themeMode, setThemeMode } = useApp.getState();
+    try {
+      setThemeMode("dark");
+      render(<ProjectActions />);
+      const darkPreview = openImageDialog();
+      const markup = previewMarkup(darkPreview);
+      const svg = new DOMParser().parseFromString(markup, "image/svg+xml");
+      expect(svg.querySelector("svg > rect")?.getAttribute("fill")).toBe(
+        "#ffffff",
+      );
+      fireEvent.click(
+        within(darkPreview).getByRole("button", {
+          name: "Close export dialog",
+        }),
+      );
+
+      setThemeMode("light");
+      expect(previewMarkup(openImageDialog())).toBe(markup);
+    } finally {
+      setThemeMode(themeMode);
+    }
   });
 
   it.each([

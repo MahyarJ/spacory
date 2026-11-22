@@ -10,6 +10,7 @@ import { Menu } from "@ui/Menu";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 import { createRoomLabelMeasurer } from "@ui/roomLabelMeasurer";
 import {
+  Check,
   Copy,
   Download,
   FileJson,
@@ -99,12 +100,18 @@ async function buildExportPng({ markup, width, height }: ExportSvgResult) {
   }
 }
 
-const COPY_MESSAGES = {
-  idle: "",
-  copying: "Copying…",
-  copied: "Image copied.",
-  failed: "Could not copy the image. You can download the PNG.",
-};
+type CopyStatus = "idle" | "pending" | "copying" | "copied" | "failed";
+
+const COPY_LABELS = [
+  { status: "idle", label: "Copy image", Icon: Copy },
+  { status: "copying", label: "Copying…", Icon: Copy },
+  { status: "copied", label: "Copied", Icon: Check },
+] as const;
+
+const COPY_FEEDBACK_TIMING = {
+  pending: { next: "copying", delay: 250 },
+  copied: { next: "idle", delay: 2000 },
+} as const;
 
 function ExportImageDialog({
   plan,
@@ -117,12 +124,23 @@ function ExportImageDialog({
   const titleId = useId();
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
-  const [copyStatus, setCopyStatus] =
-    useState<keyof typeof COPY_MESSAGES>("idle");
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const copyBusy = copyStatus === "pending" || copyStatus === "copying";
+  const visibleCopyLabel =
+    copyStatus === "copying" || copyStatus === "copied" ? copyStatus : "idle";
 
   useEffect(() => {
     dialogRef.current!.showModal();
   }, []);
+
+  useEffect(() => {
+    if (copyStatus !== "pending" && copyStatus !== "copied") return;
+    const { next, delay } = COPY_FEEDBACK_TIMING[copyStatus];
+    const timer = window.setTimeout(() => {
+      setCopyStatus((current) => (current === copyStatus ? next : current));
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [copyStatus]);
 
   const close = () => {
     dialogRef.current!.close();
@@ -156,8 +174,8 @@ function ExportImageDialog({
   };
 
   const copyImage = async () => {
-    if (copyStatus === "copying") return;
-    setCopyStatus("copying");
+    if (copyBusy) return;
+    setCopyStatus("pending");
     const png = buildExportPng(svg);
     // The browser can reject the write before it reads the PNG promise.
     void png.catch(() => {});
@@ -227,7 +245,7 @@ function ExportImageDialog({
       <div className={imageStyles.actions}>
         <button
           type="button"
-          className={styles.button}
+          className={`${styles.button} ${imageStyles.primary}`}
           aria-label="Download PNG"
           title="Download PNG"
           onClick={downloadPng}
@@ -248,22 +266,38 @@ function ExportImageDialog({
           SVG
         </button>
         {canCopyImage && (
-          <button
-            type="button"
-            className={styles.button}
-            aria-disabled={copyStatus === "copying"}
-            onClick={copyImage}
-          >
-            <Copy size={ICON_SIZE} aria-hidden="true" />
-            Copy to clipboard
-          </button>
+          <>
+            <button
+              type="button"
+              className={`${styles.button} ${imageStyles.copyButton}`}
+              aria-label="Copy image"
+              aria-disabled={copyBusy}
+              data-copied={copyStatus === "copied"}
+              onClick={copyImage}
+            >
+              {COPY_LABELS.map(({ status, label, Icon }) => (
+                <span
+                  key={status}
+                  className={imageStyles.copyLabel}
+                  data-visible={visibleCopyLabel === status}
+                  aria-hidden="true"
+                >
+                  <Icon size={ICON_SIZE} />
+                  {label}
+                </span>
+              ))}
+            </button>
+            <span className={imageStyles.copyAnnouncement} role="status">
+              {visibleCopyLabel === "copied" && "Image copied."}
+              {visibleCopyLabel === "copying" && "Copying image…"}
+            </span>
+            <div className={imageStyles.copyError} role="alert">
+              {copyStatus === "failed" &&
+                "Couldn’t copy. Try again or download the PNG."}
+            </div>
+          </>
         )}
       </div>
-      {canCopyImage && (
-        <p className={imageStyles.status} role="status">
-          {COPY_MESSAGES[copyStatus]}
-        </p>
-      )}
     </dialog>
   );
 }
