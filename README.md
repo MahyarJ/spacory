@@ -51,7 +51,8 @@ connected room structures.
 - 💾 **Import / export** — load a plan from JSON or download it from **Export → JSON**.
   Choose **Export → Image…** for a light plan preview in every editor theme.
   Show or hide **Wall lengths** and **Room areas** independently, then download
-  a PNG or SVG, or select **Copy image** to paste a PNG in supported browsers.
+  PNG or SVG, or select **Copy image** to paste a PNG in supported browsers.
+  Default export filenames use `floor-plan`.
 - 🧭 **Canvas** — pan (right-drag, two-finger drag, or the Pan tool) and zoom
   (wheel or pinch); "Fit" frames the whole plan in one click
 - 🎨 **Theming** — dark / light / system, via CSS variables

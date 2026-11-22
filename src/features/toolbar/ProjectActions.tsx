@@ -1,5 +1,5 @@
 import { PlanParseError, parsePlan, serializePlan } from "@app/io";
-import type { Plan } from "@app/schema";
+import { DEFAULT_PLAN_NAME, type Plan } from "@app/schema";
 import { useApp } from "@app/store";
 import {
   buildExportSvg,
@@ -24,12 +24,13 @@ import { ICON_SIZE } from "./constants";
 import imageStyles from "./ExportImageDialog.module.css";
 import styles from "./Toolbar.module.css";
 
-function sanitizeFilename(name: string): string {
-  const cleaned = name
-    .trim()
-    .replace(/[^a-z0-9-_ ]/gi, "")
-    .replace(/\s+/g, "-");
-  return cleaned || "spacory-plan";
+const DEFAULT_EXPORT_FILENAME = "floor-plan";
+
+function exportFilenameBase(name: string): string {
+  const title = name.trim();
+  if (title === DEFAULT_PLAN_NAME) return DEFAULT_EXPORT_FILENAME;
+  const cleaned = title.replace(/[^a-z0-9-_ ]/gi, "").replace(/\s+/g, "-");
+  return cleaned || DEFAULT_EXPORT_FILENAME;
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -121,6 +122,7 @@ function ExportImageDialog({
   const titleId = useId();
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
+  const [preparingPng, setPreparingPng] = useState(false);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const copyBusy = copyStatus === "copying";
   const visibleCopyLabel =
@@ -154,18 +156,25 @@ function ExportImageDialog({
       ),
     [plan, wallLengths, roomAreas],
   );
-  const filename = sanitizeFilename(plan.meta.name);
+  const previewSrc = useMemo(
+    () => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.markup)}`,
+    [svg.markup],
+  );
+  const filename = exportFilenameBase(plan.meta.name);
   const canCopyImage =
     typeof ClipboardItem !== "undefined" &&
     typeof navigator.clipboard?.write === "function";
 
   const downloadPng = async () => {
+    setPreparingPng(true);
     try {
       downloadBlob(await buildExportPng(svg), `${filename}.png`);
     } catch (error) {
       window.alert(
         error instanceof Error ? error.message : "Could not export PNG.",
       );
+    } finally {
+      setPreparingPng(false);
     }
   };
 
@@ -216,7 +225,7 @@ function ExportImageDialog({
         <img
           className={imageStyles.preview}
           alt="Floor plan preview"
-          src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.markup)}`}
+          src={previewSrc}
         />
         <div className={imageStyles.options}>
           <label>
@@ -240,14 +249,36 @@ function ExportImageDialog({
       <div className={imageStyles.actions}>
         <button
           type="button"
-          className={`${styles.button} ${imageStyles.primary}`}
+          className={`${styles.button} ${imageStyles.primary} ${imageStyles.statusButton}`}
           aria-label="Download PNG"
           title="Download PNG"
+          disabled={preparingPng}
           onClick={downloadPng}
         >
-          <Download size={ICON_SIZE} aria-hidden="true" />
-          PNG
+          <span
+            className={imageStyles.statusLabel}
+            data-visible={!preparingPng}
+            aria-hidden="true"
+          >
+            <Download size={ICON_SIZE} />
+            PNG
+          </span>
+          <span
+            className={imageStyles.statusLabel}
+            data-visible={preparingPng}
+            aria-hidden="true"
+          >
+            <Download size={ICON_SIZE} />
+            Preparing…
+          </span>
         </button>
+        <span
+          className={imageStyles.statusAnnouncement}
+          role="status"
+          aria-label="PNG download"
+        >
+          {preparingPng && "Preparing PNG…"}
+        </span>
         <button
           type="button"
           className={styles.button}
@@ -264,7 +295,7 @@ function ExportImageDialog({
           <>
             <button
               type="button"
-              className={`${styles.button} ${imageStyles.copyButton}`}
+              className={`${styles.button} ${imageStyles.statusButton}`}
               aria-label="Copy image"
               disabled={copyBusy}
               data-copied={copyStatus === "copied"}
@@ -273,7 +304,7 @@ function ExportImageDialog({
               {COPY_LABELS.map(({ status, label, Icon }) => (
                 <span
                   key={status}
-                  className={imageStyles.copyLabel}
+                  className={imageStyles.statusLabel}
                   data-visible={visibleCopyLabel === status}
                   aria-hidden="true"
                 >
@@ -282,7 +313,11 @@ function ExportImageDialog({
                 </span>
               ))}
             </button>
-            <span className={imageStyles.copyAnnouncement} role="status">
+            <span
+              className={imageStyles.statusAnnouncement}
+              role="status"
+              aria-label="Image copy"
+            >
               {visibleCopyLabel === "copied" && "Image copied."}
               {visibleCopyLabel === "copying" && "Copying image…"}
             </span>
@@ -304,7 +339,7 @@ export function ProjectActions() {
   const onExport = () => {
     const plan = useApp.getState().plan;
     const blob = new Blob([serializePlan(plan)], { type: "application/json" });
-    downloadBlob(blob, `${sanitizeFilename(plan.meta.name)}.json`);
+    downloadBlob(blob, `${exportFilenameBase(plan.meta.name)}.json`);
   };
 
   const onImportClick = () => fileInputRef.current?.click();

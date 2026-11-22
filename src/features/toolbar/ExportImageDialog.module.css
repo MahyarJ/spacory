@@ -84,21 +84,21 @@
   color: var(--sp-bg);
 }
 
-.actions .copyButton {
+.actions .statusButton {
   display: inline-grid;
 }
 
-.actions .copyButton:disabled {
+.actions .statusButton:disabled {
   cursor: default;
   opacity: 0.8;
 }
 
-.actions .copyButton[data-copied="true"] {
+.actions .statusButton[data-copied="true"] {
   background: color-mix(in srgb, var(--sp-grid) 85%, #22c55e);
 }
 
 /* Each label contributes to the button's size even when hidden. */
-.copyLabel {
+.statusLabel {
   grid-area: 1 / 1;
   display: inline-flex;
   align-items: center;
@@ -107,11 +107,11 @@
   white-space: nowrap;
 }
 
-.copyLabel[data-visible="false"] {
+.statusLabel[data-visible="false"] {
   visibility: hidden;
 }
 
-.copyAnnouncement {
+.statusAnnouncement {
   position: absolute;
   width: 1px;
   height: 1px;

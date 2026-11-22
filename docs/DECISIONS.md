@@ -22,6 +22,11 @@ Copy feedback stays in the button, with all labels sharing its size. The button
 shows **Copying…** immediately and is disabled until the write completes. A
 failed copy places a notification above the actions so the dialog stays in place.
 
+The PNG button shows **Preparing…** during rasterization and encoding. SVG uses
+the markup already prepared for the preview. The browser handles saving each
+file after the editor hands it off. Exports of untitled plans use the
+`floor-plan` filename without changing the plan metadata.
+
 ## Plan labels and room names scale with the drawing
 
 Plan labels store a plain text line and the start of its baseline in world

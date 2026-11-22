@@ -3,6 +3,7 @@ import { serializePlan } from "@app/io";
 import { HISTORY_STORAGE_KEY } from "@app/persistence";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
+import { FloorPlan } from "@features/canvas/FloorPlan";
 import { buildExportSvg } from "@geometry/exportSvg";
 import {
   act,
@@ -181,6 +182,74 @@ describe("ProjectActions — Export menu", () => {
     );
   });
 
+  it("uses floor-plan as the filename for every export of an untitled plan", async () => {
+    useApp.getState().loadPlan(createInitialPlan());
+    const plan = useApp.getState().plan;
+    mockPngRasterizer();
+    render(<ProjectActions />);
+
+    openExportMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "JSON" }));
+
+    const controls = within(openImageDialog());
+    fireEvent.click(controls.getByRole("button", { name: "Download SVG" }));
+    fireEvent.click(controls.getByRole("button", { name: "Download PNG" }));
+
+    await waitFor(() =>
+      expect(downloads.map(({ filename }) => filename)).toEqual([
+        "floor-plan.json",
+        "floor-plan.svg",
+        "floor-plan.png",
+      ]),
+    );
+    expect(await readBlobText(downloads[0].blob)).toBe(serializePlan(plan));
+    expect(useApp.getState().plan).toBe(plan);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("disables PNG during preparation and resets after encoding (success: %s)", async (success) => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    render(<ProjectActions />);
+    const controls = within(openImageDialog());
+    const button = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Download PNG",
+    });
+    const visibleLabel = () =>
+      button.querySelector('[data-visible="true"]')?.textContent;
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(visibleLabel()).toBe("Preparing…");
+    expect(button.disabled).toBe(true);
+    expect(
+      controls.getByRole("status", { name: "PNG download" }).textContent,
+    ).toBe("Preparing PNG…");
+    expect(downloads).toHaveLength(0);
+    fireEvent.click(button);
+
+    const png = new Blob([], { type: "image/png" });
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(success ? png : null));
+
+    expect(encode).toHaveBeenCalledOnce();
+    expect(button.disabled).toBe(false);
+    expect(visibleLabel()).toBe("PNG");
+    if (success) {
+      expect(downloads).toEqual([{ filename: "My-Plan.png", blob: png }]);
+      expect(alert).not.toHaveBeenCalled();
+    } else {
+      expect(downloads).toHaveLength(0);
+      expect(alert).toHaveBeenCalledWith("Could not export PNG.");
+    }
+  });
+
   it.each([
     { wallLengths: true, roomAreas: true },
     { wallLengths: true, roomAreas: false },
@@ -282,7 +351,12 @@ describe("ProjectActions — Export menu", () => {
     const [pngSource] = vi.mocked(URL.createObjectURL).mock.calls[0];
     expect(await readBlobText(pngSource as Blob)).toBe(previewMarkup(dialog));
     await waitFor(() =>
-      expect(controls.getByRole(allowed ? "status" : "alert").textContent).toBe(
+      expect(
+        (allowed
+          ? controls.getByRole("status", { name: "Image copy" })
+          : controls.getByRole("alert")
+        ).textContent,
+      ).toBe(
         allowed
           ? "Image copied."
           : "Couldn’t copy. Try again or download the PNG.",
@@ -349,6 +423,27 @@ describe("ProjectActions — Export menu", () => {
     } finally {
       setThemeMode(themeMode);
     }
+  });
+
+  it("blocks editor shortcuts when focus falls back to the document during export", () => {
+    useApp.getState().selectWall("w1");
+    render(
+      <>
+        <ProjectActions />
+        <FloorPlan />
+      </>,
+    );
+    const dialog = openImageDialog();
+    const before = useApp.getState().plan;
+
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(useApp.getState().plan).toBe(before);
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close export dialog" }),
+    );
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(useApp.getState().plan.walls[0].a.x).toBe(before.meta.gridSize);
   });
 
   it.each([
