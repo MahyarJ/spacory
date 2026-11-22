@@ -96,7 +96,27 @@ function openExportMenu(): HTMLElement[] {
 function openImageDialog(): HTMLElement {
   openExportMenu();
   fireEvent.click(screen.getByRole("menuitem", { name: "Image…" }));
-  return screen.getByRole("dialog", { name: "Export image" });
+  const dialog = screen.getByRole("dialog", { name: "Export image" });
+  vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(100, 100, 500, 360),
+  );
+  return dialog;
+}
+
+const backdropPoint = { clientX: 40, clientY: 40 };
+
+function pressDialog(
+  dialog: HTMLElement,
+  point: { clientX: number; clientY: number },
+) {
+  const event = new MouseEvent("pointerdown", { bubbles: true, ...point });
+  Object.defineProperty(event, "isPrimary", { value: true });
+  fireEvent(dialog, event);
+}
+
+function clickBackdrop(dialog: HTMLElement) {
+  pressDialog(dialog, backdropPoint);
+  fireEvent.click(dialog, backdropPoint);
 }
 
 function previewMarkup(dialog: HTMLElement): string {
@@ -216,7 +236,8 @@ describe("ProjectActions — Export menu", () => {
       .mockImplementation(() => {});
     const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
     render(<ProjectActions />);
-    const controls = within(openImageDialog());
+    const dialog = openImageDialog();
+    const controls = within(dialog);
     const button = controls.getByRole<HTMLButtonElement>("button", {
       name: "Download PNG",
     });
@@ -235,6 +256,8 @@ describe("ProjectActions — Export menu", () => {
     ).toBe("Preparing PNG…");
     expect(downloads).toHaveLength(0);
     fireEvent.click(button);
+    clickBackdrop(dialog);
+    expect(screen.getByRole("dialog")).toBe(dialog);
 
     const png = new Blob([], { type: "image/png" });
     const [[finishEncoding]] = encode.mock.calls;
@@ -381,7 +404,8 @@ describe("ProjectActions — Export menu", () => {
     const write = vi.fn(() => clipboardWrite);
     mockClipboard(write);
     render(<ProjectActions />);
-    const controls = within(openImageDialog());
+    const dialog = openImageDialog();
+    const controls = within(dialog);
     const button = controls.getByRole<HTMLButtonElement>("button", {
       name: "Copy image",
     });
@@ -402,6 +426,8 @@ describe("ProjectActions — Export menu", () => {
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(write).toHaveBeenCalledOnce();
+    clickBackdrop(dialog);
+    expect(screen.getByRole("dialog")).toBe(dialog);
 
     await act(async () => finishWrite());
     expect(visibleContent()?.textContent).toBe("Copied");
@@ -413,6 +439,64 @@ describe("ProjectActions — Export menu", () => {
     act(() => vi.advanceTimersByTime(1));
     expect(visibleContent()?.textContent).toBe("Copy image");
     expect(visibleContent()?.querySelector(".lucide-copy")).not.toBeNull();
+  });
+
+  it("requires the press and click to be outside the dialog bounds", () => {
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const inside = { clientX: 110, clientY: 110 };
+
+    for (const [start, end] of [
+      [inside, inside],
+      [inside, backdropPoint],
+      [backdropPoint, inside],
+    ]) {
+      pressDialog(dialog, start);
+      fireEvent.click(dialog, end);
+      expect(screen.getByRole("dialog")).toBe(dialog);
+    }
+
+    pressDialog(dialog, backdropPoint);
+    fireEvent.pointerCancel(dialog);
+    fireEvent.click(dialog, backdropPoint);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    clickBackdrop(dialog);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it.each([
+    "Close",
+    "Escape",
+  ])("allows %s during PNG preparation", async (action) => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const controls = within(dialog);
+    const png = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Download PNG",
+    });
+
+    await act(async () => {
+      fireEvent.click(png);
+    });
+    expect(png.disabled).toBe(true);
+
+    if (action === "Escape") {
+      fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    } else {
+      fireEvent.click(
+        controls.getByRole("button", { name: "Close export dialog" }),
+      );
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(new Blob([], { type: "image/png" })));
+    expect(downloads).toHaveLength(1);
   });
 
   it("keeps the same light plan preview across editor themes", () => {
@@ -463,6 +547,7 @@ describe("ProjectActions — Export menu", () => {
   it.each([
     "Close",
     "Escape",
+    "Backdrop",
   ])("closes with %s and starts with both measurements on next time", (action) => {
     const state = useApp.getState();
     state.setMeasurementSystem("imperial");
@@ -493,6 +578,8 @@ describe("ProjectActions — Export menu", () => {
         window.removeEventListener("keydown", editorShortcut);
       }
       fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    } else if (action === "Backdrop") {
+      clickBackdrop(dialog);
     } else {
       fireEvent.click(
         within(dialog).getByRole("button", { name: "Close export dialog" }),

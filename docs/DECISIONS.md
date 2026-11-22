@@ -28,6 +28,10 @@ already prepared for the preview. The browser handles saving each file after
 the editor hands it off. Exports of untitled plans use the `floor-plan`
 filename without changing the plan metadata.
 
+A backdrop click dismisses the dialog when the press starts and ends outside
+it and neither export action is busy. The close button and Escape also work
+while PNG preparation or copying is in progress.
+
 ## Plan labels and room names scale with the drawing
 
 Plan labels store a plain text line and the start of its baseline in world

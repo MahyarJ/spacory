@@ -106,6 +106,19 @@ type CopyStatus = "idle" | "copying" | "copied" | "failed";
 
 const COPY_CONFIRMATION_MS = 2000;
 
+function isBackdropEvent(event: React.MouseEvent<HTMLDialogElement>): boolean {
+  // The backdrop and the dialog's padding both target the dialog itself.
+  if (event.target !== event.currentTarget) return false;
+  const { left, right, top, bottom } =
+    event.currentTarget.getBoundingClientRect();
+  return (
+    event.clientX < left ||
+    event.clientX >= right ||
+    event.clientY < top ||
+    event.clientY >= bottom
+  );
+}
+
 function ExportImageDialog({
   plan,
   onClose,
@@ -114,12 +127,14 @@ function ExportImageDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const backdropPress = useRef(false);
   const titleId = useId();
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
   const [preparingPng, setPreparingPng] = useState(false);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const copyBusy = copyStatus === "copying";
+  const exportBusy = preparingPng || copyBusy;
   const copied = copyStatus === "copied";
   const PngIcon = preparingPng ? LoaderCircle : Download;
   const CopyIcon = copyBusy ? LoaderCircle : Copy;
@@ -198,6 +213,18 @@ function ExportImageDialog({
       onCancel={(e) => {
         e.preventDefault();
         close();
+      }}
+      onPointerDown={(e) => {
+        backdropPress.current =
+          e.isPrimary && e.button === 0 && !exportBusy && isBackdropEvent(e);
+      }}
+      onPointerCancel={() => {
+        backdropPress.current = false;
+      }}
+      onClick={(e) => {
+        const startedOnBackdrop = backdropPress.current;
+        backdropPress.current = false;
+        if (startedOnBackdrop && !exportBusy && isBackdropEvent(e)) close();
       }}
       // Preserve native control navigation and Escape's cancel event while
       // keeping keyboard events away from the editor's window listener.
