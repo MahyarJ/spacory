@@ -18,8 +18,9 @@ be pasted into messages and documents. The clipboard write starts during the
 click and receives the PNG as a promise to preserve Safari's user gesture.
 [WebKit clipboard API discussion](https://bugs.webkit.org/show_bug.cgi?id=222262)
 
-Copy feedback stays in the button, with all labels sharing its size. A failed
-copy places a notification above the actions so the dialog stays in place.
+Copy feedback stays in the button, with all labels sharing its size. The button
+shows **Copying…** immediately and is disabled until the write completes. A
+failed copy places a notification above the actions so the dialog stays in place.
 
 ## Plan labels and room names scale with the drawing
 

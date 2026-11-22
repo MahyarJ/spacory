@@ -100,7 +100,7 @@ async function buildExportPng({ markup, width, height }: ExportSvgResult) {
   }
 }
 
-type CopyStatus = "idle" | "pending" | "copying" | "copied" | "failed";
+type CopyStatus = "idle" | "copying" | "copied" | "failed";
 
 const COPY_LABELS = [
   { status: "idle", label: "Copy image", Icon: Copy },
@@ -108,10 +108,7 @@ const COPY_LABELS = [
   { status: "copied", label: "Copied", Icon: Check },
 ] as const;
 
-const COPY_FEEDBACK_TIMING = {
-  pending: { next: "copying", delay: 250 },
-  copied: { next: "idle", delay: 2000 },
-} as const;
+const COPY_CONFIRMATION_MS = 2000;
 
 function ExportImageDialog({
   plan,
@@ -125,7 +122,7 @@ function ExportImageDialog({
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
-  const copyBusy = copyStatus === "pending" || copyStatus === "copying";
+  const copyBusy = copyStatus === "copying";
   const visibleCopyLabel =
     copyStatus === "copying" || copyStatus === "copied" ? copyStatus : "idle";
 
@@ -134,11 +131,10 @@ function ExportImageDialog({
   }, []);
 
   useEffect(() => {
-    if (copyStatus !== "pending" && copyStatus !== "copied") return;
-    const { next, delay } = COPY_FEEDBACK_TIMING[copyStatus];
+    if (copyStatus !== "copied") return;
     const timer = window.setTimeout(() => {
-      setCopyStatus((current) => (current === copyStatus ? next : current));
-    }, delay);
+      setCopyStatus((current) => (current === "copied" ? "idle" : current));
+    }, COPY_CONFIRMATION_MS);
     return () => window.clearTimeout(timer);
   }, [copyStatus]);
 
@@ -174,8 +170,7 @@ function ExportImageDialog({
   };
 
   const copyImage = async () => {
-    if (copyBusy) return;
-    setCopyStatus("pending");
+    setCopyStatus("copying");
     const png = buildExportPng(svg);
     // The browser can reject the write before it reads the PNG promise.
     void png.catch(() => {});
@@ -271,7 +266,7 @@ function ExportImageDialog({
               type="button"
               className={`${styles.button} ${imageStyles.copyButton}`}
               aria-label="Copy image"
-              aria-disabled={copyBusy}
+              disabled={copyBusy}
               data-copied={copyStatus === "copied"}
               onClick={copyImage}
             >

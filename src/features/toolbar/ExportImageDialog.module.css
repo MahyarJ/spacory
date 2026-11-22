@@ -88,6 +88,11 @@
   display: inline-grid;
 }
 
+.actions .copyButton:disabled {
+  cursor: wait;
+  opacity: 0.8;
+}
+
 .actions .copyButton[data-copied="true"] {
   background: color-mix(in srgb, var(--sp-grid) 85%, #22c55e);
 }

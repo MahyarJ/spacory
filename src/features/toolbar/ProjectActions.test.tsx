@@ -269,7 +269,9 @@ describe("ProjectActions — Export menu", () => {
     const controls = within(dialog);
     fireEvent.click(controls.getByRole("checkbox", { name: "Wall lengths" }));
 
-    const button = controls.getByRole("button", { name: "Copy image" });
+    const button = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Copy image",
+    });
     fireEvent.click(button);
 
     expect(write).toHaveBeenCalledOnce();
@@ -289,11 +291,11 @@ describe("ProjectActions — Export menu", () => {
     expect(button.querySelector('[data-visible="true"]')?.textContent).toBe(
       allowed ? "Copied" : "Copy image",
     );
-    expect(button.getAttribute("aria-disabled")).toBe("false");
+    expect(button.disabled).toBe(false);
     expect(downloads).toHaveLength(0);
   });
 
-  it("shows progress only for a slow copy and restores the label after confirmation", async () => {
+  it("shows progress immediately and disables copy until the write settles", async () => {
     vi.useFakeTimers();
     mockPngRasterizer();
     let finishWrite!: () => void;
@@ -304,28 +306,25 @@ describe("ProjectActions — Export menu", () => {
     mockClipboard(write);
     render(<ProjectActions />);
     const controls = within(openImageDialog());
-    const button = controls.getByRole("button", { name: "Copy image" });
+    const button = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Copy image",
+    });
     const visibleLabel = () =>
       button.querySelector('[data-visible="true"]')?.textContent;
-    button.focus();
-
     fireEvent.click(button);
-    expect(visibleLabel()).toBe("Copy image");
-    expect(button.getAttribute("aria-disabled")).toBe("true");
+    expect(visibleLabel()).toBe("Copying…");
+    expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(write).toHaveBeenCalledOnce();
 
-    act(() => vi.advanceTimersByTime(250));
-    expect(visibleLabel()).toBe("Copying…");
     await act(async () => finishWrite());
     expect(visibleLabel()).toBe("Copied");
-    expect(document.activeElement).toBe(button);
+    expect(button.disabled).toBe(false);
 
     act(() => vi.advanceTimersByTime(1999));
     expect(visibleLabel()).toBe("Copied");
     act(() => vi.advanceTimersByTime(1));
     expect(visibleLabel()).toBe("Copy image");
-    expect(document.activeElement).toBe(button);
   });
 
   it("keeps the same light plan preview across editor themes", () => {
