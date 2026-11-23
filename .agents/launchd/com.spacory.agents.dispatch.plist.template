@@ -24,8 +24,8 @@
     <string>__PATH__</string>
   </dict>
 
-  <!-- Drive one pipeline action every 10 minutes. dispatch.sh self-guards against
-       overlap, so a run that outlasts the interval simply causes the next to skip. -->
+  <!-- Recover missed events and interrupted runs. Agent completion and webhook
+       deliveries wake the same dispatcher independently of this schedule. -->
   <key>StartInterval</key>
   <integer>600</integer>
 

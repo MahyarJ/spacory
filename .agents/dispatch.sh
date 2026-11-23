@@ -7,6 +7,7 @@
 #   tick (default)      Recover missed work and start the next eligible job.
 #   wake pr|issue N     Re-evaluate a GitHub artifact under the same lock.
 #   cycle              Run the scheduled Product planning cycle.
+#   webhook            Receive and queue signed GitHub wake-ups.
 #   setup | status     Create the labels or print their current assignments.
 # See docs/AUTOMATION.md for setup and recovery.
 set -euo pipefail
@@ -22,6 +23,10 @@ if [ -f "$SCRIPT_DIR/.env" ]; then
   set -a
   . "$SCRIPT_DIR/.env"
   set +a
+fi
+
+if [ "${1:-}" = webhook ]; then
+  exec node "$SCRIPT_DIR/webhook.mjs"
 fi
 
 MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-5}"

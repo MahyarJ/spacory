@@ -5,8 +5,8 @@
 # that actually contains gh / claude / node / git, then loads them so macOS runs
 # them on a timer even across logins/reboots.
 #
-#   .agents/launchd/install.sh install     # render + load both jobs (default)
-#   .agents/launchd/install.sh uninstall   # unload + remove both jobs
+#   .agents/launchd/install.sh install     # render + load the jobs (default)
+#   .agents/launchd/install.sh uninstall   # unload + remove the jobs
 #   .agents/launchd/install.sh status      # show whether they're loaded
 #
 # Notes:
@@ -19,14 +19,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEST="$HOME/Library/LaunchAgents"
-LABELS=(com.spacory.agents.dispatch com.spacory.agents.cycle)
+LABELS=(com.spacory.agents.dispatch com.spacory.agents.cycle com.spacory.agents.webhook)
 UID_NUM="$(id -u)"
 
 # Build a PATH that contains every tool the agents shell out to, by resolving each
 # binary's real directory and unioning them with the usual suspects.
 build_path() {
   local dirs=() b d
-  for b in gh claude node npm git bash; do
+  for b in gh claude codex node npm git bash; do
     if d="$(command -v "$b" 2>/dev/null)"; then dirs+=("$(dirname "$d")"); fi
   done
   dirs+=(/opt/homebrew/bin /usr/local/bin /usr/bin /bin /usr/sbin /sbin)
@@ -47,7 +47,7 @@ render_and_load() {
   done
   echo
   echo "PATH given to jobs: $path_val"
-  echo "Logs: $REPO_ROOT/.agents/logs/{dispatch,cycle}.log"
+  echo "Logs: $REPO_ROOT/.agents/logs/{dispatch,cycle,webhook}.log"
 }
 
 unload_and_remove() {
