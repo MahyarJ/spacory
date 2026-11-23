@@ -112,6 +112,8 @@ function mock() {
     throw new Error(args.join(" "));
   }
   if (command === "git" || command === "notify") return;
+  if (process.env.SPACORY_WEBHOOK_SECRET)
+    throw new Error("Webhook secret leaked into agent environment");
   const [mode, , context] = args;
   state.calls.push({
     mode,
@@ -209,6 +211,7 @@ function fixture(t, overrides = {}, options = {}) {
           FIXTURE_STATE: file,
           SPACORY_DISPATCH_LOCK: path.join(root, "dispatch.lock"),
           SPACORY_AGENT_RETRIES: "0",
+          SPACORY_WEBHOOK_SECRET: "fixture-webhook-secret",
           SPACORY_MAX_ROUNDS: "5",
           SPACORY_AUTOMERGE: options.automerge ? "1" : "0",
           SPACORY_REVIEWER_RESUME: options.usage ? "1" : "0",

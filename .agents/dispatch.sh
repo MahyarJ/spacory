@@ -28,6 +28,7 @@ fi
 if [ "${1:-}" = webhook ]; then
   exec node "$SCRIPT_DIR/webhook.mjs"
 fi
+unset SPACORY_WEBHOOK_SECRET
 
 export SPACORY_AGENT_USAGE_LOG="${SPACORY_AGENT_USAGE_LOG:-$SCRIPT_DIR/logs/usage.jsonl}"
 
