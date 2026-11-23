@@ -8,6 +8,7 @@ import {
 } from "@geometry/exportSvg";
 import buttons from "@ui/Button.module.css";
 import { ICON_SIZE } from "@ui/constants";
+import { ErrorNotice } from "@ui/ErrorNotice";
 import { Menu } from "@ui/Menu";
 import { Modal } from "@ui/Modal";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
@@ -24,8 +25,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import imageStyles from "./ExportImageDialog.module.css";
+import toolbarStyles from "./Toolbar.module.css";
 
 const DEFAULT_EXPORT_FILENAME = "floor-plan";
+const PNG_ERROR_MESSAGE =
+  "Couldn’t prepare the PNG. Try again or download the SVG.";
+const COPY_ERROR_MESSAGE = "Couldn’t copy. Try again or download the PNG.";
 
 function exportFilenameBase(name: string): string {
   const title = name.trim();
@@ -102,8 +107,6 @@ async function buildExportPng({ markup, width, height }: ExportSvgResult) {
   }
 }
 
-type CopyStatus = "idle" | "copied" | "failed";
-
 const COPY_CONFIRMATION_MS = 2000;
 
 function ExportImageDialog({
@@ -111,28 +114,32 @@ function ExportImageDialog({
   onClose,
   copyBusy,
   onCopy,
+  errorMessage,
+  onErrorChange,
 }: {
   plan: Plan;
   onClose: () => void;
   copyBusy: boolean;
   onCopy: (svg: ExportSvgResult) => Promise<boolean>;
+  errorMessage: string;
+  onErrorChange: (message: string) => void;
 }) {
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
   const [preparingPng, setPreparingPng] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const [copied, setCopied] = useState(false);
   const exportBusy = preparingPng || copyBusy;
-  const copied = copyStatus === "copied";
   const PngIcon = preparingPng ? LoaderCircle : Download;
   const CopyIcon = copyBusy ? LoaderCircle : Copy;
 
   useEffect(() => {
-    if (copyStatus !== "copied") return;
-    const timer = window.setTimeout(() => {
-      setCopyStatus((current) => (current === "copied" ? "idle" : current));
-    }, COPY_CONFIRMATION_MS);
+    if (!copied) return;
+    const timer = window.setTimeout(
+      () => setCopied(false),
+      COPY_CONFIRMATION_MS,
+    );
     return () => window.clearTimeout(timer);
-  }, [copyStatus]);
+  }, [copied]);
 
   const svg = useMemo(
     () =>
@@ -156,23 +163,23 @@ function ExportImageDialog({
 
   const downloadPng = async () => {
     setPreparingPng(true);
+    onErrorChange("");
     try {
       downloadBlob(await buildExportPng(svg), `${filename}.png`);
-    } catch (error) {
-      window.alert(
-        error instanceof Error ? error.message : "Could not export PNG.",
-      );
+    } catch {
+      onErrorChange(PNG_ERROR_MESSAGE);
     } finally {
       setPreparingPng(false);
     }
   };
 
   const copyImage = async () => {
-    setCopyStatus("idle");
+    setCopied(false);
+    onErrorChange("");
     try {
-      if (await onCopy(svg)) setCopyStatus("copied");
+      if (await onCopy(svg)) setCopied(true);
     } catch {
-      setCopyStatus("failed");
+      onErrorChange(COPY_ERROR_MESSAGE);
     }
   };
 
@@ -281,12 +288,12 @@ function ExportImageDialog({
               {copied && "Image copied."}
               {copyBusy && "Copying image…"}
             </span>
-            <div className={imageStyles.copyError} role="alert">
-              {copyStatus === "failed" &&
-                "Couldn’t copy. Try again or download the PNG."}
-            </div>
           </>
         )}
+        <ErrorNotice
+          message={errorMessage}
+          className={imageStyles.exportError}
+        />
       </div>
     </Modal>
   );
@@ -295,6 +302,9 @@ function ExportImageDialog({
 export function ProjectActions() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [imagePlan, setImagePlan] = useState<Plan | null>(null);
+  // Export work can finish after the dialog is dismissed. Keep its errors
+  // available in the toolbar when there is no open dialog to display them.
+  const [exportError, setExportError] = useState("");
   const copyInFlight = useRef(false);
   const [copyBusy, setCopyBusy] = useState(false);
 
@@ -361,7 +371,10 @@ export function ProjectActions() {
             key: "image",
             label: "Image…",
             icon: <ImageIcon size={ICON_SIZE} />,
-            onSelect: () => setImagePlan(useApp.getState().plan),
+            onSelect: () => {
+              setExportError("");
+              setImagePlan(useApp.getState().plan);
+            },
           },
           {
             key: "json",
@@ -371,12 +384,21 @@ export function ProjectActions() {
           },
         ]}
       />
+      <ErrorNotice
+        className={toolbarStyles.exportError}
+        message={imagePlan ? "" : exportError}
+      />
       {imagePlan && (
         <ExportImageDialog
           plan={imagePlan}
-          onClose={() => setImagePlan(null)}
+          onClose={() => {
+            setExportError("");
+            setImagePlan(null);
+          }}
           copyBusy={copyBusy}
           onCopy={copyExportImage}
+          errorMessage={exportError}
+          onErrorChange={setExportError}
         />
       )}
       <input

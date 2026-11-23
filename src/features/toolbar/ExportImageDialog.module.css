@@ -98,21 +98,13 @@
   white-space: nowrap;
 }
 
-.copyError {
+.exportError {
   position: absolute;
   z-index: 1;
   inset-inline-end: 0;
   inset-block-end: calc(100% + 0.5rem);
   max-width: 100%;
   pointer-events: none;
-}
-
-.copyError:not(:empty) {
-  padding: 0.5rem 0.75rem;
-  background: var(--sp-panel);
-  border: 1px solid var(--sp-border);
-  border-radius: var(--sp-toolbar-button-radius);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
 }
 
 .options input:focus-visible {

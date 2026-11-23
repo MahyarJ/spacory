@@ -266,13 +266,53 @@ describe("ProjectActions — Export menu", () => {
     expect(encode).toHaveBeenCalledOnce();
     expect(button.disabled).toBe(false);
     expect(button.querySelector(".lucide-download")).not.toBeNull();
+    expect(alert).not.toHaveBeenCalled();
     if (success) {
       expect(downloads).toEqual([{ filename: "My-Plan.png", blob: png }]);
-      expect(alert).not.toHaveBeenCalled();
+      expect(controls.getByRole("alert").textContent).toBe("");
     } else {
       expect(downloads).toHaveLength(0);
-      expect(alert).toHaveBeenCalledWith("Could not export PNG.");
+      expect(controls.getByRole("alert").textContent).toBe(
+        "Couldn’t prepare the PNG. Try again or download the SVG.",
+      );
+
+      await act(async () => {
+        fireEvent.click(button);
+      });
+      expect(controls.getByRole("alert").textContent).toBe("");
+      const [, [finishRetry]] = encode.mock.calls;
+      await act(async () => finishRetry(png));
+      expect(downloads).toEqual([{ filename: "My-Plan.png", blob: png }]);
     }
+  });
+
+  it("shows PNG failures in the toolbar if the export dialog was dismissed", async () => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    render(<ProjectActions />);
+    const controls = within(openImageDialog());
+
+    await act(async () => {
+      fireEvent.click(controls.getByRole("button", { name: "Download PNG" }));
+    });
+    fireEvent.click(
+      controls.getByRole("button", { name: "Close export dialog" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(null));
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Couldn’t prepare the PNG. Try again or download the SVG.",
+    );
+    expect(downloads).toHaveLength(0);
+    expect(alert).not.toHaveBeenCalled();
+
+    const reopened = within(openImageDialog());
+    expect(reopened.getByRole("alert").textContent).toBe("");
   });
 
   it.each([

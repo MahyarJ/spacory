@@ -23,8 +23,9 @@ sessions. This prevents an older image from overwriting a newer copy.
 
 Copy and PNG feedback stays in the buttons. A loader replaces the action icon
 while each button is disabled, keeping the label and width stable. The loader
-stays static with reduced motion. Copy confirms success with **Copied** and
-places a failure notification above the actions so the dialog stays in place.
+stays static with reduced motion. Copy confirms success with **Copied**.
+PNG and copy errors share a non-blocking notice above the export actions.
+When an export fails after dismissal, the toolbar shows the notice.
 
 PNG reports progress during rasterization and encoding. SVG uses the markup
 already prepared for the preview. The browser handles saving each file after
