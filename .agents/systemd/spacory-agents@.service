@@ -1,0 +1,12 @@
+[Unit]
+Description=Spacory agent dispatcher (%i)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=spacory
+WorkingDirectory=/opt/spacory
+Environment=PATH=/home/spacory/.local/bin:/usr/local/bin:/usr/bin:/bin
+UMask=0077
+ExecStart=/bin/bash /opt/spacory/.agents/dispatch.sh %i

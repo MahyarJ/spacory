@@ -30,6 +30,9 @@ jobs:
       - name: Lint & format check (Biome)
         run: npx @biomejs/biome ci
 
+      - name: Verify Linux agent units
+        run: systemd-analyze verify .agents/systemd/*.service .agents/systemd/*.timer
+
       - name: Type-check
         run: npx tsc -b
 

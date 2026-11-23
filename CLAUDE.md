@@ -78,6 +78,6 @@ Do **not** add AI/Claude attribution to commits or PRs:
   Codex reads `AGENTS.md` (a pointer to this file). See `.agents/README.md`.
 - `.agents/dispatch.sh` advances the agent loop after each verified result.
   Engineer reviews the current PR head before Product acceptance. GitHub webhooks
-  wake the dispatcher on eligible external changes. launchd keeps a recovery
-  check and a separate daily Product cycle. See [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
+  wake the dispatcher on eligible external changes. launchd on macOS or systemd
+  on Linux runs the recovery check and the separate daily Product cycle. See [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
 - Generated `*.module.css.d.ts` are gitignored.

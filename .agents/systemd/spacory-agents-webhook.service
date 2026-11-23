@@ -1,0 +1,17 @@
+[Unit]
+Description=Spacory agent webhook receiver
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=exec
+User=spacory
+WorkingDirectory=/opt/spacory
+Environment=PATH=/home/spacory/.local/bin:/usr/local/bin:/usr/bin:/bin
+UMask=0077
+ExecStart=/bin/bash /opt/spacory/.agents/dispatch.sh webhook
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
