@@ -101,16 +101,21 @@ Run `.agents/dispatch.sh setup` as the service account if the GitHub labels stil
 need to be created. When moving an active runner, stop its jobs before enabling
 the new ones. The dispatcher lock is local to a host.
 
-From `/opt/spacory`, install the units and start the timers. Enable the receiver
-once its secret and HTTPS endpoint are configured.
+From `/opt/spacory`, install the jobs and check their status.
 
 ```bash
-systemd-analyze verify .agents/systemd/*.service .agents/systemd/*.timer
-sudo install -m 0644 .agents/systemd/*.service .agents/systemd/*.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now spacory-agents-tick.timer spacory-agents-cycle.timer
-sudo systemctl enable --now spacory-agents-webhook.service
+.agents/systemd/install.sh install
+.agents/systemd/install.sh status
 ```
+
+The installer verifies the units, installs them under `/etc/systemd/system`,
+and starts the timers and webhook service. The receiver exits until its signing
+secret is configured. After adding the secret, run
+`sudo systemctl restart spacory-agents-webhook.service`.
+
+To remove the jobs, run `.agents/systemd/install.sh uninstall`. This stops any
+active worker and removes the installed unit files. The checkout, credentials,
+webhook queue, logs, and systemd drop-ins stay on disk.
 
 The recovery timer runs every 10 minutes. The Product timer runs at 09:00 UTC by
 default. Both timers persist their last trigger and catch up after downtime. To

@@ -12,8 +12,8 @@
 # Notes:
 #   * These are per-user LaunchAgents (~/Library/LaunchAgents) — they run as you,
 #     reusing your existing `claude` and `gh` auth. No secrets are copied anywhere.
-#   * They only run while you're logged in and the Mac is awake. For always-on,
-#     use GitHub Actions instead (see docs/AUTOMATION.md).
+#   * The jobs run while you are logged in and the Mac is awake. The runbook
+#     also covers running the dispatcher on a Linux host with systemd.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
