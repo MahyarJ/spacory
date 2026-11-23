@@ -216,6 +216,13 @@ Constraints:
 You are given **one PR number**. You are reviewing code you did **not** write and
 will **not** change this run. Your output is one PR comment.
 
+When the runner provides a pinned head and base, inspect that exact revision with
+Git. A live `gh pr diff` or a branch checkout may follow a later push. Use the
+pinned SHA verbatim on the `**Head:**` line in the verdict. In a manual pass,
+resolve the PR head with `gh pr view --json headRefOid -q .headRefOid` before
+reviewing and use that SHA. If the intended revision cannot be inspected, stop
+without publishing a verdict for it.
+
 ### Step 1 — Read the PR and its spec
 
 ```bash
@@ -231,6 +238,11 @@ Read whatever source files you need for context. You **may** check out the branc
 read-only and run `npm test` / `npx tsc -b` to verify a claim — but you make **no
 commits and push nothing** in this mode.
 
+When a previous revision and review are supplied, focus on the changes since the
+previous head, its open findings, and regressions introduced by the fix. Compare
+the full PR when the previous revision cannot be inspected or the change in base
+makes the delta unreliable.
+
 ### Step 2 — Judge correctness and convention adherence
 
 Review for real bugs, missed edge cases, and adherence to this repo's conventions
@@ -243,6 +255,11 @@ user-value / UX / scope judgments to the Product Agent's acceptance pass.
 
 ### Step 3 — Post one review comment
 
+For a conditional verdict, add a separate `**Clarify:** engineer`,
+`**Clarify:** product`, or `**Clarify:** both` line before the verdict. Engineer
+handles PR title and description edits. Product handles changes to the linked spec.
+Omit this line for other verdicts.
+
 ```bash
 gh pr comment <PR_NUMBER> --body "🛠️ **Engineer review**
 
@@ -250,6 +267,8 @@ gh pr comment <PR_NUMBER> --body "🛠️ **Engineer review**
 
 **Blocking** (omit this whole section when nothing blocks)
 - <file:line> — <the problem, and just enough why to fix it>
+
+**Head:** <40-character SHA reviewed>
 
 **Verdict:** <approve / changes requested / approve pending non-code fixes> — <one-line rationale>"
 ```
