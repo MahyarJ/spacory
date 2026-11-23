@@ -1,4 +1,6 @@
 import { useApp } from "@app/store";
+import buttons from "@ui/Button.module.css";
+import { ICON_SIZE } from "@ui/constants";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
 
 import clsx from "clsx";
@@ -14,7 +16,6 @@ import {
   Undo2,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import { ICON_SIZE } from "./constants";
 import { HintBar } from "./HintBar";
 import { MeasurementSystemSwitch } from "./MeasurementSystemSwitch";
 import { ProjectActions } from "./ProjectActions";
@@ -39,7 +40,7 @@ export function Toolbar() {
     return (
       <button
         type="button"
-        className={clsx(styles.button, {
+        className={clsx(buttons.button, {
           [styles.active]: tool === props.tool,
         })}
         onClick={() => setTool(props.tool)}
@@ -63,7 +64,7 @@ export function Toolbar() {
         <ToolbarButton tool="pan" label="Pan" icon={Move} />
         <button
           type="button"
-          className={styles.button}
+          className={buttons.button}
           onClick={() => fitView(createPlanLabelMeasurer())}
           title="Frame the whole plan in view"
         >
@@ -74,11 +75,11 @@ export function Toolbar() {
         <MeasurementSystemSwitch />
         <ProjectActions />
         <ThemeSwitch />
-        <button type="button" className={styles.button} onClick={undo}>
+        <button type="button" className={buttons.button} onClick={undo}>
           <Undo2 size={ICON_SIZE} />
           Undo
         </button>
-        <button type="button" className={styles.button} onClick={redo}>
+        <button type="button" className={buttons.button} onClick={redo}>
           <Redo2 size={ICON_SIZE} />
           Redo
         </button>

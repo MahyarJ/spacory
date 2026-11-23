@@ -5,6 +5,39 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Image export visibility keeps annotation positions fixed
+
+The image export preview, both download formats, and clipboard copy use the same
+light SVG in every editor theme so the preview matches the result for sharing
+and print. When a measurement is hidden, its text is omitted after room name
+layout. This keeps names in the same place and at the same size as measurements
+toggle.
+
+Copy uses the same PNG rasterizer as the PNG download so the exported plan can
+be pasted into messages and documents. The clipboard write starts during the
+click and receives the PNG as a promise to preserve Safari's user gesture.
+[WebKit clipboard API discussion](https://bugs.webkit.org/show_bug.cgi?id=222262)
+
+Project actions allow one PNG preparation and one clipboard write at a time.
+Progress persists across dialog sessions, preventing duplicate downloads and
+keeping older images from overwriting newer copies.
+
+Copy and PNG feedback stays in the buttons. A loader replaces the action icon
+while each button is disabled, keeping the label and width stable. The loader
+stays static with reduced motion. Copy confirms success with **Copied**.
+PNG and copy errors share a non-blocking notice above the export actions.
+When an export fails after dismissal, the toolbar shows the notice.
+
+PNG reports progress during rasterization and encoding. SVG uses the markup
+already prepared for the preview. The browser handles saving each file after
+the editor hands it off. Exports of untitled plans use the `floor-plan`
+filename without changing the plan metadata.
+
+The shared modal handles the close button, Escape and backdrop clicks. The
+export dialog enables backdrop dismissal while both export actions are idle.
+An eligible click starts and ends on the backdrop. The close button and Escape
+also work while PNG preparation or copying is in progress.
+
 ## Plan labels and room names scale with the drawing
 
 Plan labels store a plain text line and the start of its baseline in world

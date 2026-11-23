@@ -264,6 +264,10 @@ export function FloorPlan() {
     };
 
     const onKey = (e: KeyboardEvent) => {
+      // A disabled dialog button can leave keyboard focus on the document.
+      // Keep canvas shortcuts suspended for the entire modal session.
+      if (document.querySelector("dialog[open]")) return;
+
       // Don't hijack keys while typing into a form field.
       const target = e.target as HTMLElement | null;
       if (

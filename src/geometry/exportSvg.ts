@@ -69,6 +69,10 @@ export function buildExportSvg(
   margin = EXPORT_MARGIN,
   measure?: MeasureRoomLabel,
   measureLabel?: MeasurePlanLabel,
+  {
+    wallLengths = true,
+    roomAreas = true,
+  }: { wallLengths?: boolean; roomAreas?: boolean } = {},
 ): ExportSvgResult {
   const bounds = getPlanBounds(plan, measureLabel);
   const half = EXPORT_EMPTY_PLACEHOLDER_SIZE / 2;
@@ -143,18 +147,22 @@ export function buildExportSvg(
     dimensions: measurements,
     measure,
   });
-  const dimensions = measurements
+  const dimensions = (wallLengths ? measurements : [])
     .map(
       ({ midpoint, angle, offset, text }) =>
         `<text transform="translate(${midpoint.x} ${midpoint.y}) rotate(${angle})" y="${-offset}" font-size="${WALL_DIMENSION_FONT_SIZE}" font-family="sans-serif" ${textStyle}>${text}</text>`,
     )
     .join("");
+  // Keep the existing room-name layout when measurements are hidden. Toggling
+  // a measurement should not move, wrap, or resize another annotation.
   const roomLabels = annotations
     .map((annotation) => {
       const { room, name, area, label } = annotation;
       if (!name || !label) {
         const { x, y } = room.labelPoint;
-        const areaText = `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${ROOM_AREA_FONT_SIZE}" font-weight="400" font-family="${ROOM_LABEL_FONT_FAMILY}" ${textStyle}>${area}</text>`;
+        const areaText = roomAreas
+          ? `<text x="${x}" y="${y}" dominant-baseline="central" font-size="${ROOM_AREA_FONT_SIZE}" font-weight="400" font-family="${ROOM_LABEL_FONT_FAMILY}" ${textStyle}>${area}</text>`
+          : "";
         return name
           ? `<g><title>${escapeSvgText(name)}</title>${areaText}</g>`
           : areaText;
@@ -169,7 +177,10 @@ export function buildExportSvg(
         label.shortened || label.nameLines.length > 1
           ? `<title>${escapeSvgText(name)}</title>`
           : "";
-      return `<g transform="${roomAnnotationTransform(annotation)}" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" font-weight="400" font-family="${ROOM_LABEL_FONT_FAMILY}" ${textStyle}>${title}${lines}<text x="0" y="${label.areaY}" font-size="${ROOM_AREA_FONT_SIZE}">${area}</text></g>`;
+      const areaText = roomAreas
+        ? `<text x="0" y="${label.areaY}" font-size="${ROOM_AREA_FONT_SIZE}">${area}</text>`
+        : "";
+      return `<g transform="${roomAnnotationTransform(annotation)}" dominant-baseline="central" font-size="${ROOM_LABEL_FONT_SIZE}" font-weight="400" font-family="${ROOM_LABEL_FONT_FAMILY}" ${textStyle}>${title}${lines}${areaText}</g>`;
     })
     .join("");
 

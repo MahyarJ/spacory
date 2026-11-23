@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
+import { serializePlan } from "@app/io";
+import { HISTORY_STORAGE_KEY } from "@app/persistence";
 import { createInitialPlan, type Plan, type Wall } from "@app/schema";
 import { useApp } from "@app/store";
+import { FloorPlan } from "@features/canvas/FloorPlan";
 import { buildExportSvg } from "@geometry/exportSvg";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectActions } from "./ProjectActions";
 
@@ -14,11 +25,25 @@ const wall = (
   id: string,
 ): Wall => ({ id, a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness: 10 });
 
-/** Two walls sharing a corner — a plan with real geometry, not a lone wall. */
-const cornerPlan = (name: string): Plan => ({
+const roomPlan = (): Plan => ({
   ...createInitialPlan(),
-  meta: { ...createInitialPlan().meta, name },
-  walls: [wall(0, 0, 400, 0, "w1"), wall(400, 0, 400, 300, "w2")],
+  meta: { ...createInitialPlan().meta, name: "My Plan!" },
+  walls: [
+    wall(0, 0, 400, 0, "w1"),
+    wall(400, 0, 400, 300, "w2"),
+    wall(400, 300, 0, 300, "w3"),
+    wall(0, 300, 0, 0, "w4"),
+  ],
+  items: [
+    {
+      id: "door",
+      type: "door",
+      wallAttach: { wallId: "w1", offset: 100, length: 80 },
+      thickness: 10,
+      props: { hingeEdge: "start", swingSide: "outside" },
+    },
+  ],
+  roomNames: [{ anchor: { x: 200, y: 150 }, name: "Living room" }],
   labels: [
     {
       id: "terrace",
@@ -68,50 +93,649 @@ function openExportMenu(): HTMLElement[] {
   return screen.getAllByRole("menuitem");
 }
 
+function openImageDialog(): HTMLElement {
+  openExportMenu();
+  fireEvent.click(screen.getByRole("menuitem", { name: "Image…" }));
+  const dialog = screen.getByRole("dialog", { name: "Export image" });
+  vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(100, 100, 500, 360),
+  );
+  return dialog;
+}
+
+const backdropPoint = { clientX: 40, clientY: 40 };
+
+function pressDialog(
+  dialog: HTMLElement,
+  point: { clientX: number; clientY: number },
+) {
+  const event = new MouseEvent("pointerdown", { bubbles: true, ...point });
+  Object.defineProperty(event, "isPrimary", { value: true });
+  fireEvent(dialog, event);
+}
+
+function clickBackdrop(dialog: HTMLElement) {
+  pressDialog(dialog, backdropPoint);
+  fireEvent.click(dialog, backdropPoint);
+}
+
+function previewMarkup(dialog: HTMLElement): string {
+  const image = within(dialog).getByRole("img", { name: "Floor plan preview" });
+  return decodeURIComponent(image.getAttribute("src")!.split(",")[1]);
+}
+
+function mockPngRasterizer() {
+  const drawImage =
+    vi.fn<
+      (
+        image: HTMLImageElement,
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+      ) => void
+    >();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+    drawImage,
+  } as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(
+    (callback, type) => callback(new Blob([], { type })),
+  );
+  vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
+    function (this: HTMLImageElement) {
+      this.dispatchEvent(new Event("load"));
+    },
+  );
+  return drawImage;
+}
+
+class TestClipboardItem {
+  constructor(readonly data: Record<string, Promise<Blob>>) {}
+}
+
+function mockClipboard(write: (items: TestClipboardItem[]) => Promise<void>) {
+  vi.stubGlobal("ClipboardItem", TestClipboardItem);
+  vi.stubGlobal("navigator", { clipboard: { write } });
+}
+
+// jsdom omits the native modal methods. Model the open state; Escape's cancel
+// event is dispatched explicitly in the dialog test.
+HTMLDialogElement.prototype.showModal = function () {
+  this.open = true;
+};
+HTMLDialogElement.prototype.close = function () {
+  this.open = false;
+};
+
 describe("ProjectActions — Export menu", () => {
   let downloads: Download[];
 
   beforeEach(() => {
     downloads = captureDownloads();
-    useApp.getState().loadPlan(cornerPlan("My Plan!"));
+    useApp.getState().loadPlan(roomPlan());
   });
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     localStorage.clear();
   });
 
-  it("offers JSON, PNG and SVG, in that order", () => {
+  it("offers one image entry and downloads JSON directly", async () => {
     render(<ProjectActions />);
     expect(openExportMenu().map((item) => item.textContent)).toEqual([
+      "Image…",
       "JSON",
-      "PNG",
-      "SVG",
     ]);
-  });
 
-  it("downloads the plan's SVG markup as <plan-name>.svg", async () => {
-    render(<ProjectActions />);
-    const svgEntry = openExportMenu()[2];
-    expect(svgEntry.textContent).toBe("SVG");
+    fireEvent.click(screen.getByRole("menuitem", { name: "JSON" }));
 
-    fireEvent.click(svgEntry);
-
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
     expect(downloads).toHaveLength(1);
-    const [download] = downloads;
-    // Sanitized from "My Plan!" by the same helper the JSON/PNG entries use.
-    expect(download.filename).toBe("My-Plan.svg");
-    expect(download.blob.type).toBe("image/svg+xml;charset=utf-8");
-    expect(await readBlobText(download.blob)).toBe(
-      buildExportSvg(useApp.getState().plan).markup,
+    expect(downloads[0].filename).toBe("My-Plan.json");
+    expect(downloads[0].blob.type).toBe("application/json");
+    expect(await readBlobText(downloads[0].blob)).toBe(
+      serializePlan(useApp.getState().plan),
     );
   });
 
-  it("closes the menu when the SVG entry is selected", () => {
+  it("uses floor-plan as the filename for every export of an untitled plan", async () => {
+    useApp.getState().loadPlan(createInitialPlan());
+    const plan = useApp.getState().plan;
+    mockPngRasterizer();
     render(<ProjectActions />);
-    fireEvent.click(openExportMenu()[2]);
-    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+
+    openExportMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "JSON" }));
+
+    const controls = within(openImageDialog());
+    fireEvent.click(controls.getByRole("button", { name: "Download SVG" }));
+    fireEvent.click(controls.getByRole("button", { name: "Download PNG" }));
+
+    await waitFor(() =>
+      expect(downloads.map(({ filename }) => filename)).toEqual([
+        "floor-plan.json",
+        "floor-plan.svg",
+        "floor-plan.png",
+      ]),
+    );
+    expect(await readBlobText(downloads[0].blob)).toBe(serializePlan(plan));
+    expect(useApp.getState().plan).toBe(plan);
+  });
+
+  it.each([
+    true,
+    false,
+  ])("disables PNG during preparation and resets after encoding (success: %s)", async (success) => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const controls = within(dialog);
+    const button = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Download PNG",
+    });
+    const iconWidth = button.querySelector("svg")?.getAttribute("width");
+
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    expect(button.textContent).toBe("PNG");
+    expect(
+      button.querySelector(".lucide-loader-circle")?.getAttribute("width"),
+    ).toBe(iconWidth);
+    expect(button.disabled).toBe(true);
+    expect(
+      controls.getByRole("status", { name: "PNG download" }).textContent,
+    ).toBe("Preparing PNG…");
+    expect(downloads).toHaveLength(0);
+    fireEvent.click(button);
+    clickBackdrop(dialog);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    const png = new Blob([], { type: "image/png" });
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(success ? png : null));
+
+    expect(encode).toHaveBeenCalledOnce();
+    expect(button.disabled).toBe(false);
+    expect(button.querySelector(".lucide-download")).not.toBeNull();
+    expect(alert).not.toHaveBeenCalled();
+    if (success) {
+      expect(downloads).toEqual([{ filename: "My-Plan.png", blob: png }]);
+      expect(controls.getByRole("alert").textContent).toBe("");
+    } else {
+      expect(downloads).toHaveLength(0);
+      expect(controls.getByRole("alert").textContent).toBe(
+        "Couldn’t prepare the PNG. Try again or download the SVG.",
+      );
+
+      await act(async () => {
+        fireEvent.click(button);
+      });
+      expect(controls.getByRole("alert").textContent).toBe("");
+      const [, [finishRetry]] = encode.mock.calls;
+      await act(async () => finishRetry(png));
+      expect(downloads).toEqual([{ filename: "My-Plan.png", blob: png }]);
+    }
+  });
+
+  it("keeps PNG preparation active when the export dialog is reopened", async () => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    render(<ProjectActions />);
+    const initial = within(openImageDialog());
+
+    await act(async () => {
+      fireEvent.click(initial.getByRole("button", { name: "Download PNG" }));
+    });
+    fireEvent.click(
+      initial.getByRole("button", { name: "Close export dialog" }),
+    );
+
+    const reopened = openImageDialog();
+    const controls = within(reopened);
+    const png = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Download PNG",
+    });
+    expect(png.disabled).toBe(true);
+    expect(png.querySelector(".lucide-loader-circle")).not.toBeNull();
+    expect(
+      controls.getByRole("status", { name: "PNG download" }).textContent,
+    ).toBe("Preparing PNG…");
+
+    fireEvent.click(png);
+    expect(encode).toHaveBeenCalledOnce();
+    clickBackdrop(reopened);
+    expect(screen.getByRole("dialog")).toBe(reopened);
+
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(new Blob([], { type: "image/png" })));
+    expect(downloads).toHaveLength(1);
+    expect(png.disabled).toBe(false);
+    expect(png.querySelector(".lucide-download")).not.toBeNull();
+    expect(
+      controls.getByRole("status", { name: "PNG download" }).textContent,
+    ).toBe("");
+
+    clickBackdrop(reopened);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows PNG failures in the toolbar if the export dialog was dismissed", async () => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
+    render(<ProjectActions />);
+    const controls = within(openImageDialog());
+
+    await act(async () => {
+      fireEvent.click(controls.getByRole("button", { name: "Download PNG" }));
+    });
+    fireEvent.click(
+      controls.getByRole("button", { name: "Close export dialog" }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(null));
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Couldn’t prepare the PNG. Try again or download the SVG.",
+    );
+    expect(downloads).toHaveLength(0);
+    expect(alert).not.toHaveBeenCalled();
+
+    const reopened = within(openImageDialog());
+    expect(reopened.getByRole("alert").textContent).toBe("");
+  });
+
+  it.each([
+    { wallLengths: true, roomAreas: true },
+    { wallLengths: true, roomAreas: false },
+    { wallLengths: false, roomAreas: true },
+    { wallLengths: false, roomAreas: false },
+  ])("shares the preview SVG with both downloads (lengths $wallLengths, areas $roomAreas)", async ({
+    wallLengths,
+    roomAreas,
+  }) => {
+    const drawImage = mockPngRasterizer();
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(downloads).toHaveLength(0);
+
+    const lengths = within(dialog).getByRole<HTMLInputElement>("checkbox", {
+      name: "Wall lengths",
+    });
+    const areas = within(dialog).getByRole<HTMLInputElement>("checkbox", {
+      name: "Room areas",
+    });
+    expect(lengths.checked).toBe(true);
+    expect(areas.checked).toBe(true);
+    expect(previewMarkup(dialog)).toBe(
+      buildExportSvg(useApp.getState().plan).markup,
+    );
+
+    // The label text is part of the touch target.
+    if (!wallLengths) fireEvent.click(within(dialog).getByText("Wall lengths"));
+    if (!roomAreas) fireEvent.click(within(dialog).getByText("Room areas"));
+    expect(lengths.checked).toBe(wallLengths);
+    expect(areas.checked).toBe(roomAreas);
+
+    const markup = previewMarkup(dialog);
+    const preview = new DOMParser().parseFromString(markup, "image/svg+xml");
+    expect(
+      preview.querySelectorAll('[data-layer="dimensions"] text'),
+    ).toHaveLength(wallLengths ? 4 : 0);
+    const roomText = Array.from(
+      preview.querySelectorAll('[data-layer="room-areas"] text'),
+      (node) => node.textContent,
+    );
+    expect(roomText).toEqual(
+      roomAreas ? ["Living room", "12 m²"] : ["Living room"],
+    );
+    expect(
+      preview.querySelectorAll('[data-layer="walls"] polygon'),
+    ).toHaveLength(4);
+    expect(preview.querySelector('[data-layer="items"] path')).not.toBeNull();
+    expect(
+      preview.querySelector('[data-layer="plan-labels"] text')?.textContent,
+    ).toBe("Terrace & 茶室 <🌿>");
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Download SVG" }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Download PNG" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        downloads.map(({ filename, blob }) => [filename, blob.type]),
+      ).toEqual([
+        ["My-Plan.svg", "image/svg+xml;charset=utf-8"],
+        ["My-Plan.png", "image/png"],
+      ]),
+    );
+    expect(await readBlobText(downloads[0].blob)).toBe(markup);
+    const [pngSource] = vi.mocked(URL.createObjectURL).mock.calls[1];
+    expect(await readBlobText(pngSource as Blob)).toBe(markup);
+    expect(drawImage).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    true,
+    false,
+  ])("uses the preview PNG and reports the write result (allowed: %s)", async (allowed) => {
+    mockPngRasterizer();
+    const write = vi.fn(async ([_item]: TestClipboardItem[]) => {
+      if (!allowed) throw new DOMException("Denied", "NotAllowedError");
+    });
+    mockClipboard(write);
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const controls = within(dialog);
+    fireEvent.click(controls.getByRole("checkbox", { name: "Wall lengths" }));
+
+    const button = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Copy image",
+    });
+    fireEvent.click(button);
+
+    expect(write).toHaveBeenCalledOnce();
+    const [[[item]]] = write.mock.calls;
+    await expect(item.data["image/png"]).resolves.toMatchObject({
+      type: "image/png",
+    });
+    const [pngSource] = vi.mocked(URL.createObjectURL).mock.calls[0];
+    expect(await readBlobText(pngSource as Blob)).toBe(previewMarkup(dialog));
+    await waitFor(() =>
+      expect(
+        (allowed
+          ? controls.getByRole("status", { name: "Image copy" })
+          : controls.getByRole("alert")
+        ).textContent,
+      ).toBe(
+        allowed
+          ? "Image copied."
+          : "Couldn’t copy. Try again or download the PNG.",
+      ),
+    );
+    expect(button.querySelector('[data-visible="true"]')?.textContent).toBe(
+      allowed ? "Copied" : "Copy image",
+    );
+    expect(button.disabled).toBe(false);
+    expect(downloads).toHaveLength(0);
+  });
+
+  it("shows progress immediately and disables copy until the write settles", async () => {
+    vi.useFakeTimers();
+    mockPngRasterizer();
+    let finishWrite!: () => void;
+    const clipboardWrite = new Promise<void>((resolve) => {
+      finishWrite = resolve;
+    });
+    const write = vi.fn(() => clipboardWrite);
+    mockClipboard(write);
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const controls = within(dialog);
+    const button = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Copy image",
+    });
+    const visibleContent = () => button.querySelector('[data-visible="true"]');
+    const iconWidth = visibleContent()
+      ?.querySelector("svg")
+      ?.getAttribute("width");
+    fireEvent.click(button);
+    expect(visibleContent()?.textContent).toBe("Copy image");
+    expect(
+      visibleContent()
+        ?.querySelector(".lucide-loader-circle")
+        ?.getAttribute("width"),
+    ).toBe(iconWidth);
+    expect(
+      controls.getByRole("status", { name: "Image copy" }).textContent,
+    ).toBe("Copying image…");
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(write).toHaveBeenCalledOnce();
+    clickBackdrop(dialog);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    await act(async () => finishWrite());
+    expect(visibleContent()?.textContent).toBe("Copied");
+    expect(visibleContent()?.querySelector(".lucide-check")).not.toBeNull();
+    expect(button.disabled).toBe(false);
+
+    act(() => vi.advanceTimersByTime(1999));
+    expect(visibleContent()?.textContent).toBe("Copied");
+    act(() => vi.advanceTimersByTime(1));
+    expect(visibleContent()?.textContent).toBe("Copy image");
+    expect(visibleContent()?.querySelector(".lucide-copy")).not.toBeNull();
+  });
+
+  it("prevents overlapping clipboard writes when the export dialog is reopened", async () => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    const write = vi.fn(async ([item]: TestClipboardItem[]) => {
+      await item.data["image/png"];
+    });
+    mockClipboard(write);
+    render(<ProjectActions />);
+    const firstDialog = within(openImageDialog());
+
+    await act(async () => {
+      fireEvent.click(firstDialog.getByRole("button", { name: "Copy image" }));
+    });
+    fireEvent.click(
+      firstDialog.getByRole("button", { name: "Close export dialog" }),
+    );
+
+    const reopened = openImageDialog();
+    const controls = within(reopened);
+    fireEvent.click(controls.getByRole("checkbox", { name: "Wall lengths" }));
+    const copy = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Copy image",
+    });
+    expect(copy.disabled).toBe(true);
+    fireEvent.click(copy);
+    expect(write).toHaveBeenCalledOnce();
+    expect(encode).toHaveBeenCalledOnce();
+
+    const png = new Blob([], { type: "image/png" });
+    const [[finishFirst]] = encode.mock.calls;
+    await act(async () => finishFirst(png));
+    expect(copy.disabled).toBe(false);
+    expect(
+      controls.getByRole("status", { name: "Image copy" }).textContent,
+    ).toBe("");
+
+    await act(async () => {
+      fireEvent.click(copy);
+    });
+    expect(write).toHaveBeenCalledTimes(2);
+    const [svg] = vi.mocked(URL.createObjectURL).mock.calls[1];
+    expect(await readBlobText(svg as Blob)).toBe(previewMarkup(reopened));
+    const [, [finishSecond]] = encode.mock.calls;
+    await act(async () => finishSecond(png));
+    expect(
+      controls.getByRole("status", { name: "Image copy" }).textContent,
+    ).toBe("Image copied.");
+  });
+
+  it("requires the press and click to be outside the dialog bounds", () => {
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const inside = { clientX: 110, clientY: 110 };
+
+    for (const [start, end] of [
+      [inside, inside],
+      [inside, backdropPoint],
+      [backdropPoint, inside],
+    ]) {
+      pressDialog(dialog, start);
+      fireEvent.click(dialog, end);
+      expect(screen.getByRole("dialog")).toBe(dialog);
+    }
+
+    pressDialog(dialog, backdropPoint);
+    fireEvent.pointerCancel(dialog);
+    fireEvent.click(dialog, backdropPoint);
+    expect(screen.getByRole("dialog")).toBe(dialog);
+
+    clickBackdrop(dialog);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it.each([
+    "Close",
+    "Escape",
+  ])("allows %s during PNG preparation", async (action) => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    const controls = within(dialog);
+    const png = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Download PNG",
+    });
+
+    await act(async () => {
+      fireEvent.click(png);
+    });
+    expect(png.disabled).toBe(true);
+
+    if (action === "Escape") {
+      fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    } else {
+      fireEvent.click(
+        controls.getByRole("button", { name: "Close export dialog" }),
+      );
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(new Blob([], { type: "image/png" })));
+    expect(downloads).toHaveLength(1);
+  });
+
+  it("keeps the same light plan preview across editor themes", () => {
+    const { themeMode, setThemeMode } = useApp.getState();
+    try {
+      setThemeMode("dark");
+      render(<ProjectActions />);
+      const darkPreview = openImageDialog();
+      const markup = previewMarkup(darkPreview);
+      const svg = new DOMParser().parseFromString(markup, "image/svg+xml");
+      expect(svg.querySelector("svg > rect")?.getAttribute("fill")).toBe(
+        "#ffffff",
+      );
+      fireEvent.click(
+        within(darkPreview).getByRole("button", {
+          name: "Close export dialog",
+        }),
+      );
+
+      setThemeMode("light");
+      expect(previewMarkup(openImageDialog())).toBe(markup);
+    } finally {
+      setThemeMode(themeMode);
+    }
+  });
+
+  it("blocks editor shortcuts when focus falls back to the document during export", () => {
+    useApp.getState().selectWall("w1");
+    render(
+      <>
+        <ProjectActions />
+        <FloorPlan />
+      </>,
+    );
+    const dialog = openImageDialog();
+    const before = useApp.getState().plan;
+
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(useApp.getState().plan).toBe(before);
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Close export dialog" }),
+    );
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(useApp.getState().plan.walls[0].a.x).toBe(before.meta.gridSize);
+  });
+
+  it.each([
+    "Close",
+    "Escape",
+    "Backdrop",
+  ])("closes with %s and starts with both measurements on next time", (action) => {
+    const state = useApp.getState();
+    state.setMeasurementSystem("imperial");
+    state.selectWall("w1");
+    const before = useApp.getState();
+    const history = localStorage.getItem(HISTORY_STORAGE_KEY);
+    expect(history).not.toBeNull();
+
+    render(<ProjectActions />);
+    const dialog = openImageDialog();
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Wall lengths" }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Room areas" }),
+    );
+
+    if (action === "Escape") {
+      const editorShortcut = vi.fn();
+      window.addEventListener("keydown", editorShortcut, { once: true });
+      try {
+        const button = within(dialog).getByRole("button", {
+          name: "Download PNG",
+        });
+        expect(fireEvent.keyDown(button, { key: "Escape" })).toBe(true);
+        expect(editorShortcut).not.toHaveBeenCalled();
+      } finally {
+        window.removeEventListener("keydown", editorShortcut);
+      }
+      fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    } else if (action === "Backdrop") {
+      clickBackdrop(dialog);
+    } else {
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Close export dialog" }),
+      );
+    }
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(downloads).toHaveLength(0);
+    expect(useApp.getState()).toBe(before);
+    expect(localStorage.getItem(HISTORY_STORAGE_KEY)).toBe(history);
+    const reopened = openImageDialog();
+    expect(
+      within(reopened).getByRole<HTMLInputElement>("checkbox", {
+        name: "Wall lengths",
+      }).checked,
+    ).toBe(true);
+    expect(
+      within(reopened).getByRole<HTMLInputElement>("checkbox", {
+        name: "Room areas",
+      }).checked,
+    ).toBe(true);
   });
 
   it.each([
@@ -133,35 +757,17 @@ describe("ProjectActions — Export menu", () => {
     y,
     limit,
   }) => {
-    const plan = cornerPlan("My Plan!");
+    const plan = roomPlan();
     const label = plan.labels![0];
     plan.labels = [{ ...label, position: { x, y } }];
     useApp.getState().loadPlan(plan);
 
-    const drawImage =
-      vi.fn<
-        (
-          image: HTMLImageElement,
-          x: number,
-          y: number,
-          width: number,
-          height: number,
-        ) => void
-      >();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
-      drawImage,
-    } as unknown as CanvasRenderingContext2D);
-    vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(
-      (callback, type) => callback(new Blob([], { type })),
-    );
-    vi.spyOn(HTMLImageElement.prototype, "src", "set").mockImplementation(
-      function (this: HTMLImageElement) {
-        this.dispatchEvent(new Event("load"));
-      },
-    );
-
+    const drawImage = mockPngRasterizer();
     render(<ProjectActions />);
-    fireEvent.click(openExportMenu()[1]);
+    const dialog = openImageDialog();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Download PNG" }),
+    );
     const expected = buildExportSvg(plan);
     const [svg] = vi.mocked(URL.createObjectURL).mock.calls[0];
     const markup = await readBlobText(svg as Blob);

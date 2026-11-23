@@ -4,9 +4,9 @@ import {
   selectionCount,
 } from "@app/selection";
 import { useApp } from "@app/store";
-import { ICON_SIZE } from "@features/toolbar/constants";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
+import { ICON_SIZE } from "@ui/constants";
 import {
   SquareCenterlineDashedHorizontal,
   SquareCenterlineDashedVertical,

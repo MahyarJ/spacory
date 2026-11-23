@@ -77,10 +77,12 @@ export interface Plan {
   labels?: PlanLabel[];
 }
 
+export const DEFAULT_PLAN_NAME = "Untitled";
+
 export const createInitialPlan = (): Plan => ({
   version: "1.3.0",
   meta: {
-    name: "Untitled",
+    name: DEFAULT_PLAN_NAME,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     measurementSystem: "metric",
