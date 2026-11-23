@@ -18,8 +18,9 @@ be pasted into messages and documents. The clipboard write starts during the
 click and receives the PNG as a promise to preserve Safari's user gesture.
 [WebKit clipboard API discussion](https://bugs.webkit.org/show_bug.cgi?id=222262)
 
-Project actions allow one clipboard write at a time, including across dialog
-sessions. This prevents an older image from overwriting a newer copy.
+Project actions allow one PNG preparation and one clipboard write at a time.
+Progress persists across dialog sessions, preventing duplicate downloads and
+keeping older images from overwriting newer copies.
 
 Copy and PNG feedback stays in the buttons. A loader replaces the action icon
 while each button is disabled, keeping the label and width stable. The loader

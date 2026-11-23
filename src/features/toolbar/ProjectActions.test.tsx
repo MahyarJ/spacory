@@ -286,6 +286,50 @@ describe("ProjectActions — Export menu", () => {
     }
   });
 
+  it("keeps PNG preparation active when the export dialog is reopened", async () => {
+    mockPngRasterizer();
+    const encode = vi
+      .mocked(HTMLCanvasElement.prototype.toBlob)
+      .mockImplementation(() => {});
+    render(<ProjectActions />);
+    const initial = within(openImageDialog());
+
+    await act(async () => {
+      fireEvent.click(initial.getByRole("button", { name: "Download PNG" }));
+    });
+    fireEvent.click(
+      initial.getByRole("button", { name: "Close export dialog" }),
+    );
+
+    const reopened = openImageDialog();
+    const controls = within(reopened);
+    const png = controls.getByRole<HTMLButtonElement>("button", {
+      name: "Download PNG",
+    });
+    expect(png.disabled).toBe(true);
+    expect(png.querySelector(".lucide-loader-circle")).not.toBeNull();
+    expect(
+      controls.getByRole("status", { name: "PNG download" }).textContent,
+    ).toBe("Preparing PNG…");
+
+    fireEvent.click(png);
+    expect(encode).toHaveBeenCalledOnce();
+    clickBackdrop(reopened);
+    expect(screen.getByRole("dialog")).toBe(reopened);
+
+    const [[finishEncoding]] = encode.mock.calls;
+    await act(async () => finishEncoding(new Blob([], { type: "image/png" })));
+    expect(downloads).toHaveLength(1);
+    expect(png.disabled).toBe(false);
+    expect(png.querySelector(".lucide-download")).not.toBeNull();
+    expect(
+      controls.getByRole("status", { name: "PNG download" }).textContent,
+    ).toBe("");
+
+    clickBackdrop(reopened);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("shows PNG failures in the toolbar if the export dialog was dismissed", async () => {
     mockPngRasterizer();
     const encode = vi

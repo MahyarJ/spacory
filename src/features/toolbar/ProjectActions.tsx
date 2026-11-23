@@ -112,6 +112,8 @@ const COPY_CONFIRMATION_MS = 2000;
 function ExportImageDialog({
   plan,
   onClose,
+  preparingPng,
+  onDownloadPng,
   copyBusy,
   onCopy,
   errorMessage,
@@ -119,6 +121,8 @@ function ExportImageDialog({
 }: {
   plan: Plan;
   onClose: () => void;
+  preparingPng: boolean;
+  onDownloadPng: (svg: ExportSvgResult, filename: string) => Promise<void>;
   copyBusy: boolean;
   onCopy: (svg: ExportSvgResult) => Promise<boolean>;
   errorMessage: string;
@@ -126,7 +130,6 @@ function ExportImageDialog({
 }) {
   const [wallLengths, setWallLengths] = useState(true);
   const [roomAreas, setRoomAreas] = useState(true);
-  const [preparingPng, setPreparingPng] = useState(false);
   const [copied, setCopied] = useState(false);
   const exportBusy = preparingPng || copyBusy;
   const PngIcon = preparingPng ? LoaderCircle : Download;
@@ -160,18 +163,6 @@ function ExportImageDialog({
   const canCopyImage =
     typeof ClipboardItem !== "undefined" &&
     typeof navigator.clipboard?.write === "function";
-
-  const downloadPng = async () => {
-    setPreparingPng(true);
-    onErrorChange("");
-    try {
-      downloadBlob(await buildExportPng(svg), `${filename}.png`);
-    } catch {
-      onErrorChange(PNG_ERROR_MESSAGE);
-    } finally {
-      setPreparingPng(false);
-    }
-  };
 
   const copyImage = async () => {
     setCopied(false);
@@ -222,7 +213,7 @@ function ExportImageDialog({
           aria-label="Download PNG"
           title="Download PNG"
           disabled={preparingPng}
-          onClick={downloadPng}
+          onClick={() => onDownloadPng(svg, `${filename}.png`)}
         >
           <PngIcon
             className={preparingPng ? imageStyles.loader : undefined}
@@ -305,8 +296,25 @@ export function ProjectActions() {
   // Export work can finish after the dialog is dismissed. Keep its errors
   // available in the toolbar when there is no open dialog to display them.
   const [exportError, setExportError] = useState("");
+  const pngInFlight = useRef(false);
+  const [preparingPng, setPreparingPng] = useState(false);
   const copyInFlight = useRef(false);
   const [copyBusy, setCopyBusy] = useState(false);
+
+  const downloadPng = async (svg: ExportSvgResult, filename: string) => {
+    if (pngInFlight.current) return;
+    pngInFlight.current = true;
+    setPreparingPng(true);
+    setExportError("");
+    try {
+      downloadBlob(await buildExportPng(svg), filename);
+    } catch {
+      setExportError(PNG_ERROR_MESSAGE);
+    } finally {
+      pngInFlight.current = false;
+      setPreparingPng(false);
+    }
+  };
 
   const copyExportImage = async (svg: ExportSvgResult) => {
     // The clipboard write can finish after the export dialog is dismissed.
@@ -395,6 +403,8 @@ export function ProjectActions() {
             setExportError("");
             setImagePlan(null);
           }}
+          preparingPng={preparingPng}
+          onDownloadPng={downloadPng}
           copyBusy={copyBusy}
           onCopy={copyExportImage}
           errorMessage={exportError}
