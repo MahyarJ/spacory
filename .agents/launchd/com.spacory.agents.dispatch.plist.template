@@ -24,12 +24,12 @@
     <string>__PATH__</string>
   </dict>
 
-  <!-- Recover missed events and interrupted runs. Agent completion and webhook
-       deliveries wake the same dispatcher independently of this schedule. -->
+  <!-- Every 10 minutes while the Mac is awake, recover missed webhook
+       deliveries and interrupted runs from GitHub state. -->
   <key>StartInterval</key>
   <integer>600</integer>
 
-  <!-- Catch up once on load, but don't hammer if the Mac was asleep for a while. -->
+  <!-- Run one recovery check when launchd loads this job. -->
   <key>RunAtLoad</key>
   <true/>
 

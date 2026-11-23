@@ -116,8 +116,11 @@ Use `dispatch.log`, `webhook.log`, and `cycle.log` under `.agents/logs` to diagn
 runs. A healthy signed delivery gets `202` when queued or `204` when irrelevant.
 Restart the receiver with the installer if it is unavailable. Saved wake-ups are
 read at startup. If GitHub missed a delivery while the Mac was asleep, re-deliver
-it in GitHub or run a targeted wake. The periodic check also recovers orphaned
-labels and can continue directly from a published verdict or a pushed revision.
+it in GitHub or run a targeted wake. A tick missed during sleep is skipped. The
+next 10-minute tick while the Mac is awake scans GitHub state for work that needs
+attention. A check also runs when launchd loads the job. Recovery uses in-flight
+labels and checkpoints to continue from a published verdict or pushed revision,
+or retry the interrupted stage if its expected result is missing.
 
 For a scheduler-disabled smoke test, unload just the health-check job with
 `launchctl bootout "gui/$(id -u)/com.spacory.agents.dispatch"`. Apply `agent:ready`
