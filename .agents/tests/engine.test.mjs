@@ -53,6 +53,7 @@ function fixture() {
     assert.ok(source, `missing test utility ${name}`);
     symlinkSync(source, path.join(bin, name));
   }
+  symlinkSync(process.execPath, path.join(bin, "node"));
   const mock = `#!${process.execPath}
 const fs = require('node:fs');
 fs.appendFileSync(process.env.CALLS, JSON.stringify({cli: require('node:path').basename(process.argv[1]), args: process.argv.slice(2), home: process.env.CODEX_HOME, pid: process.pid, ppid: process.ppid}) + '\\n');
@@ -977,3 +978,94 @@ exit "$rc"`,
     f.finish();
   }
 });
+
+for (const provider of ["claude", "codex"]) {
+  test(`${provider} tracks provider usage and resumes only the configured reviewer`, () => {
+    const f = fixture();
+    const session = "951bd111-72e7-489f-a22d-2dcb6bff6cc1";
+    const usage = path.join(f.dir, "usage.jsonl");
+    const events =
+      provider === "claude"
+        ? [
+            {
+              type: "system",
+              subtype: "init",
+              model: "resolved-claude",
+              session_id: session,
+            },
+            {
+              type: "result",
+              result: "review done",
+              session_id: session,
+              usage: {
+                input_tokens: 2,
+                cache_read_input_tokens: 3,
+                cache_creation_input_tokens: 5,
+                output_tokens: 4,
+              },
+            },
+          ]
+        : [
+            { type: "thread.started", thread_id: session },
+            {
+              type: "item.completed",
+              item: { type: "agent_message", text: "review done" },
+            },
+            {
+              type: "turn.completed",
+              usage: {
+                input_tokens: 10,
+                cached_input_tokens: 3,
+                output_tokens: 4,
+              },
+            },
+          ];
+    const result = launch(
+      f,
+      {
+        SPACORY_AGENT_ENGINE: provider,
+        SPACORY_AGENT_MODEL: "configured",
+        SPACORY_AGENT_USAGE_LOG: usage,
+        SPACORY_AGENT_PR: "14",
+        SPACORY_AGENT_RESUME_ID: session,
+        MOCK_STDOUT: events.map((event) => JSON.stringify(event)).join("\n"),
+      },
+      "configure_agent reviewer review",
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "review done\n");
+    const invocation = f.calls().at(-1).args;
+    assert.ok(invocation.includes(session));
+    assert.ok(
+      invocation.includes(provider === "claude" ? "stream-json" : "--json"),
+    );
+    if (provider === "codex")
+      assert.deepEqual(invocation.slice(0, 3), ["exec", "resume", session]);
+    const row = JSON.parse(readFileSync(usage, "utf8"));
+    assert.deepEqual(
+      [
+        row.provider,
+        row.model,
+        row.role,
+        row.session,
+        row.pr,
+        row.input,
+        row.cachedInput,
+        row.output,
+        row.resumed,
+      ],
+      [
+        provider,
+        provider === "claude" ? "resolved-claude" : "configured",
+        "reviewer",
+        session,
+        14,
+        10,
+        3,
+        4,
+        true,
+      ],
+    );
+    assert.equal(typeof row.elapsedSeconds, "number");
+  });
+}

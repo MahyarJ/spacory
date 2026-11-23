@@ -101,7 +101,13 @@ _spacory_stream_agent() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   mkfifo "$capture/stdout.pipe" "$capture/stderr.pipe" || exit 1
-  tee "$capture/stdout" <"$capture/stdout.pipe" >&3 &
+  if [ -n "${SPACORY_AGENT_USAGE_LOG:-}" ]; then
+    # Provider JSONL includes tool payloads. Keep it in the temporary capture;
+    # the usage parser prints the final answer and writes only structured counts.
+    cat <"$capture/stdout.pipe" >"$capture/stdout" &
+  else
+    tee "$capture/stdout" <"$capture/stdout.pipe" >&3 &
+  fi
   stdout_pid=$!
   tee "$capture/stderr" <"$capture/stderr.pipe" >&4 &
   stderr_pid=$!
@@ -135,6 +141,7 @@ launch_agent() {
       *) _spacory_config_error "unsupported Codex permission mapping: $3"; return 1 ;;
     esac
   fi
+  local started="$SECONDS"
   local metadata stream_rc=0 rc result_dir='' worker='' launch_signal=''
   local saved_hup saved_int saved_term saved_signal signal_rc
   if [ "$(spacory_engine)" = codex ]; then
@@ -208,6 +215,11 @@ launch_agent() {
   fi
   eval "$metadata"
   rc="$SPACORY_AGENT_RESULT_EXIT_CODE"
+  if [ -n "${SPACORY_AGENT_USAGE_LOG:-}" ]; then
+    printf '%s' "$SPACORY_AGENT_RESULT_STDOUT" | node "$_SPACORY_ENGINE_DIR/usage.mjs" run \
+      "$SPACORY_AGENT_RESULT_PROVIDER" "$SPACORY_AGENT_RESULT_MODEL" "$SPACORY_AGENT_RESULT_ROLE" \
+      "$SPACORY_AGENT_RESULT_MODE" "$((SECONDS - started))" "$rc" || :
+  fi
   if [ "$rc" -ne 0 ]; then
     SPACORY_AGENT_RESULT_STATUS=execution_error
     local diagnostics

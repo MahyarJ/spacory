@@ -40,7 +40,14 @@ _launch_codex() {
   local full
   full="$(cat "$shim")"$'\n\n'"$_SPACORY_CODEX_CONTRACT"$'\n\n'"$prompt"
 
-  local args=( exec "$full" -C "$PWD" --skip-git-repo-check )
+  local args
+  if [ "$SPACORY_AGENT_ROLE:$SPACORY_AGENT_MODE" = reviewer:review ] && [ -n "${SPACORY_AGENT_RESUME_ID:-}" ]; then
+    # Resume takes the current working directory from the process, without -C.
+    args=( exec resume "$SPACORY_AGENT_RESUME_ID" "$full" --all --skip-git-repo-check )
+  else
+    args=( exec "$full" -C "$PWD" --skip-git-repo-check )
+  fi
+  [ -z "${SPACORY_AGENT_USAGE_LOG:-}" ] || args+=( --json )
   [ -n "${SPACORY_RESOLVED_MODEL:-}" ] && args+=( -m "$SPACORY_RESOLVED_MODEL" )
 
   # Map the Claude permission vocabulary onto Codex sandbox/approval flags. Both

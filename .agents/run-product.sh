@@ -85,6 +85,8 @@ case "${1:-}" in
 esac
 EXTRA="${*:-}"
 
+[ "$MODE" != acceptance ] || export SPACORY_AGENT_PR="$NUM"
+
 ROLE=product
 configure_agent "$ROLE" "$MODE" || exit 1
 require_engine || exit 1
