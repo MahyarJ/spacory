@@ -29,6 +29,8 @@ if [ "${1:-}" = webhook ]; then
   exec node "$SCRIPT_DIR/webhook.mjs"
 fi
 
+export SPACORY_AGENT_USAGE_LOG="${SPACORY_AGENT_USAGE_LOG:-$SCRIPT_DIR/logs/usage.jsonl}"
+
 MAX_ROUNDS="${SPACORY_MAX_ROUNDS:-5}"
 AUTOMERGE="${SPACORY_AUTOMERGE:-0}"
 INFLIGHT_STALE_MINS="${SPACORY_INFLIGHT_STALE_MINS:-120}"
@@ -85,11 +87,12 @@ swap_label() { remove_label "$1" "$2" "$3"; add_label "$1" "$2" "$4"; }
 
 block() {  # $1=issue|pr $2=number $3=reason
   local kind="$1" num="$2" reason="$3"
-  # strip any in-flight/queue labels, mark blocked.
+  # Keep the blocked marker visible throughout cleanup.
+  add_label "$kind" "$num" "agent:blocked"
+  local l
   for l in agent:triage agent:triaging agent:ready agent:implementing agent:review agent:reviewing agent:changes agent:resolving agent:conflict agent:reconciling agent:clarify agent:clarifying; do
     remove_label "$kind" "$num" "$l"
   done
-  add_label "$kind" "$num" "agent:blocked"
   log "BLOCKED $kind #$num — $reason"
   notify "🚧 Spacory agents: $kind #$num blocked — $reason. Needs a human."
 }
@@ -338,7 +341,6 @@ maybe_merge() {  # $1=pr — only if the human opted in AND CI is green
   # and is re-checked next tick.
   if [ "$(pr_mergeable "$pr")" = CONFLICTING ]; then
     move_pr "$pr" conflict
-    PR_STAGE=conflict
     log "⚠︎ accepted PR #$pr conflicts with main → agent:conflict (reconcile before merge)"
     notify "🔀 Spacory agents: accepted PR #$pr conflicts with main — reconciling before merge."
     return
@@ -354,7 +356,6 @@ maybe_merge() {  # $1=pr — only if the human opted in AND CI is green
   # quiets. See AUTOMATION.md.)
   if pr_behind_main "$pr"; then
     move_pr "$pr" conflict
-    PR_STAGE=conflict
     log "⚠︎ accepted PR #$pr is behind main → agent:conflict (reconcile so CI validates the merge)"
     notify "🔀 Spacory agents: accepted PR #$pr is behind main — reconciling so CI validates the merged result before merge."
     return
@@ -487,7 +488,7 @@ prune_stale_worktrees() {
   git worktree prune 2>/dev/null || true
   [ -d "$SPACORY_WORKTREE_BASE" ] || return 0
   local d
-  for d in "$SPACORY_WORKTREE_BASE"/run-*; do
+  for d in "$SPACORY_WORKTREE_BASE"/run-* "$SPACORY_WORKTREE_BASE"/review-pr-*; do
     [ -d "$d" ] || continue
     if [ -n "$(find "$d" -maxdepth 0 -mmin +"$INFLIGHT_STALE_MINS" 2>/dev/null)" ]; then
       log "↩︎ pruning stale agent worktree ${d##*/} (>${INFLIGHT_STALE_MINS}m old)"

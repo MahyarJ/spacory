@@ -10,7 +10,7 @@ read_pr() {
   state="$(node "$SCRIPT_DIR/pr-state.mjs" read "$1")" || return
   IFS='|' read -r PR_STAGE PR_HEAD PR_BASE PR_ELIGIBLE PR_ENGINEER PR_PRODUCT \
     PR_ENGINEER_ID PR_PREVIOUS_HEAD PR_PREVIOUS_ID PR_CHANGE_HEAD PR_RESOLVE_HEAD \
-    PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFIED PR_ACTIVE_CLARIFICATION PR_CLARIFY_REPLIES <<<"$state"
+    PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFIED PR_ACTIVE_CLARIFICATION PR_CLARIFY_REPLIES PR_EXTRA_LABELS <<<"$state"
 }
 
 checkpoint() {
@@ -20,20 +20,33 @@ checkpoint() {
 move_pr() {  # PR, destination stage (PR_STAGE is the live source stage)
   local pr="$1" next="$2"
   [ "$PR_STAGE" != "$next" ] || return 0
+  # Keep at least one label during the transition so health checks can find it.
+  add_label pr "$pr" "agent:$next"
   if [ -n "$PR_STAGE" ]; then
-    gh pr edit "$pr" --add-label "agent:$next" --remove-label "agent:$PR_STAGE" >/dev/null
-  else
-    add_label pr "$pr" "agent:$next"
+    gh pr edit "$pr" --remove-label "agent:$PR_STAGE" >/dev/null
   fi
+  PR_STAGE="$next"
   log "  PR #$pr → agent:$next"
 }
 
+reviewer_session() {
+  (
+    source "$SCRIPT_DIR/engine.sh"
+    configure_agent reviewer review
+    node "$SCRIPT_DIR/usage.mjs" session "$1" "$2" "$(spacory_engine)" "$SPACORY_RESOLVED_MODEL"
+  )
+}
+
 run_pr_verdict() {  # PR, review | acceptance
-  local pr="$1" mode="$2" head="$PR_HEAD" attempt=1 rc=0 verdict='none' live
+  local pr="$1" mode="$2" head="$PR_HEAD" attempt=1 rc=0 verdict='none' live resume='' previous=''
   local context="Review the pinned head $head against base $PR_BASE. Use git fetch origin refs/pull/$pr/head and inspect $PR_BASE...$head. If the pinned commit is unavailable, stop without posting a verdict. Include exactly '**Head:** $head' in the verdict comment."
   if [ "$mode" = acceptance ]; then
     context="$context Engineer's approval and evidence for this revision are in comment $PR_ENGINEER_ID (gh api repos/:owner/:repo/issues/comments/$PR_ENGINEER_ID). Walk the user workflow and reference that evidence where applicable."
   elif [ -n "$PR_PREVIOUS_HEAD" ] && [ "$PR_PREVIOUS_HEAD" != "$head" ]; then
+    previous="$PR_PREVIOUS_HEAD"
+    if [ "${SPACORY_REVIEWER_RESUME:-0}" = 1 ]; then
+      resume="$(reviewer_session "$pr" "$previous")" || resume=''
+    fi
     context="$context This is a re-review. Previous head: $PR_PREVIOUS_HEAD. Inspect the changes between those SHAs, outstanding blocking findings from comment $PR_PREVIOUS_ID (gh api repos/:owner/:repo/issues/comments/$PR_PREVIOUS_ID), and regressions introduced by the fix. If the previous revision cannot be compared safely, review the full PR."
   else
     context="$context Review the full PR."
@@ -45,14 +58,20 @@ run_pr_verdict() {  # PR, review | acceptance
     [ "$live" = "$head" ] || return 0
     rc=0
     if [ "$mode" = review ]; then
-      run_engineer review "$pr" "$context" || rc=$?
+      SPACORY_AGENT_HEAD="$head" SPACORY_AGENT_PREVIOUS_HEAD="$previous" SPACORY_AGENT_RESUME_ID="$resume" \
+        run_engineer review "$pr" "$context" || rc=$?
     else
-      run_product acceptance "$pr" "$context" || rc=$?
+      SPACORY_AGENT_HEAD="$head" run_product acceptance "$pr" "$context" || rc=$?
     fi
     read_pr "$pr"
     [ "$PR_ELIGIBLE" = true ] && [ "$PR_HEAD" = "$head" ] && [ "$PR_STAGE" = reviewing ] || return 0
     if [ "$mode" = review ]; then verdict="$PR_ENGINEER"; else verdict="$PR_PRODUCT"; fi
     [ "$verdict" = none ] || return 0
+    if [ -n "$resume" ]; then
+      log "  reviewer session produced no verdict; starting a fresh review of PR #$pr."
+      resume=''
+      continue
+    fi
     if [ "$rc" -eq 0 ] || [ "$attempt" -gt "$AGENT_RETRIES" ]; then
       block pr "$pr" "$mode did not publish a verdict for $head (exit $rc)"
       return 0
@@ -78,7 +97,7 @@ run_pr_push() {  # PR, resolve | reconcile
     after="$(pr_head_sha "$pr")"
     [ "$after" = "$head" ] || break
     rc=0
-    run_engineer "$mode" "$pr" "Start from PR head $head. If the remote head has moved before checkout, stop and let the dispatcher re-evaluate it." || rc=$?
+    SPACORY_AGENT_HEAD="$head" run_engineer "$mode" "$pr" "Start from PR head $head. If the remote head has moved before checkout, stop and let the dispatcher re-evaluate it." || rc=$?
     after="$(pr_head_sha "$pr")"
     [ "$after" = "$head" ] || break
     if [ "$rc" -eq 0 ] || [ "$attempt" -gt "$AGENT_RETRIES" ]; then
@@ -105,7 +124,7 @@ run_pr_clarification() {
     [ "$role" = "$lane" ] || [ "$role" = both ] || continue
     case ",$PR_CLARIFY_REPLIES," in *",$lane,"*) continue ;; esac
     rc=0
-    "run_$lane" clarify "$pr" "$detail" || rc=$?
+    SPACORY_AGENT_PR="$pr" SPACORY_AGENT_HEAD="$head" "run_$lane" clarify "$pr" "$detail" || rc=$?
     [ "$lane" != product ] || commit_memory
     read_pr "$pr"
     [ "$PR_STAGE" = clarifying ] || return 0
@@ -143,6 +162,9 @@ drive_pr() {
     transition=$((transition + 1))
     read_pr "$pr"
     [ "$PR_ELIGIBLE" = true ] || return 0
+    if [ "$PR_STAGE" != blocked ] && [ -n "$PR_EXTRA_LABELS" ]; then
+      gh pr edit "$pr" --remove-label "$PR_EXTRA_LABELS" >/dev/null
+    fi
     case "$PR_STAGE" in
       '')
         [ "$intake" -eq 1 ] || return 0
@@ -196,6 +218,7 @@ drive_pr() {
           run_pr_verdict "$pr" acceptance
         else
           move_pr "$pr" accepted
+          node "$SCRIPT_DIR/usage.mjs" accepted "$pr" "$PR_HEAD" || true
           announce=1
         fi
         ;;
@@ -204,7 +227,8 @@ drive_pr() {
           move_pr "$pr" review
         else
           maybe_merge "$pr" "$PR_HEAD" "$announce"
-          if [ "$(pr_head_sha "$pr")" != "$PR_HEAD" ] || [ "$PR_STAGE" = conflict ]; then
+          live="$(pr_head_sha "$pr")"
+          if [ "$live" != "$PR_HEAD" ] || [ "$PR_STAGE" = conflict ]; then
             announce=0
             continue
           fi

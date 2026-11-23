@@ -149,7 +149,16 @@ case "$MODE" in
     echo "→ Product Agent  [triage] #$NUM  (permission-mode: $PERMISSION_MODE)" >&2
     ;;
   *)
-    TASK="Run a product cycle for this repo."
+    inventory="$(mktemp "${TMPDIR:-/tmp}/spacory-product-inventory.XXXXXX")"
+    trap 'rm -f "$inventory"' EXIT
+    fields=number,title,labels,url,state,closedAt
+    {
+      printf 'Open issues (JSON array)\n'
+      gh issue list --state open --limit 1000 --json "$fields"
+      printf '\nRecently closed issues (JSON array)\n'
+      gh issue list --state closed --limit 30 --json "$fields"
+    } >"$inventory"
+    TASK="Run a product cycle for this repo. The runner fetched the open and recently closed issues into $inventory. Read that file for intake and use gh issue view for any issue that needs more detail."
     [ -n "$EXTRA" ] && TASK="$TASK Additional focus for this run: $EXTRA"
     echo "→ Product Agent  [cycle]  (permission-mode: $PERMISSION_MODE)" >&2
     ;;

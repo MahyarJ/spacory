@@ -11,6 +11,18 @@ const actions = new Set([
   "clarify",
   "clarified",
 ]);
+const stages = new Set([
+  "agent:blocked",
+  "agent:clarify",
+  "agent:clarifying",
+  "agent:conflict",
+  "agent:reconciling",
+  "agent:changes",
+  "agent:resolving",
+  "agent:review",
+  "agent:reviewing",
+  "agent:accepted",
+]);
 const sha = /^[0-9a-f]{40}$/;
 const requestId = /^(?:comment|inline)-[0-9]+$/;
 const maintainer = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
@@ -49,7 +61,7 @@ function verdictFrom(body) {
   const head = body.match(/^\*\*Head:\*\* ([a-f0-9]{40})[ \t]*$/m)?.[1];
   const result = body
     .match(
-      /^\*\*Verdict:\*\* (accepted pending non-code fixes|approve pending non-code fixes|changes requested|accepted|approve)(?=\s|$)/im,
+      /^\*\*Verdict:\*\* (accepted pending non-code fix(?:es)?|approve pending non-code fix(?:es)?|changes requested|accepted|approve)(?=[ \t]*(?:[—–:-]|\.?[ \t]*$))/im,
     )?.[1]
     .toLowerCase();
   if (!head || !result) return;
@@ -79,7 +91,13 @@ function clarificationRequest(comment, inline, command) {
   return "both";
 }
 
-export function prState(pr, comments, inlineComments, actor) {
+export function prState(
+  pr,
+  comments,
+  inlineComments,
+  actor,
+  labelHistory = [],
+) {
   const result = {};
   const started = {};
   const handled = new Set();
@@ -159,20 +177,16 @@ export function prState(pr, comments, inlineComments, actor) {
       }
     }
   }
-  const labels = new Set(pr.labels.map(({ name }) => name));
-  const stage =
-    [
-      "blocked",
-      "clarify",
-      "clarifying",
-      "conflict",
-      "reconciling",
-      "changes",
-      "resolving",
-      "review",
-      "reviewing",
-      "accepted",
-    ].find((name) => labels.has(`agent:${name}`)) ?? "";
+  const labels = pipelineLabels(pr);
+  // Outgoing and incoming labels can coexist if a process died during a swap.
+  // Use the most recently applied active label to recover the intended stage.
+  const active = labels.includes("agent:blocked")
+    ? "agent:blocked"
+    : (labelHistory.findLast(
+        (entry) =>
+          entry.event === "labeled" && labels.includes(entry.label?.name),
+      )?.label.name ?? labels[0]);
+  const stage = active?.slice(6) ?? "";
   return {
     stage,
     head: pr.headRefOid,
@@ -191,18 +205,16 @@ export function prState(pr, comments, inlineComments, actor) {
     clarifyDone: Boolean(started.clarified && !started.clarify),
     activeClarification: started.clarify?.requests.join(",") ?? "",
     clarifyReplies: [...clarifyReplies].join(","),
+    extraLabels: labels.filter((label) => label !== active).join(","),
   };
 }
 
-function commentsFor(kind, number) {
-  return JSON.parse(
-    gh(
-      "api",
-      `repos/:owner/:repo/${kind}/${number}/comments`,
-      "--paginate",
-      "--slurp",
-    ),
-  ).flat();
+function pipelineLabels(pr) {
+  return pr.labels.map(({ name }) => name).filter((name) => stages.has(name));
+}
+
+function paginated(endpoint) {
+  return JSON.parse(gh("api", endpoint, "--paginate", "--slurp")).flat();
 }
 
 function main([command, number, action, head, requests = ""]) {
@@ -239,15 +251,23 @@ function main([command, number, action, head, requests = ""]) {
     throw new Error("Missing PR head or base SHA");
   const active = pr.state === "OPEN" && !pr.isDraft && !pr.isCrossRepository;
   const actor = active ? gh("api", "user", "--jq", ".id").trim() : "";
-  const comments = active ? commentsFor("issues", number) : [];
+  const comments = active
+    ? paginated(`repos/:owner/:repo/issues/${number}/comments`)
+    : [];
   const inline =
     active &&
     pr.labels.some(({ name }) =>
       ["agent:clarify", "agent:clarifying"].includes(name),
     )
-      ? commentsFor("pulls", number)
+      ? paginated(`repos/:owner/:repo/pulls/${number}/comments`)
       : [];
-  console.log(Object.values(prState(pr, comments, inline, actor)).join("|"));
+  const labelHistory =
+    active && pipelineLabels(pr).length > 1
+      ? paginated(`repos/:owner/:repo/issues/${number}/timeline`)
+      : [];
+  console.log(
+    Object.values(prState(pr, comments, inline, actor, labelHistory)).join("|"),
+  );
 }
 
 if (

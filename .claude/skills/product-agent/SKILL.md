@@ -145,10 +145,11 @@ the memory file and read selectively.
 
 ### Step 2 — Check what already exists
 
-List open issues (`gh issue list --state open`) and recently closed ones
-(`gh issue list --state closed --limit 30`) so you don't create duplicates or
-re-propose work already done or in flight. If an existing issue covers the area,
-skip or refine it rather than duplicating.
+Use the open and recently closed issue inventory supplied by the headless runner.
+Read individual issue bodies when needed to assess overlap. In a manual session,
+list open issues (`gh issue list --state open --limit 1000`) and recently closed
+ones (`gh issue list --state closed --limit 30`). Skip or refine issues that
+already cover the area, including shipped and in-flight work.
 
 While reconciling, also sanity-check that **`README.md` still matches shipped
 reality** — its user-facing feature list and its "Not yet" section. The README is

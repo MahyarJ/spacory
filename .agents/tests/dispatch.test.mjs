@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -43,7 +44,9 @@ function mock() {
       if (verb === "user") output(42);
       else if (verb.endsWith("/comments"))
         output([verb.includes("/pulls/") ? [] : state.comments]);
-      else if (verb.includes("/compare/")) output(0);
+      else if (verb.includes("/compare/")) output(state.behind ?? 0);
+      else if (verb.endsWith("/timeline") && args.includes("--slurp"))
+        output([state.timeline ?? []]);
       else if (!verb.endsWith("/timeline")) throw new Error(args.join(" "));
       return;
     }
@@ -65,6 +68,7 @@ function mock() {
       } else if (fields === "headRefOid") output(state.head);
       else if (fields === "headRefName") output("branch");
       else if (fields === "mergeable") output("MERGEABLE");
+      else if (fields === "statusCheckRollup") output(state.ci ?? "PASS");
       else if (fields === "body") output(12);
       else if (fields === "comments")
         output(
@@ -88,13 +92,17 @@ function mock() {
       const key = kind === "pr" ? "labels" : "issueLabels";
       if (args.includes("--remove-label"))
         state[key] = state[key].filter(
-          (label) => label !== arg("--remove-label"),
+          (label) => !arg("--remove-label").split(",").includes(label),
         );
       if (
         args.includes("--add-label") &&
         !state[key].includes(arg("--add-label"))
       )
         state[key].push(arg("--add-label"));
+      return save();
+    }
+    if (verb === "merge") {
+      state.merges.push(arg("--match-head-commit"));
       return save();
     }
     if (verb === "comment" && number === "34") {
@@ -105,14 +113,21 @@ function mock() {
   }
   if (command === "git" || command === "notify") return;
   const [mode, , context] = args;
-  state.calls.push({ mode, agent: command, head: state.head, context });
+  state.calls.push({
+    mode,
+    agent: command,
+    head: state.head,
+    context,
+    resume: process.env.SPACORY_AGENT_RESUME_ID || null,
+  });
   const entry = state.answers.shift() ?? {};
   if (entry.mode && entry.mode !== mode)
     throw new Error(`expected ${entry.mode}, got ${mode}`);
   const current = state.head;
   if (mode === "implement") state.exists = true;
+  if (mode === "reconcile" && entry.push) state.behind = 0;
   if (entry.push) state.head = entry.push.repeat(40);
-  if (mode === "review" || mode === "acceptance") {
+  if (!entry.noVerdict && (mode === "review" || mode === "acceptance")) {
     const role = mode === "review" ? "Engineer review" : "Product acceptance";
     const verdict =
       entry.verdict ?? (mode === "review" ? "approve" : "accepted");
@@ -125,16 +140,32 @@ function mock() {
       `**${command === "engineer" ? "Engineer" : "Product"} clarification**\nSummary`,
     );
   save();
+  process.exitCode = entry.exit ?? 0;
 }
 
-function fixture(t, overrides = {}) {
+function fixture(t, overrides = {}, options = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), "spacory-dispatch-test-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const dir = path.join(root, ".agents");
   const bin = path.join(root, "bin");
   mkdirSync(dir);
   mkdirSync(bin);
-  for (const filename of ["dispatch.sh", "pr-dispatch.sh", "pr-state.mjs"]) {
+  mkdirSync(path.join(dir, "logs"));
+  copyFileSync(path.join(scripts, "engine.sh"), path.join(dir, "engine.sh"));
+  cpSync(path.join(scripts, "providers"), path.join(dir, "providers"), {
+    recursive: true,
+  });
+  if (options.usage)
+    writeFileSync(
+      path.join(dir, "logs", "usage.jsonl"),
+      `${JSON.stringify(options.usage)}\n`,
+    );
+  for (const filename of [
+    "dispatch.sh",
+    "pr-dispatch.sh",
+    "pr-state.mjs",
+    "usage.mjs",
+  ]) {
     copyFileSync(path.join(scripts, filename), path.join(dir, filename));
   }
   const mockFile = path.join(root, "mock.cjs");
@@ -163,6 +194,7 @@ function fixture(t, overrides = {}) {
     comments: [],
     calls: [],
     answers: [],
+    merges: [],
     ...overrides,
   });
   return {
@@ -178,7 +210,8 @@ function fixture(t, overrides = {}) {
           SPACORY_DISPATCH_LOCK: path.join(root, "dispatch.lock"),
           SPACORY_AGENT_RETRIES: "0",
           SPACORY_MAX_ROUNDS: "5",
-          SPACORY_AUTOMERGE: "0",
+          SPACORY_AUTOMERGE: options.automerge ? "1" : "0",
+          SPACORY_REVIEWER_RESUME: options.usage ? "1" : "0",
         },
         encoding: "utf8",
         timeout: 30000,
@@ -343,4 +376,89 @@ test("conditional approval can clarify an artifact without a human comment", (t)
   assert.deepEqual(calls(state), ["review", "clarify", "review", "acceptance"]);
   assert.equal(state.calls[1].agent, "engineer");
   assert.deepEqual(state.labels, ["agent:accepted"]);
+});
+
+test("an unavailable reviewer session falls back to a fresh pass for the same head", (t) => {
+  const session = "951bd111-72e7-489f-a22d-2dcb6bff6cc1";
+  const f = fixture(
+    t,
+    {
+      head: sha("b"),
+      labels: ["agent:resolving"],
+      comments: [
+        comment(100, marker("review", sha("a"))),
+        comment(
+          101,
+          `**Engineer review**\n**Head:** ${sha("a")}\n**Verdict:** changes requested`,
+        ),
+        comment(102, marker("resolve", sha("a"))),
+      ],
+      answers: [{ mode: "review", noVerdict: true, exit: 1 }],
+    },
+    {
+      usage: {
+        event: "run",
+        role: "reviewer",
+        mode: "review",
+        pr: 34,
+        head: sha("a"),
+        provider: "claude",
+        configuredModel: null,
+        exitCode: 0,
+        session,
+      },
+    },
+  );
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(state), ["review", "review", "acceptance"]);
+  assert.deepEqual(
+    state.calls.map((call) => call.resume),
+    [session, null, null],
+  );
+  assert.ok(state.calls[1].context.includes("comment 101"));
+});
+
+test("recovery picks up the newest live label after an interrupted label swap", (t) => {
+  const f = fixture(t, {
+    head: sha("b"),
+    labels: ["agent:resolving", "agent:review"],
+    timeline: [
+      { event: "labeled", label: { name: "agent:resolving" } },
+      { event: "labeled", label: { name: "agent:review" } },
+    ],
+    comments: [comment(100, marker("resolve", sha("a")))],
+  });
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(state), ["review", "acceptance"]);
+  assert.deepEqual(state.labels, ["agent:accepted"]);
+});
+
+test("merge waits for green CI and pins the approved head", (t) => {
+  const f = fixture(t, { ci: "PENDING" }, { automerge: true });
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(state.labels, ["agent:accepted"]);
+  assert.deepEqual(state.merges, []);
+  state.ci = "PASS";
+  f.set(state);
+  assert.deepEqual(f.dispatch("wake", "pr", "34").merges, [sha("a")]);
+});
+
+test("a stale base reconciles and requires approvals for the new head", (t) => {
+  const f = fixture(t, {
+    behind: 1,
+    answers: [
+      { mode: "review" },
+      { mode: "acceptance" },
+      { mode: "reconcile", push: "b" },
+    ],
+  });
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(state), [
+    "review",
+    "acceptance",
+    "reconcile",
+    "review",
+    "acceptance",
+  ]);
+  assert.equal(state.calls.at(-1).head, sha("b"));
 });
