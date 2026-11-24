@@ -24,12 +24,12 @@
     <string>__PATH__</string>
   </dict>
 
-  <!-- Drive one pipeline action every 10 minutes. dispatch.sh self-guards against
-       overlap, so a run that outlasts the interval simply causes the next to skip. -->
+  <!-- Every 10 minutes while the Mac is awake, recover missed webhook
+       deliveries and interrupted runs from GitHub state. -->
   <key>StartInterval</key>
   <integer>600</integer>
 
-  <!-- Catch up once on load, but don't hammer if the Mac was asleep for a while. -->
+  <!-- Run one recovery check when launchd loads this job. -->
   <key>RunAtLoad</key>
   <true/>
 

@@ -90,6 +90,10 @@ esac
 shift
 EXTRA="${*:-}"
 
+case "$MODE" in
+  review|resolve|reconcile) export SPACORY_AGENT_PR="$NUM" ;;
+esac
+
 ROLE=engineer
 [ "$MODE" != review ] || ROLE=reviewer
 configure_agent "$ROLE" "$MODE" || exit 1
@@ -112,6 +116,16 @@ if [ -z "${SPACORY_AGENT_ISOLATED:-}" ]; then
     || { echo "error: git fetch failed; cannot isolate the run" >&2; exit 1; }
   mkdir -p "$SPACORY_WORKTREE_BASE"
   WORKTREE="$SPACORY_WORKTREE_BASE/run-$$-${RANDOM}"
+  if [ "$MODE" = review ] && [ "${SPACORY_REVIEWER_RESUME:-0}" = 1 ] && [ -n "${SPACORY_AGENT_HEAD:-}" ]; then
+    # Use the same isolated path each round so provider project-scoped sessions
+    # can be reopened by ID. Remove the worktree after every round as usual.
+    resume_tree="$SPACORY_WORKTREE_BASE/review-pr-$NUM"
+    if [ ! -e "$resume_tree" ]; then
+      WORKTREE="$resume_tree"
+    else
+      unset SPACORY_AGENT_RESUME_ID
+    fi
+  fi
   git -C "$REPO_ROOT" worktree add --detach --quiet "$WORKTREE" origin/main \
     || { echo "error: git worktree add failed ($WORKTREE)" >&2; exit 1; }
   # Reuse the caller's installed deps so the verify gate runs without npm install.

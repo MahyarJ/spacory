@@ -1,14 +1,15 @@
 # Spacory Agents
 
 A lightweight **two-agent development workflow**. Two agents collaborate
-asynchronously through **GitHub** (Issues and PR comments) — they never share a session,
-never depend on each other being "live," and are each spun up fresh per run.
+asynchronously through **GitHub** (Issues and PR comments) and start a new process
+for each run. They each have their own sessions. The dispatcher can pilot resuming an Engineer
+reviewer session for one PR.
 
 There are exactly **two roles**, each exercised in more than one *capacity*. A PR
 reviewer who leaves comments is the **Engineer Agent** (review capacity); the one who
 addresses those comments is the **Engineer Agent** (resolve capacity); the one who
 acceptance-tests in the product voice is the **Product Agent** (acceptance capacity). No
-new agent "types" are invented — same two roles, different modes, each a fresh headless
+new agent "types" are invented — same two roles, different modes, each a separate headless
 run coordinating through GitHub. `REVIEWER` is an independent configuration name
 for the existing Engineer review capacity, not an additional pipeline stage.
 
@@ -101,31 +102,23 @@ scope) — landing it in the backlog just like a `cycle`-created issue — or
 backlog until **you** promote it with `agent:ready` — triage never pushes work into
 the build loop on its own.
 
-### Reviewing a PR: fan out, then resolve manually
+### Reviewing a PR
 
-When a PR is open, fan out the two **independent, read-only** review passes — they share
-nothing and post separate PR comments, so run them in parallel:
+The dispatcher runs Engineer review first. A request for changes goes through
+Resolve and Engineer re-review. Product acceptance starts after Engineer approves
+the current head. Both verdicts identify the revision assessed.
 
-```bash
-.agents/run-engineer.sh review 14 &     # Engineer: code review comment
-.agents/run-product.sh  acceptance 14 &  # Product: acceptance comment
-wait
-```
-
-Then **you** read the comments and, if there's anything to fix, re-run the Engineer
-Agent in resolve mode on that PR — a fresh, stateless run whose spec is the PR's
-comments:
+To drive the loop manually, run Engineer review. Run Product acceptance after
+Engineer approves the current head.
 
 ```bash
-.agents/run-engineer.sh resolve 14       # addresses the comments, pushes to the branch
+.agents/run-engineer.sh review 14
+.agents/run-product.sh acceptance 14
 ```
 
-You can drive every step manually like this — each is a fresh headless run that
-coordinates only through GitHub — **or** hand the whole loop to the optional,
-label-driven dispatcher (`dispatch.sh`), which derives the next action from the
-`agent:*` labels and fires the matching run on a timer. See
-[`../docs/AUTOMATION.md`](../docs/AUTOMATION.md). Either way, merging stays a human
-action.
+If either pass requests code changes, run `.agents/run-engineer.sh resolve 14`
+and return the new revision to Engineer review. For event-driven operation and
+scheduled recovery, see [the automation runbook](../docs/AUTOMATION.md).
 
 ## How to invoke
 
@@ -180,7 +173,7 @@ resets the review-round budget, refining a spec this way never trips the loop's
 non-convergence cap. See [`../docs/AUTOMATION.md`](../docs/AUTOMATION.md).
 
 Each runner validates its input, runs from the repository root, and starts one
-fresh headless session. The task retains the `/<role>-agent <mode> [number]` line.
+headless session. The task retains the `/<role>-agent <mode> [number]` line.
 For Claude, the adapter preserves `-p`, `--append-system-prompt-file`, and
 `--permission-mode`, plus optional `--model` and `--effort`. For Codex, the adapter
 passes the role shim, validated canonical contracts, and task directly to

@@ -76,12 +76,8 @@ Do **not** add AI/Claude attribution to commits or PRs:
   The runners are **engine-pluggable** via `SPACORY_AGENT_ENGINE` (`claude` |
   `codex`) — the CLI-specific launch is factored into `.agents/engine.sh`, and
   Codex reads `AGENTS.md` (a pointer to this file). See `.agents/README.md`.
-- The agent loop can be **orchestrated on a timer**: `.agents/dispatch.sh` is a
-  stateless dispatcher over `agent:*` GitHub labels (triage → implement →
-  review+accept → resolve → merge, plus `agent:clarify` for mid-flight spec
-  refinement and `agent:conflict`/`reconcile` when a branch conflicts with `main`),
-  installed via launchd (`.agents/launchd/install.sh`). Label a rough
-  idea issue `agent:triage` to have the Product Agent groom it into a spec, or an
-  in-flight issue/PR `agent:clarify` to have it answer a question and fold the
-  decision back into the ticket. See [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
+- `.agents/dispatch.sh` advances the agent loop after each verified result.
+  Engineer reviews the current PR head before Product acceptance. GitHub webhooks
+  wake the dispatcher on eligible external changes. launchd on macOS or systemd
+  on Linux runs the recovery check and the separate daily Product cycle. See [`docs/AUTOMATION.md`](docs/AUTOMATION.md).
 - Generated `*.module.css.d.ts` are gitignored.

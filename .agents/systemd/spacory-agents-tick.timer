@@ -1,0 +1,10 @@
+[Unit]
+Description=Recover missed Spacory agent work every 10 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/10:00
+Persistent=true
+Unit=spacory-agents@tick.service
+
+[Install]
+WantedBy=timers.target

@@ -145,10 +145,11 @@ the memory file and read selectively.
 
 ### Step 2 — Check what already exists
 
-List open issues (`gh issue list --state open`) and recently closed ones
-(`gh issue list --state closed --limit 30`) so you don't create duplicates or
-re-propose work already done or in flight. If an existing issue covers the area,
-skip or refine it rather than duplicating.
+Use the open and recently closed issue inventory supplied by the headless runner.
+Read individual issue bodies when needed to assess overlap. In a manual session,
+list open issues (`gh issue list --state open --limit 1000`) and recently closed
+ones (`gh issue list --state closed --limit 30`). Skip or refine issues that
+already cover the area, including shipped and in-flight work.
 
 While reconciling, also sanity-check that **`README.md` still matches shipped
 reality** — its user-facing feature list and its "Not yet" section. The README is
@@ -272,6 +273,13 @@ You are given **one PR number**. Judge whether the delivered change actually
 creates the user value the issue promised. You do **not** change code, create
 issues, or modify `project-memory.md` in this mode.
 
+When the runner provides a pinned head and base, inspect that exact revision with
+Git. A live `gh pr diff` or a branch checkout may follow a later push. Use the
+pinned SHA verbatim on the `**Head:**` line in the verdict. In a manual pass,
+resolve the PR head with `gh pr view --json headRefOid -q .headRefOid` before
+reviewing and use that SHA. If the intended revision cannot be inspected, stop
+without publishing a verdict for it.
+
 ### Step 1 — Read the change against its promise
 
 ```bash
@@ -285,6 +293,10 @@ gh api repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments \
 
 You **may** read `project-memory.md` for product context but **do not modify it**
 in this mode. Read source/UI files as needed to judge the user-visible result.
+
+When the runner provides Engineer's approval, read its evidence before walking the
+issue's user workflow. Cite it for findings it already covers, and independently
+verify the user-facing criteria and behavior.
 
 ### Step 2 — Walk the acceptance criteria, in the product voice
 
@@ -325,6 +337,11 @@ to the Engineer Agent's review — don't duplicate them.
 
 ### Step 3 — Post one acceptance comment
 
+For a conditional verdict, add a separate `**Clarify:** engineer`,
+`**Clarify:** product`, or `**Clarify:** both` line before the verdict. Engineer
+handles PR title and description edits. Product handles changes to the linked spec.
+Omit this line for other verdicts.
+
 ```bash
 gh pr comment <PR_NUMBER> --body "🪐 **Product acceptance**
 
@@ -332,6 +349,8 @@ gh pr comment <PR_NUMBER> --body "🪐 **Product acceptance**
 
 **Needs attention** (omit this whole section when nothing is outstanding)
 - <an unmet criterion, a criterion the code deliberately deviated from, a UX/scope concern, or a non-code artifact to fix — with why it matters>
+
+**Head:** <40-character SHA reviewed>
 
 **Verdict:** <accepted / changes requested / accepted pending non-code fixes> — <one-line rationale>"
 ```

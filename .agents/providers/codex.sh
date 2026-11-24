@@ -40,7 +40,17 @@ _launch_codex() {
   local full
   full="$(cat "$shim")"$'\n\n'"$_SPACORY_CODEX_CONTRACT"$'\n\n'"$prompt"
 
-  local args=( exec "$full" -C "$PWD" --skip-git-repo-check )
+  local args resume="${SPACORY_AGENT_RESUME_ID:-}"
+  [ "$SPACORY_AGENT_ROLE:$SPACORY_AGENT_MODE" = reviewer:review ] || resume=''
+  if [ -n "$resume" ]; then
+    # --sandbox belongs to exec, while resume uses the current directory.
+    args=( exec )
+    [ "$mode" != acceptEdits ] || args+=( --sandbox workspace-write )
+    args+=( resume "$resume" "$full" --all --skip-git-repo-check )
+  else
+    args=( exec "$full" -C "$PWD" --skip-git-repo-check )
+  fi
+  [ -z "${SPACORY_AGENT_USAGE_LOG:-}" ] || args+=( --json )
   [ -n "${SPACORY_RESOLVED_MODEL:-}" ] && args+=( -m "$SPACORY_RESOLVED_MODEL" )
 
   # Map the Claude permission vocabulary onto Codex sandbox/approval flags. Both
@@ -50,8 +60,8 @@ _launch_codex() {
     bypassPermissions)
       args+=( --dangerously-bypass-approvals-and-sandbox ) ;;
     acceptEdits)
-      args+=( --sandbox workspace-write
-              -c approval_policy="never"
+      [ -n "$resume" ] || args+=( --sandbox workspace-write )
+      args+=( -c approval_policy="never"
               -c sandbox_workspace_write.network_access=true ) ;;
   esac
 

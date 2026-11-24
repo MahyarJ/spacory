@@ -5,6 +5,18 @@ A lightweight log of notable decisions and the reasoning behind them, so the
 
 ---
 
+## Review handoffs use verified GitHub state
+
+The dispatcher advances after each verified runner result. A signed webhook
+queues wakes for outside changes, and the scheduled check reads the same GitHub
+state for recovery. Keeping phase checkpoints and verdicts on the PR lets a
+restarted dispatcher recognize a review or push that finished before the label
+changed. A single lock prevents overlapping runs on the local runner.
+
+Engineer reviews first and Product starts after Engineer approves the current
+head. Exact SHAs keep an approval from following a later push. Product can reuse
+Engineer evidence and focus its own pass on the issue's user workflow.
+
 ## Image export visibility keeps annotation positions fixed
 
 The image export preview, both download formats, and clipboard copy use the same
