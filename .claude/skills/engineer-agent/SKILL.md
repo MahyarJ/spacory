@@ -259,6 +259,10 @@ user-value / UX / scope judgments to the Product Agent's acceptance pass.
    A fix that adds a write or a new route creates a new interruption point to
    check.
 
+After finding a blocker, finish reviewing the affected behavior before posting a
+verdict. Report all blockers you can verify on the revision under review in one
+review comment.
+
 State material verification gaps in the review. Give each blocker a concrete
 sequence and its observable effect. If a blocker was first raised in a re-review,
 compare with the previous head and say when it was introduced if you can
