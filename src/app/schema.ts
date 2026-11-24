@@ -62,6 +62,21 @@ export interface WindowItem extends ItemBase {
 
 export type Item = DoorItem | WindowItem;
 
+export type FixtureType = "sink";
+
+export interface Fixture {
+  id: string;
+  type: FixtureType;
+  /** World coordinates at the center of the fixture. */
+  position: Point;
+  width: number;
+  depth: number;
+  /** Clockwise rotation in degrees. */
+  rotation: number;
+}
+
+export const MIN_FIXTURE_DIMENSION = 1;
+
 export interface Plan {
   version: "1.3.0";
   meta: {
@@ -75,6 +90,7 @@ export interface Plan {
   items: Item[];
   roomNames?: RoomName[];
   labels?: PlanLabel[];
+  fixtures?: Fixture[];
 }
 
 export const DEFAULT_PLAN_NAME = "Untitled";

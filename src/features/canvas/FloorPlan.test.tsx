@@ -8,8 +8,10 @@ import { useApp } from "@app/store";
 import { DEFAULT_VIEW, MIN_SCALE } from "@app/viewport";
 import { MeasurementSystemSwitch } from "@features/toolbar/MeasurementSystemSwitch";
 import { Toolbar } from "@features/toolbar/Toolbar";
+import { WallOptionsBar } from "@features/toolbar/wall/WallOptionsBar";
 import { getPlanBounds } from "@geometry/bounds";
 import { buildExportSvg } from "@geometry/exportSvg";
+import { getFixtureBounds } from "@geometry/fixtures";
 import { planLabelRect } from "@geometry/planLabels";
 import { detectRooms, findRoomAt } from "@geometry/rooms";
 import {
@@ -751,6 +753,130 @@ describe("FloorPlan touch gestures", () => {
         ?.getAttribute("transform"),
     ).toBe("translate(500 350)");
     expect(loadPersistedHistory()?.past).toHaveLength(0);
+  });
+
+  it("places, resizes and rotates a sink through the toolbar and preserves it in storage", () => {
+    const original = enclosedPlan();
+    original.items.push({
+      id: "window",
+      type: "window",
+      wallAttach: { wallId: "w1", offset: 90, length: 80 },
+      thickness: 10,
+      props: {},
+    });
+    setup({ plan: original });
+    render(
+      <>
+        <Toolbar />
+        <WallOptionsBar />
+      </>,
+    );
+    const button = (name: string) => screen.getByRole("button", { name });
+    const fixture = () => useApp.getState().plan.fixtures?.[0];
+    const selection = () => canvas.querySelector("[data-fixture-selection]");
+
+    fireEvent.click(button("Sink"));
+    down(1, 500, 160, { pointerType: "mouse" });
+    up(1, 500, 160);
+    expect(fixture()).toMatchObject({
+      type: "sink",
+      position: { x: 500, y: 160 },
+      width: 60,
+      depth: 50,
+      rotation: 0,
+    });
+    expect(selection()).not.toBeNull();
+
+    const width = screen.getByRole("spinbutton", { name: "Width" });
+    fireEvent.change(width, { target: { value: "90" } });
+    fireEvent.keyDown(width, { key: "Enter" });
+    expect(selection()?.getAttribute("width")).toBe("90");
+    fireEvent.click(button("Rotate clockwise 45°"));
+    expect(selection()?.parentElement?.getAttribute("transform")).toBe(
+      "translate(500 160) rotate(45)",
+    );
+    expect(loadPersistedHistory()?.past).toHaveLength(3);
+
+    fireEvent.click(button("Undo"));
+    expect(fixture()).toMatchObject({ width: 90, rotation: 0 });
+    expect(loadPersistedHistory()?.present.fixtures).toEqual([fixture()]);
+    fireEvent.click(button("Redo"));
+    const restored = loadPersistedHistory()?.present;
+    expect(restored?.fixtures?.[0]).toMatchObject({ width: 90, rotation: 45 });
+    expect(parsePlan(serializePlan(restored!)).fixtures).toEqual([fixture()]);
+    expect(restored?.walls).toEqual(original.walls);
+    expect(restored?.items).toEqual(original.items);
+    expect(detectRooms(restored!.walls)).toEqual(detectRooms(original.walls));
+
+    act(() => useApp.getState().loadPlan(restored!));
+    expect(
+      canvas.querySelector('[data-fixture="sink"]')?.getAttribute("transform"),
+    ).toBe("translate(500 160) rotate(45)");
+    act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
+    fireEvent.click(button("Fit"));
+    const { scale, panX, panY } = view();
+    const { maxX, minY, maxY } = getFixtureBounds(fixture()!);
+    expect(maxX * scale + panX).toBeLessThan(800);
+    expect(minY * scale + panY).toBeGreaterThan(0);
+    expect(maxY * scale + panY).toBeLessThan(600);
+  });
+
+  it("moves and edits a duplicate independently with touch and imperial controls", () => {
+    setup({
+      plan: {
+        ...createInitialPlan(),
+        meta: { ...createInitialPlan().meta, measurementSystem: "imperial" },
+      },
+    });
+    render(
+      <>
+        <Toolbar />
+        <WallOptionsBar />
+      </>,
+    );
+    const button = (name: string) => screen.getByRole("button", { name });
+    const fixtures = () => useApp.getState().plan.fixtures;
+    fireEvent.click(button("Sink"));
+    down(1, 200, 200);
+    down(2, 300, 200);
+    up(2, 300, 200);
+    up(1, 200, 200);
+    expect(fixtures()).toBeUndefined();
+    down(1, 200, 200);
+    up(1, 200, 200);
+    const original = fixtures()?.[0];
+
+    fireEvent.click(button("Duplicate"));
+    const copy = fixtures()?.[1];
+    expect(copy?.id).not.toBe(original?.id);
+    expect(copy?.position).toEqual({ x: 220, y: 220 });
+    const depthFeet = screen.getByRole("spinbutton", { name: "Depth feet" });
+    const depthInches = screen.getByRole("spinbutton", {
+      name: "Depth inches",
+    });
+    fireEvent.change(depthFeet, { target: { value: "2" } });
+    fireEvent.change(depthInches, { target: { value: "0" } });
+    fireEvent.keyDown(depthInches, { key: "Enter" });
+    expect(fixtures()?.[1].depth).toBeCloseTo(60.96);
+
+    down(1, 220, 220);
+    move(1, 260, 275);
+    cancel(1, 260, 275);
+    expect(fixtures()?.[1].position).toEqual(copy?.position);
+    expect(loadPersistedHistory()?.past).toHaveLength(3);
+
+    down(1, 220, 220);
+    move(1, 241, 246);
+    up(1, 260, 275);
+    expect(fixtures()?.[1].position).toEqual({ x: 260, y: 275 });
+    expect(fixtures()?.[0]).toEqual(original);
+    expect(loadPersistedHistory()?.past).toHaveLength(4);
+    fireEvent.click(button("Undo"));
+    expect(fixtures()?.[1].position).toEqual(copy?.position);
+    fireEvent.click(button("Remove"));
+    expect(fixtures()).toEqual([original]);
+    fireEvent.click(button("Undo"));
+    expect(fixtures()).toHaveLength(2);
   });
 
   it("fits a distant outdoor label and returns to that zoom with wheel and pinch", () => {

@@ -1,7 +1,9 @@
 import { isPlanLabelText } from "./planLabel";
 import {
   createInitialPlan,
+  type Fixture,
   type Item,
+  MIN_FIXTURE_DIMENSION,
   type Plan,
   type PlanLabel,
   type Point,
@@ -63,6 +65,39 @@ function asLabel(v: unknown, i: number): PlanLabel {
     id: v.id,
     position: asPoint(v.position, `${where}.position`),
     text: v.text,
+  };
+}
+
+function asFixture(v: unknown, i: number): Fixture {
+  const where = `fixtures[${i}]`;
+  if (!isObject(v)) throw new PlanParseError(`${where} must be an object`);
+  if (typeof v.id !== "string" || !v.id.trim()) {
+    throw new PlanParseError(`${where}.id must be a non-empty string`);
+  }
+  if (v.type !== "sink") {
+    throw new PlanParseError(`${where}.type must be "sink"`);
+  }
+  const { width, depth, rotation } = v;
+  if (
+    !isFiniteNumber(width) ||
+    width < MIN_FIXTURE_DIMENSION ||
+    !isFiniteNumber(depth) ||
+    depth < MIN_FIXTURE_DIMENSION
+  ) {
+    throw new PlanParseError(
+      `${where}.width and .depth must be at least ${MIN_FIXTURE_DIMENSION} cm`,
+    );
+  }
+  if (!isFiniteNumber(rotation)) {
+    throw new PlanParseError(`${where}.rotation must be a number`);
+  }
+  return {
+    id: v.id,
+    type: v.type,
+    position: asPoint(v.position, `${where}.position`),
+    width,
+    depth,
+    rotation,
   };
 }
 
@@ -176,6 +211,17 @@ export function coercePlan(raw: unknown): Plan {
   ) {
     throw new PlanParseError("Label ids must be unique.");
   }
+  const { fixtures } = raw;
+  if (fixtures !== undefined && !Array.isArray(fixtures)) {
+    throw new PlanParseError('"fixtures" must be an array.');
+  }
+  const planFixtures = fixtures?.map(asFixture);
+  if (
+    planFixtures &&
+    new Set(planFixtures.map(({ id }) => id)).size !== planFixtures.length
+  ) {
+    throw new PlanParseError("Fixture ids must be unique.");
+  }
 
   // Drop items whose wall no longer exists to keep the renderer safe.
   const wallIds = new Set(walls.map((w) => w.id));
@@ -208,5 +254,6 @@ export function coercePlan(raw: unknown): Plan {
       ? {}
       : { roomNames: roomNames.map(asRoomName) }),
     ...(planLabels === undefined ? {} : { labels: planLabels }),
+    ...(planFixtures === undefined ? {} : { fixtures: planFixtures }),
   };
 }

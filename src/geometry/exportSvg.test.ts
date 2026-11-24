@@ -84,6 +84,31 @@ describe("buildExportSvg", () => {
     expect(markup).toContain("<circle");
   });
 
+  it("draws and frames a resized, rotated sink beyond the wall footprint", () => {
+    const { markup, width, height } = buildExportSvg({
+      ...planOf([wall(0, 0, 100, 0)]),
+      fixtures: [
+        {
+          id: "fixture",
+          type: "sink",
+          position: { x: 200, y: 80 },
+          width: 100,
+          depth: 40,
+          rotation: 45,
+        },
+      ],
+    });
+    const reach = 70 / Math.sqrt(2) + 0.75;
+    expect(width).toBeCloseTo(205 + reach + 2 * EXPORT_MARGIN);
+    expect(height).toBeCloseTo(85 + reach + 2 * EXPORT_MARGIN);
+    expect(markup).toContain(
+      'data-fixture="sink" transform="translate(200 80) rotate(45)"',
+    );
+    expect(markup).toContain('<rect x="-50" y="-20" width="100" height="40"');
+    expect(markup).toMatch(/data-fixture="sink".*<rect.*<rect.*<circle.*<path/);
+    expect(markup).not.toContain("data-fixture-selection");
+  });
+
   it("frames a perimeter door's whole swing arc plus the margin", () => {
     // Door on the outermost wall swinging outward: the arc's radius equals the
     // opening's 80cm length, so it reaches y = -80 — 75cm past the wall's own

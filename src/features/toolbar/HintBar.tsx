@@ -11,12 +11,19 @@ export function HintBar() {
   const selW = useApp((s) => s.selectedWalls);
   const selI = useApp((s) => s.selectedItems);
   const selectedLabels = useApp((s) => s.selectedLabels);
+  const selectedFixtures = useApp((s) => s.selectedFixtures);
   const labelEditor = useApp((s) => s.labelEditor);
   const plan = useApp((s) => s.plan);
 
-  const count = selectionCount(selW, selI, selectedLabels);
+  const count = selectionCount(selW, selI, selectedLabels, selectedFixtures);
   const labelsOnly = count === selectedLabels.size;
-  const wallsOnly = isWallOnlySelection(selW, selI, selectedLabels);
+  const fixturesOnly = count === selectedFixtures.size;
+  const wallsOnly = isWallOnlySelection(
+    selW,
+    selI,
+    selectedLabels,
+    selectedFixtures,
+  );
   const isDoorSelected = hasSelectedDoor(plan, selI);
 
   let text: React.ReactNode = null;
@@ -38,6 +45,11 @@ export function HintBar() {
               Choose <strong>Remove</strong> or press{" "}
             </>
           )}
+          {fixturesOnly && (
+            <>
+              Drag to move. Choose <strong>Remove</strong> or press{" "}
+            </>
+          )}
           {wallsOnly && (
             <>
               <kbd>[</kbd> <kbd>]</kbd> adjust wall thickness{" · "}
@@ -50,17 +62,19 @@ export function HintBar() {
             </>
           )}
           <kbd>Delete</kbd>
-          {labelsOnly ? "." : " remove selection"}
+          {labelsOnly || fixturesOnly ? "." : " remove selection"}
         </span>
       );
     } else {
       text = (
         <span>
-          Select a wall, opening, or label to edit it, or choose a room to name
-          it. Shift-click or drag to select multiple objects.
+          Select a wall, opening, fixture, or label to edit it, or choose a room
+          to name it. Shift-click or drag to select multiple objects.
         </span>
       );
     }
+  } else if (tool === "sink") {
+    text = <span>Click or tap the canvas to place a sink.</span>;
   } else if (tool === "label") {
     text = (
       <span>

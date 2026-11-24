@@ -27,6 +27,10 @@ connected room structures.
 - 🚪 **Openings** — place doors and windows along a wall by click-click or by
   dragging; toggle a door's hinge edge and swing side. Openings follow their
   wall as it moves and resizes
+- 🚰 **Fixtures** — choose **Sink** and click or tap the canvas to place a
+  60 × 50 cm sink. Drag it to move it, edit its width and depth, or use the
+  options bar to rotate it by 45°, duplicate it, or remove it. Fit, autosave,
+  JSON, SVG, and PNG include the sink.
 - 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and
   area in the plan’s units. With Select active, choose a room to add, edit, or
   clear its name. New names and edits can use up to 80 characters. Labels on
@@ -109,7 +113,7 @@ Then open the printed local URL.
 | `Delete` / `Backspace` | Remove the selection |
 | `[` / `]` | Decrease / increase thickness for wall-only selections |
 | `H` / `S` | Toggle selected door hinge / swing |
-| Arrows | Nudge selected walls, labels, or a junction (Shift = ×10, Alt = raw 1 unit) |
+| Arrows | Nudge selected walls, labels, fixtures, or a junction (Shift = ×10, Alt = raw 1 unit) |
 
 ---
 

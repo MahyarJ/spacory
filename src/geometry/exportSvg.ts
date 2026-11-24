@@ -1,6 +1,11 @@
 import { isDoor, type Plan } from "@app/schema";
 import { getPlanBounds } from "./bounds";
 import {
+  FIXTURE_STROKE_WIDTH,
+  fixtureTransform,
+  getFixtureSymbol,
+} from "./fixtures";
+import {
   DOOR_HINGE_RADIUS,
   getDoorArcPath,
   getDoorGeometry,
@@ -135,6 +140,19 @@ export function buildExportSvg(
     })
     .join("");
 
+  const fixtureShapes = plan.fixtures
+    ?.map((fixture) => {
+      const { rim, basin, drain, tap } = getFixtureSymbol(fixture);
+      return (
+        `<g data-fixture="${fixture.type}" transform="${fixtureTransform(fixture)}" stroke="${EXPORT_WALL_COLOR}" stroke-width="${FIXTURE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">` +
+        `<rect x="${rim.x}" y="${rim.y}" width="${rim.width}" height="${rim.height}" fill="${EXPORT_BACKGROUND}" />` +
+        `<rect x="${basin.x}" y="${basin.y}" width="${basin.width}" height="${basin.height}" rx="${basin.rx}" fill="none" />` +
+        `<circle cx="${drain.cx}" cy="${drain.cy}" r="${drain.r}" fill="none" />` +
+        `<path d="${tap}" fill="none" /></g>`
+      );
+    })
+    .join("");
+
   const textStyle = `text-anchor="middle" fill="${EXPORT_WALL_COLOR}" stroke="${EXPORT_BACKGROUND}" stroke-width="3" paint-order="stroke"`;
   const measurements = wallDimensions(plan.walls, plan.meta.measurementSystem);
   const annotations = layoutRoomLabels({
@@ -195,6 +213,7 @@ export function buildExportSvg(
     `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${EXPORT_BACKGROUND}" />` +
     `<g data-layer="walls">${wallShapes}${junctionShapes}</g>` +
     `<g data-layer="items">${itemShapes}</g>` +
+    (fixtureShapes ? `<g data-layer="fixtures">${fixtureShapes}</g>` : "") +
     `<g data-layer="dimensions">${dimensions}</g>` +
     `<g data-layer="room-areas">${roomLabels}</g>` +
     (planLabels ? `<g data-layer="plan-labels">${planLabels}</g>` : "") +

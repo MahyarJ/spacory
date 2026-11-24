@@ -1,3 +1,4 @@
+import { type Fixture, MIN_FIXTURE_DIMENSION } from "@app/schema";
 import {
   type SelectionAction,
   selectionActions,
@@ -8,6 +9,8 @@ import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { ICON_SIZE } from "@ui/constants";
 import {
+  Copy,
+  RotateCw,
   SquareCenterlineDashedHorizontal,
   SquareCenterlineDashedVertical,
   Trash2,
@@ -22,15 +25,22 @@ export function WallOptions() {
   const selectedWalls = useApp((s) => s.selectedWalls);
   const selectedItems = useApp((s) => s.selectedItems);
   const selectedLabels = useApp((s) => s.selectedLabels);
+  const selectedFixtures = useApp((s) => s.selectedFixtures);
   const plan = useApp((s) => s.plan);
   const { walls, items } = plan;
   const system = plan.meta.measurementSystem;
   const setWallLength = useApp((s) => s.setSelectedWallLength);
   const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
+  const updateFixture = useApp((s) => s.updateFixture);
 
   const canEditMeasurement =
     tool === "select" &&
-    selectionCount(selectedWalls, selectedItems, selectedLabels) === 1;
+    selectionCount(
+      selectedWalls,
+      selectedItems,
+      selectedLabels,
+      selectedFixtures,
+    ) === 1;
   const selectedWall =
     canEditMeasurement && selectedWalls.size === 1
       ? walls.find((w) => selectedWalls.has(w.id))
@@ -39,10 +49,20 @@ export function WallOptions() {
     canEditMeasurement && selectedItems.size === 1
       ? items.find((i) => selectedItems.has(i.id))
       : undefined;
+  const selectedFixture =
+    canEditMeasurement && selectedFixtures.size === 1
+      ? plan.fixtures?.find((fixture) => selectedFixtures.has(fixture.id))
+      : undefined;
 
   const actions =
     tool === "select"
-      ? selectionActions(plan, selectedWalls, selectedItems, selectedLabels)
+      ? selectionActions(
+          plan,
+          selectedWalls,
+          selectedItems,
+          selectedLabels,
+          selectedFixtures,
+        )
       : [];
 
   return (
@@ -80,20 +100,49 @@ export function WallOptions() {
         />
       )}
 
-      {actions.length > 0 && <SelectionActionButtons actions={actions} />}
+      {selectedFixture && (
+        <div className={styles.wallOptions} key={selectedFixture.id}>
+          <LengthField
+            id="fixture-width-input"
+            label="Width"
+            lengthCm={selectedFixture.width}
+            minCm={MIN_FIXTURE_DIMENSION}
+            system={system}
+            onCommit={(width) => updateFixture(selectedFixture.id, { width })}
+          />
+          <LengthField
+            id="fixture-depth-input"
+            label="Depth"
+            lengthCm={selectedFixture.depth}
+            minCm={MIN_FIXTURE_DIMENSION}
+            system={system}
+            onCommit={(depth) => updateFixture(selectedFixture.id, { depth })}
+          />
+        </div>
+      )}
+      {actions.length > 0 && (
+        <SelectionActionButtons actions={actions} fixture={selectedFixture} />
+      )}
     </div>
   );
 }
 
 /**
- * On-screen equivalents of the selection's keyboard verbs, so a tablet user can
- * edit what they drew. Each button calls the very same store action the key
- * press does, so it commits once and is one undo entry — no second write path.
+ * Selection controls for mouse and touch. Actions with keyboard shortcuts
+ * share the same store commands, so either input creates one undo step.
  */
-function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
+function SelectionActionButtons({
+  actions,
+  fixture,
+}: {
+  actions: SelectionAction[];
+  fixture?: Fixture;
+}) {
   const deleteSelected = useApp((s) => s.deleteSelected);
   const toggleHinge = useApp((s) => s.toggleSelectedDoorHingeEdge);
   const toggleSwing = useApp((s) => s.toggleSelectedDoorSwingSide);
+  const updateFixture = useApp((s) => s.updateFixture);
+  const duplicateFixture = useApp((s) => s.duplicateFixture);
 
   // Icon-only, so each needs an explicit accessible name; the tooltip names the
   // accelerator too, so the bar teaches the shortcut instead of replacing it.
@@ -125,6 +174,25 @@ function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
       title: "Toggle swing (S)",
       icon: <SquareCenterlineDashedVertical size={ICON_SIZE} />,
       onClick: toggleSwing,
+    },
+    rotate: {
+      label: "Rotate clockwise 45°",
+      title: "Rotate clockwise 45°",
+      icon: <RotateCw size={ICON_SIZE} />,
+      onClick: () => {
+        if (fixture) {
+          const rotation = ((fixture.rotation % 360) + 360 + 45) % 360;
+          updateFixture(fixture.id, { rotation });
+        }
+      },
+    },
+    duplicate: {
+      label: "Duplicate",
+      title: "Duplicate",
+      icon: <Copy size={ICON_SIZE} />,
+      onClick: () => {
+        if (fixture) duplicateFixture(fixture.id);
+      },
     },
   };
 

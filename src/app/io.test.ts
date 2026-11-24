@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { PLAN_VERSION, PlanParseError, parsePlan, serializePlan } from "./io";
+import {
+  coercePlan,
+  PLAN_VERSION,
+  PlanParseError,
+  parsePlan,
+  serializePlan,
+} from "./io";
 import {
   createInitialPlan,
   type DoorItem,
+  type Fixture,
   type Plan,
   type WindowItem,
 } from "./schema";
@@ -36,6 +43,43 @@ const plan: Plan = {
   ],
   items: [door, win],
 };
+
+describe("stored fixtures", () => {
+  const sink: Fixture = {
+    id: "fixture-1",
+    type: "sink",
+    position: { x: -150.5, y: 321 },
+    width: 80,
+    depth: 45,
+    rotation: -30,
+  };
+
+  it("round-trips a free-standing sink, and keeps the field absent on older plans", () => {
+    const emptyPlan = createInitialPlan();
+    expect(
+      parsePlan(serializePlan({ ...emptyPlan, fixtures: [sink] })).fixtures,
+    ).toEqual([sink]);
+    expect(parsePlan(serializePlan(emptyPlan))).not.toHaveProperty("fixtures");
+  });
+
+  it.each([
+    [{ ...sink, id: " " }, /id/],
+    [{ ...sink, type: "toilet" }, /type/],
+    [{ ...sink, position: { x: Infinity, y: 0 } }, /position/],
+    [{ ...sink, width: 0 }, /width/],
+    [{ ...sink, depth: "50" }, /depth/],
+    [{ ...sink, rotation: NaN }, /rotation/],
+  ])("rejects invalid stored fixture data %#", (invalid, message) => {
+    expect(() => coercePlan({ ...plan, fixtures: [invalid] })).toThrow(message);
+  });
+
+  it("rejects a non-array and duplicate ids", () => {
+    expect(() => coercePlan({ ...plan, fixtures: {} })).toThrow(/array/);
+    expect(() =>
+      coercePlan({ ...plan, fixtures: [sink, { ...sink }] }),
+    ).toThrow(/unique/);
+  });
+});
 
 describe("serializePlan / parsePlan round-trip", () => {
   it("preserves walls, items and meta through a round-trip", () => {

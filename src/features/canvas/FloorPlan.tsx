@@ -17,6 +17,7 @@ import {
   pickWallEndpoint,
   type WallEndpointRef,
 } from "@geometry/connectivity";
+import { hitFixture } from "@geometry/fixtures";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
 import { computeWallGeometry } from "@geometry/junction";
 import {
@@ -55,6 +56,7 @@ import { flushSync } from "react-dom";
 import { uid } from "../../util/uid";
 import { ConnectionPointsLayer } from "./ConnectionPointsLayer";
 import { DimensionsLayer } from "./DimensionsLayer";
+import { FixturesLayer } from "./FixturesLayer";
 import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { InlineLabelEditor } from "./InlineLabelEditor";
@@ -77,7 +79,7 @@ type Opening = {
   thickness: number;
 };
 
-const LABEL_DRAG_THRESHOLD = 5; // CSS pixels, regardless of zoom
+const TAP_THRESHOLD = 5; // CSS pixels, regardless of zoom
 
 export function FloorPlan() {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -99,6 +101,8 @@ export function FloorPlan() {
   const selectRoom = useApp((s) => s.selectRoom);
   const selectedRoomPoint = useApp((s) => s.selectedRoomPoint);
   const selectedLabels = useApp((s) => s.selectedLabels);
+  const selectedFixtures = useApp((s) => s.selectedFixtures);
+  const selectFixture = useApp((s) => s.selectFixture);
   const labelEditor = useApp((s) => s.labelEditor);
   const selectLabels = useApp((s) => s.selectLabels);
   const setLabelEditor = useApp((s) => s.setLabelEditor);
@@ -158,6 +162,7 @@ export function FloorPlan() {
     null,
   );
   const roomTap = useRef(false);
+  const fixturePress = useRef<{ pointerId: number; start: Point } | null>(null);
   const labelPress = useRef<{
     pointerId: number;
     start: Point;
@@ -203,6 +208,7 @@ export function FloorPlan() {
     start: Point;
     applied: Point;
     snap: boolean;
+    threshold: number;
   } | null>(null);
   const [movingPoint, setMovingPoint] = useState<null | {
     start: Point; // pointer position where drag began
@@ -308,12 +314,14 @@ export function FloorPlan() {
           if (
             useApp.getState().selectedRoomPoint ||
             useApp.getState().selectedLabels.size ||
+            useApp.getState().selectedFixtures.size ||
             useApp.getState().labelEditor
           )
             useApp.getState().selectNone();
-          labelPress.current = null;
           if (selectionDrag.current && useApp.getState().liveDragItems)
             useApp.getState().cancelLiveDrag();
+          labelPress.current = null;
+          fixturePress.current = null;
           selectionDrag.current = null;
           setDrawingWall(null);
           setOpening(null);
@@ -402,6 +410,7 @@ export function FloorPlan() {
     if (useApp.getState().liveDragItems) useApp.getState().cancelLiveDrag();
     roomTap.current = false;
     labelPress.current = null;
+    fixturePress.current = null;
     selectionDrag.current = null;
     setMovingPoint(null);
     setMovingEndpoint(null);
@@ -412,12 +421,17 @@ export function FloorPlan() {
     setIsPanning(false);
   };
 
-  const startSelectionDrag = (world: Point, snap: boolean) => {
-    selectionDrag.current = { start: world, applied: { x: 0, y: 0 }, snap };
+  const startSelectionDrag = (world: Point, snap: boolean, threshold = 0) => {
+    selectionDrag.current = {
+      start: world,
+      applied: { x: 0, y: 0 },
+      snap,
+      threshold,
+    };
     useApp.getState().beginLiveDrag();
   };
 
-  const moveSelectionDrag = (world: Point, threshold = 0) => {
+  const moveSelectionDrag = (world: Point) => {
     const drag = selectionDrag.current;
     const state = useApp.getState();
     if (!drag || !state.liveDragItems) return;
@@ -426,7 +440,7 @@ export function FloorPlan() {
       y: world.y - drag.start.y,
     };
     const target =
-      Math.hypot(delta.x, delta.y) * view.scale <= threshold
+      Math.hypot(delta.x, delta.y) * view.scale <= drag.threshold
         ? { x: 0, y: 0 }
         : drag.snap
           ? snapToGrid(delta, plan.meta.gridSize)
@@ -524,6 +538,11 @@ export function FloorPlan() {
       return;
     }
 
+    if (tool === "sink" && e.button === 0) {
+      fixturePress.current = { pointerId: e.pointerId, start: world };
+      return;
+    }
+
     if (tool === "select") {
       const hitLabel =
         e.button === 0 &&
@@ -544,7 +563,8 @@ export function FloorPlan() {
           !additive &&
           selectedLabels.size === 1 &&
           selectedWalls.size === 0 &&
-          selectedItems.size === 0;
+          selectedItems.size === 0 &&
+          selectedFixtures.size === 0;
         if (!alreadySelected) selectLabels([label.id], additive);
         labelPress.current = {
           pointerId: e.pointerId,
@@ -556,6 +576,27 @@ export function FloorPlan() {
         startSelectionDrag(
           world,
           !e.altKey && useApp.getState().selectedWalls.size > 0,
+          TAP_THRESHOLD,
+        );
+        return;
+      }
+
+      const fixture =
+        e.button === 0 &&
+        plan.fixtures?.findLast((item) =>
+          hitFixture(
+            world,
+            item,
+            (e.pointerType === "touch" ? 10 : 2) / view.scale,
+          ),
+        );
+      if (fixture) {
+        if (!selectedFixtures.has(fixture.id))
+          selectFixture(fixture.id, additive);
+        startSelectionDrag(
+          world,
+          !e.altKey && useApp.getState().selectedWalls.size > 0,
+          TAP_THRESHOLD,
         );
         return;
       }
@@ -713,8 +754,7 @@ export function FloorPlan() {
     setCursor(world);
     const press = labelPress.current;
     if (press?.pointerId === e.pointerId) {
-      if (press.label && tool === "select")
-        moveSelectionDrag(world, LABEL_DRAG_THRESHOLD);
+      if (press.label && tool === "select") moveSelectionDrag(world);
       return;
     }
     if (e.buttons === 1 && tool === "select" && selectionDrag.current) {
@@ -824,15 +864,29 @@ export function FloorPlan() {
     }
     if (releasePointer(e.pointerId)) return;
     if (isPanning) setIsPanning(false);
+    const placement = fixturePress.current;
+    if (placement?.pointerId === e.pointerId) {
+      fixturePress.current = null;
+      const world = toWorld(e.clientX, e.clientY);
+      if (
+        tool === "sink" &&
+        Math.hypot(world.x - placement.start.x, world.y - placement.start.y) *
+          view.scale <=
+          TAP_THRESHOLD
+      ) {
+        useApp.getState().placeFixture(tool, world);
+      }
+      return;
+    }
     const press = labelPress.current;
     if (press?.pointerId === e.pointerId) {
       labelPress.current = null;
       const world = toWorld(e.clientX, e.clientY);
       const dx = world.x - press.start.x;
       const dy = world.y - press.start.y;
-      const moved = Math.hypot(dx, dy) * view.scale > LABEL_DRAG_THRESHOLD;
+      const moved = Math.hypot(dx, dy) * view.scale > TAP_THRESHOLD;
       if (press.label) {
-        if (tool === "select") moveSelectionDrag(world, LABEL_DRAG_THRESHOLD);
+        if (tool === "select") moveSelectionDrag(world);
         if (!finishSelectionDrag() || tool !== "select" || moved) return;
         if (press.editOnTap) {
           const { id, position } = press.label;
@@ -910,6 +964,9 @@ export function FloorPlan() {
       for (const wall of plan.walls) {
         if (segmentIntersectsRect(wall.a, wall.b, r)) selectWall(wall.id, true);
       }
+      for (const fixture of plan.fixtures ?? []) {
+        if (pointInRect(fixture.position, r)) selectFixture(fixture.id, true);
+      }
       const labels = labelFrames.filter(({ rect }) => rectsIntersect(rect, r));
       if (labels.length)
         selectLabels(
@@ -920,6 +977,9 @@ export function FloorPlan() {
       return;
     }
     if (selectionDrag.current) {
+      if (tool === "select" && selectionDrag.current.threshold > 0) {
+        moveSelectionDrag(toWorld(e.clientX, e.clientY));
+      }
       finishSelectionDrag();
       return;
     }
@@ -1054,6 +1114,10 @@ export function FloorPlan() {
           />
           <WallsLayer geometry={wallGeometry} />
           <ItemsLayer />
+          <FixturesLayer
+            fixtures={plan.fixtures}
+            selectedIds={selectedFixtures}
+          />
           <DimensionsLayer dimensions={dimensions} scale={view.scale} />
           <SelectionLayer />
           {tool === "select" && focusedRoomOutline && (

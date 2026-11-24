@@ -1000,3 +1000,11 @@ the system choice, and releasing records the drag as its own undo step.
 The schema exposes only `MeasurementSystem`; it no longer advertises individually
 selectable display units. Formatting accepts the system directly, while numeric
 editors share a `LengthUnit` type limited to cm/in.
+
+## Free-standing fixtures (#120)
+
+Store fixtures in an optional `Plan.fixtures` array with center coordinates,
+width and depth in cm, and clockwise rotation in degrees. The center stays fixed
+when resizing or rotating. Keeping the field absent on legacy plans preserves
+the document shape expected by their saved undo history. Canvas and image
+export share fixture geometry, and framing uses the rotated footprint.

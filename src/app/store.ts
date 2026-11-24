@@ -37,15 +37,18 @@ import { isPlanLabelText } from "./planLabel";
 import { isRoomNameTooLong } from "./roomName";
 import {
   createInitialPlan,
+  type Fixture,
+  type FixtureType,
   type Item,
   isDoor,
   type MeasurementSystem,
+  MIN_FIXTURE_DIMENSION,
   type Plan,
   type PlanLabel,
   type Point,
   type Wall,
 } from "./schema";
-import { isWallOnlySelection } from "./selection";
+import { isWallOnlySelection, selectionCount } from "./selection";
 import {
   applyThemeAttr,
   initialTheme,
@@ -63,7 +66,16 @@ import {
   type ViewState,
 } from "./viewport";
 
-export type Tool = "select" | "wall" | "window" | "door" | "label" | "pan";
+export type Tool =
+  | "select"
+  | "wall"
+  | "window"
+  | "door"
+  | "label"
+  | "pan"
+  | FixtureType;
+
+type FixtureEdit = Partial<Pick<Fixture, "width" | "depth" | "rotation">>;
 
 type WallLengthEdit = {
   wallId: string;
@@ -83,6 +95,9 @@ interface AppState {
   setMeasurementSystem: (system: MeasurementSystem) => void;
   addWall: (w: Wall) => void;
   addItem: (i: Item) => void;
+  placeFixture: (type: FixtureType, position: Point) => void;
+  updateFixture: (id: string, edit: FixtureEdit) => void;
+  duplicateFixture: (id: string) => void;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setCanvasSize: (size: { width: number; height: number }) => void;
   /**
@@ -98,6 +113,8 @@ interface AppState {
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
   selectedLabels: Set<string>;
+  selectedFixtures: Set<string>;
+  selectFixture: (id: string, additive?: boolean) => void;
   labelEditor: { id?: string; position: Point } | null;
   selectLabels: (ids: string[], additive?: boolean) => void;
   setLabelEditor: (editor: AppState["labelEditor"]) => void;
@@ -274,6 +291,7 @@ function commit(
     | "selectedConnectionPointEndpoints"
     | "selectedWalls"
     | "selectedItems"
+    | "selectedFixtures"
   >,
   heldPoint: Point | null = selection.selectedConnectionPoint,
   fixedPoints?: Point[],
@@ -284,9 +302,10 @@ function commit(
   | "selectedConnectionPointEndpoints"
   | "selectedWalls"
   | "selectedItems"
+  | "selectedFixtures"
 > {
-  // Metadata-only changes must not normalize geometry or disturb a live
-  // selection. Their geometry is the exact committed snapshot, not a preview.
+  // Edits that leave walls and openings alone skip wall normalization. This
+  // also lets metadata commits preserve the selection during a live drag.
   if (
     next.walls === history.present.walls &&
     next.items === history.present.items
@@ -300,6 +319,10 @@ function commit(
         selection.selectedConnectionPointEndpoints,
       selectedWalls: selection.selectedWalls,
       selectedItems: selection.selectedItems,
+      selectedFixtures: prunedIds(
+        selection.selectedFixtures,
+        next.fixtures ?? [],
+      ),
     };
   }
   // Merge seams vacated by this edit before splitting any new mid-span joins.
@@ -332,6 +355,10 @@ function commit(
     selectedConnectionPointEndpoints: endpoints,
     selectedWalls: prunedIds(selection.selectedWalls, present.walls),
     selectedItems: prunedIds(selection.selectedItems, present.items),
+    selectedFixtures: prunedIds(
+      selection.selectedFixtures,
+      present.fixtures ?? [],
+    ),
   };
 }
 
@@ -358,6 +385,7 @@ function emptySelection() {
     selectedItems: new Set<string>(),
     selectedRoomPoint: null,
     selectedLabels: new Set<string>(),
+    selectedFixtures: new Set<string>(),
     labelEditor: null,
     selectedConnectionPoint: null,
     selectedConnectionPointEndpoints: [],
@@ -370,6 +398,18 @@ function commitLabels(labels: PlanLabel[], state: AppState) {
     {
       ...plan,
       labels,
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    },
+    state,
+  );
+}
+
+function commitFixtures(fixtures: Fixture[], state: AppState) {
+  const plan = history.present;
+  return commit(
+    {
+      ...plan,
+      fixtures,
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     },
     state,
@@ -417,11 +457,18 @@ function translatePlanSelection(
     plan,
     selectedWalls,
     selectedLabels,
-  }: Pick<AppState, "plan" | "selectedWalls" | "selectedLabels">,
+    selectedFixtures,
+  }: Pick<
+    AppState,
+    "plan" | "selectedWalls" | "selectedLabels" | "selectedFixtures"
+  >,
   dx: number,
   dy: number,
 ): Plan {
-  if ((dx === 0 && dy === 0) || (!selectedWalls.size && !selectedLabels.size)) {
+  if (
+    (dx === 0 && dy === 0) ||
+    (!selectedWalls.size && !selectedLabels.size && !selectedFixtures.size)
+  ) {
     return plan;
   }
   return {
@@ -444,6 +491,21 @@ function translatePlanSelection(
           ),
         }
       : {}),
+    ...(selectedFixtures.size && plan.fixtures
+      ? {
+          fixtures: plan.fixtures.map((fixture) =>
+            selectedFixtures.has(fixture.id)
+              ? {
+                  ...fixture,
+                  position: {
+                    x: fixture.position.x + dx,
+                    y: fixture.position.y + dy,
+                  },
+                }
+              : fixture,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -454,13 +516,14 @@ export const useApp = create<AppState>((set, get) => ({
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
   setTool: (tool) => {
-    if (tool === "label") set({ ...emptySelection(), tool });
+    if (tool === "label" || tool === "sink") set({ ...emptySelection(), tool });
     else if (tool === "select" && get().tool === "select") set({ tool });
     else
       set({
         tool,
         selectedRoomPoint: null,
         selectedLabels: new Set(),
+        selectedFixtures: new Set(),
         labelEditor: null,
       });
   },
@@ -530,6 +593,72 @@ export const useApp = create<AppState>((set, get) => ({
     };
     set(commit(next, get()));
   },
+  placeFixture: (type, position) => {
+    const state = get();
+    if (state.liveDragItems) return;
+    const fixture: Fixture = {
+      id: uid("fixture"),
+      type,
+      position,
+      width: 60,
+      depth: 50,
+      rotation: 0,
+    };
+    set({
+      ...commitFixtures([...(history.present.fixtures ?? []), fixture], state),
+      ...emptySelection(),
+      selectedFixtures: new Set([fixture.id]),
+      tool: "select",
+    });
+  },
+  updateFixture: (id, edit) => {
+    const state = get();
+    const fixtures = history.present.fixtures;
+    const fixture = fixtures?.find((item) => item.id === id);
+    if (state.liveDragItems || !fixtures || !fixture) return;
+    const { width, depth, rotation } = { ...fixture, ...edit };
+    if (
+      !Number.isFinite(width) ||
+      width < MIN_FIXTURE_DIMENSION ||
+      !Number.isFinite(depth) ||
+      depth < MIN_FIXTURE_DIMENSION ||
+      !Number.isFinite(rotation)
+    )
+      return;
+    if (
+      width === fixture.width &&
+      depth === fixture.depth &&
+      rotation === fixture.rotation
+    )
+      return;
+    set(
+      commitFixtures(
+        fixtures.map((item) =>
+          item === fixture ? { ...fixture, width, depth, rotation } : item,
+        ),
+        state,
+      ),
+    );
+  },
+  duplicateFixture: (id) => {
+    const state = get();
+    const { fixtures, meta } = history.present;
+    const fixture = fixtures?.find((item) => item.id === id);
+    if (state.liveDragItems || !fixtures || !fixture) return;
+    const copy = {
+      ...fixture,
+      id: uid("fixture"),
+      position: {
+        x: fixture.position.x + meta.gridSize,
+        y: fixture.position.y + meta.gridSize,
+      },
+    };
+    set({
+      ...commitFixtures([...fixtures, copy], state),
+      ...emptySelection(),
+      selectedFixtures: new Set([copy.id]),
+    });
+  },
   setView: (fn) =>
     set(({ view }) => {
       const next = fn(view);
@@ -544,7 +673,8 @@ export const useApp = create<AppState>((set, get) => ({
     ),
   fitView: (measureLabel) => {
     const { plan, canvasSize, setView } = get();
-    const minScale = plan.labels?.length ? 0 : MIN_SCALE;
+    const minScale =
+      plan.labels?.length || plan.fixtures?.length ? 0 : MIN_SCALE;
     const next = computeFitView(
       getPlanBounds(plan, measureLabel),
       canvasSize,
@@ -560,6 +690,7 @@ export const useApp = create<AppState>((set, get) => ({
       ...emptySelection(),
       selectedWalls: additive ? state.selectedWalls : new Set(),
       selectedItems: additive ? state.selectedItems : new Set(),
+      selectedFixtures: additive ? state.selectedFixtures : new Set(),
       selectedLabels: new Set(
         additive ? [...state.selectedLabels, ...ids] : ids,
       ),
@@ -650,6 +781,7 @@ export const useApp = create<AppState>((set, get) => ({
         selectedItems: additive ? s.selectedItems : new Set(),
         selectedRoomPoint: null,
         selectedLabels: additive ? s.selectedLabels : new Set(),
+        selectedFixtures: additive ? s.selectedFixtures : new Set(),
         labelEditor: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
@@ -664,11 +796,22 @@ export const useApp = create<AppState>((set, get) => ({
         selectedWalls: additive ? s.selectedWalls : new Set(),
         selectedRoomPoint: null,
         selectedLabels: additive ? s.selectedLabels : new Set(),
+        selectedFixtures: additive ? s.selectedFixtures : new Set(),
         labelEditor: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
       };
     }),
+  selectFixture: (id, additive) =>
+    set((state) => ({
+      ...emptySelection(),
+      selectedWalls: additive ? state.selectedWalls : new Set(),
+      selectedItems: additive ? state.selectedItems : new Set(),
+      selectedLabels: additive ? state.selectedLabels : new Set(),
+      selectedFixtures: new Set(
+        additive ? [...state.selectedFixtures, id] : [id],
+      ),
+    })),
   selectConnectionPoint: (point) =>
     set((s) => ({
       ...emptySelection(),
@@ -682,10 +825,21 @@ export const useApp = create<AppState>((set, get) => ({
     })),
   deleteSelected: () => {
     const state = get();
-    const { selectedWalls, selectedItems, selectedLabels, plan } = state;
+    const {
+      selectedWalls,
+      selectedItems,
+      selectedLabels,
+      selectedFixtures,
+      plan,
+    } = state;
     if (
-      (!selectedWalls.size && !selectedItems.size && !selectedLabels.size) ||
-      (selectedLabels.size && state.liveDragItems)
+      selectionCount(
+        selectedWalls,
+        selectedItems,
+        selectedLabels,
+        selectedFixtures,
+      ) === 0 ||
+      ((selectedLabels.size || selectedFixtures.size) && state.liveDragItems)
     )
       return;
     const next: Plan = {
@@ -696,6 +850,13 @@ export const useApp = create<AppState>((set, get) => ({
       items: selectedItems.size
         ? plan.items.filter((i) => !selectedItems.has(i.id))
         : plan.items,
+      ...(selectedFixtures.size && plan.fixtures
+        ? {
+            fixtures: plan.fixtures.filter(
+              ({ id }) => !selectedFixtures.has(id),
+            ),
+          }
+        : {}),
       ...(selectedLabels.size && plan.labels
         ? {
             labels: plan.labels.filter(
@@ -712,8 +873,21 @@ export const useApp = create<AppState>((set, get) => ({
   },
   nudgeSelectedWallThickness: (delta) => {
     const state = get();
-    const { selectedWalls, selectedItems, selectedLabels, plan } = state;
-    if (!isWallOnlySelection(selectedWalls, selectedItems, selectedLabels))
+    const {
+      selectedWalls,
+      selectedItems,
+      selectedLabels,
+      selectedFixtures,
+      plan,
+    } = state;
+    if (
+      !isWallOnlySelection(
+        selectedWalls,
+        selectedItems,
+        selectedLabels,
+        selectedFixtures,
+      )
+    )
       return;
     const next: Plan = {
       ...plan,
@@ -858,6 +1032,10 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       selectedConnectionPoint: null,
       selectedLabels: new Set(),
+      selectedFixtures: prunedIds(
+        get().selectedFixtures,
+        history.present.fixtures ?? [],
+      ),
       labelEditor: null,
       selectedConnectionPointEndpoints: [],
       liveDragItems: null,
@@ -877,6 +1055,10 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       selectedConnectionPoint: null,
       selectedLabels: new Set(),
+      selectedFixtures: prunedIds(
+        get().selectedFixtures,
+        history.present.fixtures ?? [],
+      ),
       labelEditor: null,
       selectedConnectionPointEndpoints: [],
       liveDragItems: null,
@@ -900,6 +1082,7 @@ export const useApp = create<AppState>((set, get) => ({
       selectedItems: new Set(),
       selectedRoomPoint: null,
       selectedLabels: new Set(),
+      selectedFixtures: new Set(),
       labelEditor: null,
       marquee: null,
       // Loading a document ends any in-progress drag; drop its pre-drag snapshot
