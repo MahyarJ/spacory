@@ -133,8 +133,8 @@ From `/opt/spacory`, install the jobs and check their status.
 
 The installer verifies the units, installs them under `/etc/systemd/system`,
 and starts the timers and webhook service. The receiver exits until its signing
-secret is configured. After adding the secret, run
-`sudo systemctl restart spacory-agents-webhook.service`.
+secret is configured. Follow the [webhook setup](#connect-github-webhooks) to
+start the receiver after adding the secret.
 
 To remove the jobs, run `.agents/systemd/install.sh uninstall`. This stops any
 active worker and removes the installed unit files. The checkout, credentials,
@@ -161,11 +161,21 @@ journalctl -u spacory-agents-webhook.service -u spacory-agents@tick.service -u s
 ## Connect GitHub webhooks
 
 1. Set `SPACORY_WEBHOOK_SECRET` to a random secret in `.agents/.env`. Set
-   `SPACORY_WEBHOOK_PORT` if you need a loopback port other than `8787`. Restart
-   the receiver so it reads the configuration.
-2. Forward an HTTPS endpoint you control to `127.0.0.1:8787/github` using your
-   reverse proxy or tunnel. The server listens on loopback.
-3. Add a **repository webhook** on GitHub with that HTTPS URL, JSON content type,
+   `SPACORY_WEBHOOK_PORT` if you need a loopback port other than `8787`.
+2. Follow the service log from the checkout, then restart the receiver in
+   another terminal so it reads the configuration. On macOS, run both commands
+   as the user who installed the launchd jobs.
+
+   | Platform | Follow the log | Restart the receiver |
+   | --- | --- | --- |
+   | macOS | `tail -n 0 -F .agents/logs/webhook.log` | `launchctl kickstart -k "gui/$(id -u)/com.spacory.agents.webhook"` |
+   | Linux | `sudo journalctl -n 0 -f -u spacory-agents-webhook.service` | `sudo systemctl restart spacory-agents-webhook.service` |
+
+   Confirm a fresh `Spacory GitHub webhook listening` line shows the expected
+   loopback port and repository before testing a GitHub delivery.
+3. Forward an HTTPS endpoint you control to the loopback address from the log
+   (`127.0.0.1:8787/github` by default) using your reverse proxy or tunnel.
+4. Add a **repository webhook** on GitHub with that HTTPS URL, JSON content type,
    and the same secret. Subscribe to **Issues**, **Issue comments**, **Pull
    requests**, and **Pull request review comments**. Verify the ping and a test
    delivery in GitHub's **Recent Deliveries** view. [GitHub webhook setup](https://docs.github.com/en/webhooks/using-webhooks/creating-webhooks)
