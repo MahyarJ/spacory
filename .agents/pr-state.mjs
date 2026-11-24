@@ -117,6 +117,8 @@ export function prState(
       if (action === "review") {
         delete result.acceptance;
         delete started.acceptance;
+        delete started.clarify;
+        delete started.clarified;
       }
       if (action === "clarify") clarifyReplies = new Set();
       if (action === "clarified") {
@@ -129,7 +131,10 @@ export function prState(
         delete started.acceptance;
         delete started.clarify;
       }
-      if (action !== "clarify") lastProgress = comment.created_at;
+      // Clarification marks its own comment IDs handled. Preserve other requests
+      // posted before the batch finished until the next review starts.
+      if (action !== "clarify" && action !== "clarified")
+        lastProgress = comment.created_at;
       continue;
     }
     if (started.clarify) {
@@ -190,6 +195,10 @@ export function prState(
           entry.event === "labeled" && labels.includes(entry.label?.name),
       )?.label.name ?? labels[0]);
   const stage = active?.slice(6) ?? "";
+  const conditionalClarifyHead =
+    started.clarify?.action === "conditional-clarify"
+      ? started.clarify.head
+      : "";
   return {
     stage,
     head: pr.headRefOid,
@@ -205,14 +214,14 @@ export function prState(
     reconcileHead: started.reconcile?.head ?? "",
     clarifyRole: roles.size > 1 ? "both" : ([...roles][0] ?? ""),
     requests: [...new Set(requests)].join(","),
-    clarifyDone: Boolean(started.clarified && !started.clarify),
+    clarifyEnded:
+      Boolean(started.clarified && !started.clarify) ||
+      (conditionalClarifyHead !== "" &&
+        conditionalClarifyHead !== pr.headRefOid),
     activeClarification: started.clarify?.requests.join(",") ?? "",
     clarifyReplies: [...clarifyReplies].join(","),
     extraLabels: labels.filter((label) => label !== active).join(","),
-    conditionalClarifyHead:
-      started.clarify?.action === "conditional-clarify"
-        ? started.clarify.head
-        : "",
+    conditionalClarifyHead,
   };
 }
 
@@ -261,20 +270,22 @@ function main([command, number, action, head, requests = ""]) {
   const comments = active
     ? paginated(`repos/:owner/:repo/issues/${number}/comments`)
     : [];
-  const inline =
-    active &&
-    pr.labels.some(({ name }) =>
-      ["agent:clarify", "agent:clarifying"].includes(name),
-    )
-      ? paginated(`repos/:owner/:repo/pulls/${number}/comments`)
-      : [];
   const labelHistory =
     active && pipelineLabels(pr).length > 1
       ? paginated(`repos/:owner/:repo/issues/${number}/timeline`)
       : [];
-  console.log(
-    Object.values(prState(pr, comments, inline, actor, labelHistory)).join("|"),
-  );
+  let state = prState(pr, comments, [], actor, labelHistory);
+  if (
+    active &&
+    (state.stage === "clarify" ||
+      state.stage === "clarifying" ||
+      (state.stage === "review" && state.clarifyEnded))
+  ) {
+    const inline = paginated(`repos/:owner/:repo/pulls/${number}/comments`);
+    if (inline.length)
+      state = prState(pr, comments, inline, actor, labelHistory);
+  }
+  console.log(Object.values(state).join("|"));
 }
 
 if (

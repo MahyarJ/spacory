@@ -10,7 +10,7 @@ read_pr() {
   state="$(node "$SCRIPT_DIR/pr-state.mjs" read "$1")" || return
   IFS='|' read -r PR_STAGE PR_HEAD PR_BASE PR_ELIGIBLE PR_ENGINEER PR_PRODUCT \
     PR_ENGINEER_ID PR_PREVIOUS_HEAD PR_PREVIOUS_ID PR_CHANGE_HEAD PR_RESOLVE_HEAD \
-    PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFIED PR_ACTIVE_CLARIFICATION \
+    PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFY_ENDED PR_ACTIVE_CLARIFICATION \
     PR_CLARIFY_REPLIES PR_EXTRA_LABELS PR_CONDITIONAL_CLARIFY_HEAD <<<"$state"
 }
 
@@ -143,9 +143,9 @@ run_pr_clarification() {
       *) block pr "$pr" "$lane did not publish a clarification reply (exit $rc)"; return 0 ;;
     esac
   done
-  # The same SHA may need new verdicts after a specification or PR edit.
+  # Record this batch's replies. The next state read checks for pending requests
+  # before closing clarification and asking for fresh verdicts.
   checkpoint "$pr" clarified "$head" "$requests"
-  move_pr "$pr" review
 }
 
 # An unopened handoff can be reconstructed from the linked issue. An ordinary
@@ -186,8 +186,7 @@ drive_pr() {
       clarify|clarifying)
         if [ -n "$PR_REQUESTS" ]; then
           run_pr_clarification "$pr"
-        elif [ "$PR_STAGE" = clarifying ] && { [ "$PR_CLARIFIED" = true ] ||
-          { [ -n "$PR_CONDITIONAL_CLARIFY_HEAD" ] && [ "$PR_CONDITIONAL_CLARIFY_HEAD" != "$PR_HEAD" ]; }; }; then
+        elif [ "$PR_STAGE" = clarifying ] && [ "$PR_CLARIFY_ENDED" = true ]; then
           move_pr "$pr" review
         else
           return 0
@@ -209,9 +208,13 @@ drive_pr() {
         fi
         ;;
       review)
-        # A queued review is a new request, including an explicit re-review
-        # at the same head after the spec changes or a Resolve is blocked.
-        run_pr_verdict "$pr" review
+        if [ "$PR_CLARIFY_ENDED" = true ] && [ -n "$PR_REQUESTS" ]; then
+          # Pick up requests posted while the clarification label was being removed.
+          run_pr_clarification "$pr"
+        else
+          # A queued review is a new request, even on the same head.
+          run_pr_verdict "$pr" review
+        fi
         ;;
       reviewing)
         # Read the head again after interpreting the evidence before publishing

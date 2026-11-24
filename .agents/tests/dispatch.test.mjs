@@ -43,7 +43,9 @@ function mock() {
     if (kind === "api") {
       if (verb === "user") output(42);
       else if (verb.endsWith("/comments"))
-        output([verb.includes("/pulls/") ? [] : state.comments]);
+        output([
+          verb.includes("/pulls/") ? state.inlineComments : state.comments,
+        ]);
       else if (verb.includes("/compare/")) output(state.behind ?? 0);
       else if (verb.endsWith("/timeline") && args.includes("--slurp"))
         output([state.timeline ?? []]);
@@ -118,6 +120,17 @@ function mock() {
         delete state.pushOnClarify;
         if (state.commentOnClarify) add(state.commentOnClarify);
       }
+      if (
+        kind === "pr" &&
+        arg("--add-label") === "agent:review" &&
+        state.labels.includes("agent:clarifying") &&
+        state.commentOnClarifyHandoff
+      ) {
+        add(state.commentOnClarifyHandoff);
+        if (state.inlineOnClarifyHandoff)
+          state.inlineComments.push(state.comments.pop());
+        delete state.commentOnClarifyHandoff;
+      }
       return save();
     }
     if (verb === "merge") {
@@ -157,10 +170,12 @@ function mock() {
       `**${role}**\n**Head:** ${current}\n${entry.clarify ? `**Clarify:** ${entry.clarify}\n` : ""}**Verdict:** ${verdict}`,
     );
   }
-  if (mode === "clarify")
+  if (mode === "clarify") {
     add(
       `**${command === "engineer" ? "Engineer" : "Product"} clarification**\nSummary`,
     );
+    if (entry.comment) add(entry.comment);
+  }
   save();
   process.exitCode = entry.exit ?? 0;
 }
@@ -215,6 +230,7 @@ function fixture(t, overrides = {}, options = {}) {
     issueLabels: [],
     laterIssueLabels: [],
     comments: [],
+    inlineComments: [],
     calls: [],
     answers: [],
     merges: [],
@@ -607,3 +623,57 @@ test("a push during Engineer clarification skips the remaining conditional Produ
   );
   assert.deepEqual(state.labels, ["agent:accepted"]);
 });
+
+for (const timing of [
+  "explicit while replying",
+  "plain while replying",
+  "plain during handoff",
+  "inline during handoff",
+]) {
+  test(`clarification drains a late ${timing} request before re-review`, (t) => {
+    const first = "Clarify the revised scope.\n/agent clarify product";
+    const inline = timing.startsWith("inline");
+    const explicit = inline || timing.startsWith("explicit");
+    const question = explicit
+      ? "Clarify the revision handling.\n/agent clarify engineer"
+      : "Does the revised behavior also handle this case?";
+    const duringHandoff = timing.endsWith("handoff");
+    const f = fixture(t, {
+      pushOnClarify: "b",
+      commentOnClarify: first,
+      commentOnClarifyHandoff: duringHandoff ? question : null,
+      inlineOnClarifyHandoff: inline,
+      answers: [
+        {
+          mode: "review",
+          verdict: "approve pending non-code fixes",
+          clarify: "engineer",
+        },
+        { mode: "clarify", comment: duringHandoff ? null : question },
+      ],
+    });
+    const done = f.dispatch("wake", "pr", "34");
+    const lateRoles = explicit ? ["engineer"] : ["engineer", "product"];
+    assert.deepEqual(
+      done.calls.map(({ mode, agent }) => [mode, agent]),
+      [
+        ["review", "engineer"],
+        ["clarify", "product"],
+        ...lateRoles.map((agent) => ["clarify", agent]),
+        ["review", "engineer"],
+        ["acceptance", "product"],
+      ],
+    );
+    const lateComments = inline ? done.inlineComments : done.comments;
+    const lateComment = lateComments.find(({ body }) => body === question);
+    const requestId = `${inline ? "inline" : "comment"}-${lateComment.id}`;
+    for (const clarification of done.calls.slice(2, -2)) {
+      assert.match(
+        clarification.context,
+        new RegExp(`requests in this run: ${requestId}\\.`),
+      );
+    }
+    assert.deepEqual(done.labels, ["agent:accepted"]);
+    assert.deepEqual(f.dispatch("wake", "pr", "34").calls, done.calls);
+  });
+}
