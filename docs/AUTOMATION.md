@@ -73,6 +73,24 @@ cutover while PRs are in flight so recovery recognizes earlier checkpoints.
 Configure the provider in `.agents/.env` using `.agents/.env.example`. Codex uses
 the explicitly selected `CODEX_HOME` from the runner environment.
 
+### macOS and Linux defaults
+
+Both launchd and systemd run the same dispatcher commands (`webhook`, `tick`, and
+`cycle`). The service manager controls startup, scheduling, and logs.
+
+| Behavior | macOS with launchd | Linux with systemd |
+| --- | --- | --- |
+| Startup | Per-user jobs run while the user is logged in. | The timers and webhook service start at boot. Dispatcher processes run as `spacory`. |
+| Recovery check | Runs when launchd loads the job and every 10 minutes while the Mac is awake. Ticks missed during sleep are skipped. | Runs on 10-minute clock boundaries. The persistent timer triggers a catch-up run after downtime. |
+| Daily Product cycle | 09:00 in the Mac's local timezone. A missed cycle during sleep runs on wake. | 09:00 UTC by default. The persistent timer triggers a catch-up run after downtime. |
+| Webhook receiver | Starts when the job loads and restarts after a failed exit. | Starts at boot and restarts after failure with a five-second delay. |
+| Tool paths | The installer finds tool directories on its `PATH` and writes them into the launchd jobs. | The units specify a fixed `PATH` that can be extended through a drop-in. |
+| Service logs | `dispatch.log`, `webhook.log`, and `cycle.log` under `.agents/logs`. | The systemd journal. |
+
+On either host, the receiver exits normally when its signing secret is missing.
+The [Linux setup](#linux-with-systemd) shows how to set the Product cycle to the
+same local timezone as the Mac during a cutover.
+
 ### macOS with launchd
 
 ```bash
@@ -81,11 +99,8 @@ the explicitly selected `CODEX_HOME` from the runner environment.
 .agents/launchd/install.sh status
 ```
 
-The installer loads the health check (every 10 minutes), the Product cycle (daily
-at 09:00 local time), and the webhook receiver. The receiver is inactive until it
-has a secret. The jobs run while the Mac is awake and the user is logged in.
-The cycle stays on its own schedule and gets its issue inventory through `gh`
-before launching Product.
+The installer loads all three jobs. The daily cycle gets its issue inventory
+through `gh` before launching Product.
 
 ### Linux with systemd
 
@@ -125,9 +140,7 @@ To remove the jobs, run `.agents/systemd/install.sh uninstall`. This stops any
 active worker and removes the installed unit files. The checkout, credentials,
 webhook queue, logs, and systemd drop-ins stay on disk.
 
-The recovery timer runs every 10 minutes. The Product timer runs at 09:00 UTC by
-default. Both timers persist their last trigger and catch up after downtime. To
-change the Product timezone, use `sudo systemctl edit spacory-agents-cycle.timer`
+To change the Product timezone, use `sudo systemctl edit spacory-agents-cycle.timer`
 and clear the inherited schedule before setting the new one.
 
 ```ini
@@ -184,18 +197,15 @@ one dispatcher in flight across the webhook, health check, and Product cycle.
 .agents/dispatch.sh tick             # run the scheduled recovery now
 ```
 
-On macOS, use `dispatch.log`, `webhook.log`, and `cycle.log` under `.agents/logs`
-to diagnose runs. On Linux, use the systemd journal. A healthy signed delivery
-receives `202` when queued or `204` when irrelevant. Restart the receiver through
+Check the service logs for your [host](#macos-and-linux-defaults). A healthy signed
+delivery receives `202` when queued or `204` when irrelevant. Restart the receiver through
 the host service manager if it is unavailable. It reads saved wake-ups at startup.
 If GitHub missed a delivery during host downtime, redeliver it in GitHub or run
 a targeted wake.
 
-On macOS, a tick missed during sleep is skipped. Recovery runs at the next
-10-minute tick while the Mac is awake or when launchd loads the job. On Linux,
-the persistent timer catches up after downtime. Recovery uses in-flight labels
-and checkpoints to continue from a published verdict or pushed revision, or retry
-the interrupted stage if its expected result is missing.
+At the next recovery check, the dispatcher uses in-flight labels and checkpoints
+to continue from a published verdict or pushed revision, or retry the interrupted
+stage if its expected result is missing.
 
 For a scheduler-disabled smoke test, stop just the Linux health-check timer with
 `sudo systemctl stop spacory-agents-tick.timer`. On macOS, unload it with
