@@ -40,10 +40,13 @@ _launch_codex() {
   local full
   full="$(cat "$shim")"$'\n\n'"$_SPACORY_CODEX_CONTRACT"$'\n\n'"$prompt"
 
-  local args
-  if [ "$SPACORY_AGENT_ROLE:$SPACORY_AGENT_MODE" = reviewer:review ] && [ -n "${SPACORY_AGENT_RESUME_ID:-}" ]; then
-    # Resume takes the current working directory from the process, without -C.
-    args=( exec resume "$SPACORY_AGENT_RESUME_ID" "$full" --all --skip-git-repo-check )
+  local args resume="${SPACORY_AGENT_RESUME_ID:-}"
+  [ "$SPACORY_AGENT_ROLE:$SPACORY_AGENT_MODE" = reviewer:review ] || resume=''
+  if [ -n "$resume" ]; then
+    # --sandbox belongs to exec, while resume uses the current directory.
+    args=( exec )
+    [ "$mode" != acceptEdits ] || args+=( --sandbox workspace-write )
+    args+=( resume "$resume" "$full" --all --skip-git-repo-check )
   else
     args=( exec "$full" -C "$PWD" --skip-git-repo-check )
   fi
@@ -57,8 +60,8 @@ _launch_codex() {
     bypassPermissions)
       args+=( --dangerously-bypass-approvals-and-sandbox ) ;;
     acceptEdits)
-      args+=( --sandbox workspace-write
-              -c approval_policy="never"
+      [ -n "$resume" ] || args+=( --sandbox workspace-write )
+      args+=( -c approval_policy="never"
               -c sandbox_workspace_write.network_access=true ) ;;
   esac
 

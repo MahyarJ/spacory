@@ -1040,7 +1040,13 @@ for (const provider of ["claude", "codex"]) {
       invocation.includes(provider === "claude" ? "stream-json" : "--json"),
     );
     if (provider === "codex")
-      assert.deepEqual(invocation.slice(0, 3), ["exec", "resume", session]);
+      assert.deepEqual(invocation.slice(0, 5), [
+        "exec",
+        "--sandbox",
+        "workspace-write",
+        "resume",
+        session,
+      ]);
     const row = JSON.parse(readFileSync(usage, "utf8"));
     assert.deepEqual(
       [
