@@ -116,6 +116,7 @@ function mock() {
       ) {
         state.head = state.pushOnClarify.repeat(40);
         delete state.pushOnClarify;
+        if (state.commentOnClarify) add(state.commentOnClarify);
       }
       return save();
     }
@@ -556,4 +557,53 @@ test("an explicit review after blocked Resolve replaces the prior same-head verd
   assert.deepEqual(calls(done), ["review", "resolve", "review", "acceptance"]);
   assert.deepEqual(done.labels, ["agent:accepted"]);
   assert.equal(done.calls[2].head, sha("a"));
+});
+
+test("a maintainer question takes priority over an expired conditional clarification", (t) => {
+  const question = "Clarify the revised behavior.\n/agent clarify product";
+  const f = fixture(t, {
+    pushOnClarify: "b",
+    commentOnClarify: question,
+    answers: [
+      {
+        mode: "review",
+        verdict: "approve pending non-code fixes",
+        clarify: "engineer",
+      },
+    ],
+  });
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(state), ["review", "clarify", "review", "acceptance"]);
+  const [, clarify] = state.calls;
+  assert.equal(clarify.agent, "product");
+  assert.equal(clarify.head, sha("b"));
+  const request = state.comments.find(({ body }) => body === question);
+  assert.match(
+    clarify.context,
+    new RegExp(`requests in this run: comment-${request.id}\\.`),
+  );
+});
+
+test("a push during Engineer clarification skips the remaining conditional Product lane", (t) => {
+  const f = fixture(t, {
+    answers: [
+      {
+        mode: "review",
+        verdict: "approve pending non-code fixes",
+        clarify: "both",
+      },
+      { mode: "clarify", push: "b" },
+    ],
+  });
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(
+    state.calls.map(({ mode, agent, head }) => [mode, agent, head]),
+    [
+      ["review", "engineer", sha("a")],
+      ["clarify", "engineer", sha("a")],
+      ["review", "engineer", sha("b")],
+      ["acceptance", "product", sha("b")],
+    ],
+  );
+  assert.deepEqual(state.labels, ["agent:accepted"]);
 });

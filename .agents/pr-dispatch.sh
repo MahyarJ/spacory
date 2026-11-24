@@ -115,21 +115,29 @@ run_pr_push() {  # PR, resolve | reconcile
 }
 
 run_pr_clarification() {
-  local pr="$1" head="$PR_HEAD" requests="$PR_REQUESTS" role="$PR_CLARIFY_ROLE" detail lane rc
-  if [ "$PR_STAGE" != clarifying ] || [ "$PR_ACTIVE_CLARIFICATION" != "$requests" ]; then
+  local pr="$1" head="$PR_HEAD" requests="$PR_REQUESTS" role="$PR_CLARIFY_ROLE"
+  local conditional_head="$PR_CONDITIONAL_CLARIFY_HEAD" detail lane live rc
+  if [ "$PR_STAGE" != clarifying ] || [ "$PR_ACTIVE_CLARIFICATION" != "$requests" ] ||
+    { [ -n "$conditional_head" ] && [ "$conditional_head" != "$head" ]; }; then
     checkpoint "$pr" clarify "$head" "$requests"
     move_pr "$pr" clarifying
     PR_CLARIFY_REPLIES=''
+    conditional_head=''
   fi
   detail="Handle these clarification requests in this run: $requests. IDs prefixed comment- are top-level PR conversation comments; IDs prefixed inline- are line comments. Reply to the requests in your lane and post the clarification summary comment."
   for lane in engineer product; do
     [ "$role" = "$lane" ] || [ "$role" = both ] || continue
     case ",$PR_CLARIFY_REPLIES," in *",$lane,"*) continue ;; esac
+    if [ -n "$conditional_head" ]; then
+      live="$(pr_head_sha "$pr")"
+      [ "$live" = "$conditional_head" ] || return 0
+    fi
     rc=0
     SPACORY_AGENT_PR="$pr" SPACORY_AGENT_HEAD="$head" "run_$lane" clarify "$pr" "$detail" || rc=$?
-    [ "$lane" != product ] || commit_memory
     read_pr "$pr"
-    [ "$PR_STAGE" = clarifying ] || return 0
+    [ "$PR_ELIGIBLE" = true ] && [ "$PR_STAGE" = clarifying ] || return 0
+    [ -z "$conditional_head" ] || [ "$PR_HEAD" = "$conditional_head" ] || return 0
+    [ "$lane" != product ] || commit_memory
     case ",$PR_CLARIFY_REPLIES," in
       *",$lane,"*) ;;
       *) block pr "$pr" "$lane did not publish a clarification reply (exit $rc)"; return 0 ;;
@@ -176,13 +184,11 @@ drive_pr() {
       '') return 0 ;;
       blocked) return 0 ;;
       clarify|clarifying)
-        if [ "$PR_STAGE" = clarifying ] && [ "$PR_CLARIFIED" = true ]; then
-          move_pr "$pr" review
-        elif [ "$PR_STAGE" = clarifying ] && [ -n "$PR_CONDITIONAL_CLARIFY_HEAD" ] &&
-          [ "$PR_CONDITIONAL_CLARIFY_HEAD" != "$PR_HEAD" ]; then
-          move_pr "$pr" review
-        elif [ -n "$PR_REQUESTS" ]; then
+        if [ -n "$PR_REQUESTS" ]; then
           run_pr_clarification "$pr"
+        elif [ "$PR_STAGE" = clarifying ] && { [ "$PR_CLARIFIED" = true ] ||
+          { [ -n "$PR_CONDITIONAL_CLARIFY_HEAD" ] && [ "$PR_CONDITIONAL_CLARIFY_HEAD" != "$PR_HEAD" ]; }; }; then
+          move_pr "$pr" review
         else
           return 0
         fi

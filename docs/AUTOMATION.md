@@ -47,7 +47,8 @@ and apply the label for the step you want to retry.
   applies `agent:ready` when the spec is ready to build.
 - To clarify a PR, leave a top-level comment and apply `agent:clarify`, in either
   order. The dispatcher keeps a maintainer request queued across pushes. A
-  conditional verdict only applies to its recorded head. To target one role,
+  push cancels any remaining roles for a conditional verdict on the old head. A
+  pending maintainer request still runs before re-review. To target one role,
   put `/agent clarify engineer` or `/agent clarify product` on its own line in
   the comment. Inline review comments use the explicit command. A plain top-level
   request can involve both roles. Completed requests are recorded by comment ID.
