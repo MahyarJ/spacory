@@ -46,14 +46,16 @@ and apply the label for the step you want to retry.
 - To groom an idea into a spec, apply `agent:triage` to an issue. A maintainer
   applies `agent:ready` when the spec is ready to build.
 - To clarify a PR, leave a top-level comment and apply `agent:clarify`, in either
-  order. The dispatcher waits for a new maintainer request. To target one role,
+  order. The dispatcher keeps a maintainer request queued across pushes. A
+  conditional verdict only applies to its recorded head. To target one role,
   put `/agent clarify engineer` or `/agent clarify product` on its own line in
   the comment. Inline review comments use the explicit command. A plain top-level
   request can involve both roles. Completed requests are recorded by comment ID.
 - For clarification on an issue, apply `agent:clarify` after posting the question.
   Product answers and folds any decision back into the spec.
-- Apply `agent:review` to request fresh review or `agent:conflict` to reconcile.
-  The dispatcher owns the in-flight labels such as `agent:reviewing`.
+- Apply `agent:review` to start a fresh review, including after a spec change on
+  the same PR revision. Apply `agent:conflict` to reconcile. The dispatcher owns
+  the in-flight labels such as `agent:reviewing`.
 
 ## Prepare the runner
 

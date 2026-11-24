@@ -9,6 +9,7 @@ const actions = new Set([
   "resolve",
   "reconcile",
   "clarify",
+  "conditional-clarify",
   "clarified",
 ]);
 const stages = new Set([
@@ -109,14 +110,16 @@ export function prState(
     if (String(comment.user?.id) !== actor) continue;
     const record = recordFrom(comment.body ?? "");
     if (record) {
-      started[record.action] = record;
-      delete result[record.action];
-      if (record.action === "review") {
+      const action =
+        record.action === "conditional-clarify" ? "clarify" : record.action;
+      started[action] = record;
+      delete result[action];
+      if (action === "review") {
         delete result.acceptance;
         delete started.acceptance;
       }
-      if (record.action === "clarify") clarifyReplies = new Set();
-      if (record.action === "clarified") {
+      if (action === "clarify") clarifyReplies = new Set();
+      if (action === "clarified") {
         for (const id of record.requests) handled.add(id);
         previous = undefined;
         lastChanges = undefined;
@@ -126,7 +129,7 @@ export function prState(
         delete started.acceptance;
         delete started.clarify;
       }
-      if (record.action !== "clarify") lastProgress = comment.created_at;
+      if (action !== "clarify") lastProgress = comment.created_at;
       continue;
     }
     if (started.clarify) {
@@ -206,6 +209,10 @@ export function prState(
     activeClarification: started.clarify?.requests.join(",") ?? "",
     clarifyReplies: [...clarifyReplies].join(","),
     extraLabels: labels.filter((label) => label !== active).join(","),
+    conditionalClarifyHead:
+      started.clarify?.action === "conditional-clarify"
+        ? started.clarify.head
+        : "",
   };
 }
 

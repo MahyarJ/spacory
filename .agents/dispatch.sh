@@ -440,7 +440,7 @@ do_implement() {  # $1=issue
   done
   local pr; pr="$(pr_for_issue "$issue")"
   if [ -n "$pr" ]; then
-    drive_pr "$pr" 1
+    drive_pr "$pr" 1 "$issue"
     remove_label issue "$issue" agent:implementing
   elif [ "$rc" -ne 0 ]; then
     block issue "$issue" "engineer implement run failed (after $attempt attempt(s))"
@@ -468,7 +468,7 @@ reclaim_orphaned_inflight() {
   for issue in $(list_issues agent:implementing); do
     pr="$(pr_for_issue "$issue")"
     if [ -n "$pr" ]; then
-      drive_pr "$pr" 1
+      drive_pr "$pr" 1 "$issue"
       remove_label issue "$issue" agent:implementing
     else
       swap_label issue "$issue" agent:implementing agent:ready
@@ -509,13 +509,13 @@ dispatch_issue() {
     *$'\nagent:triage\n'*) do_triage "$issue" ;;
     *$'\nagent:ready\n'*)
       pr="$(pr_for_issue "$issue")"
-      if [ -n "$pr" ]; then drive_pr "$pr" 1; else do_implement "$issue"; fi
+      if [ -n "$pr" ]; then drive_pr "$pr" 1 "$issue"; else do_implement "$issue"; fi
       ;;
   esac
 }
 
 dispatch_once() {
-  local n prs label seen=' '
+  local n pr prs label seen=' '
   reclaim_orphaned_inflight
   prune_stale_worktrees
   for label in conflict reconciling changes resolving clarify clarifying review reviewing accepted; do
@@ -528,7 +528,15 @@ dispatch_once() {
   done
   for n in $(list_issues agent:clarify); do do_issue_clarify "$n"; return; done
   for n in $(list_issues agent:triage); do do_triage "$n"; return; done
-  for n in $(list_issues agent:ready); do dispatch_issue "$n"; return; done
+  for n in $(list_issues agent:ready); do
+    pr="$(pr_for_issue "$n")"
+    if [ -n "$pr" ]; then
+      drive_pr "$pr" 1 "$n"
+      continue
+    fi
+    dispatch_issue "$n"
+    return
+  done
 }
 
 print_status() {

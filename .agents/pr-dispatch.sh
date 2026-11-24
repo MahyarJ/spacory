@@ -10,7 +10,8 @@ read_pr() {
   state="$(node "$SCRIPT_DIR/pr-state.mjs" read "$1")" || return
   IFS='|' read -r PR_STAGE PR_HEAD PR_BASE PR_ELIGIBLE PR_ENGINEER PR_PRODUCT \
     PR_ENGINEER_ID PR_PREVIOUS_HEAD PR_PREVIOUS_ID PR_CHANGE_HEAD PR_RESOLVE_HEAD \
-    PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFIED PR_ACTIVE_CLARIFICATION PR_CLARIFY_REPLIES PR_EXTRA_LABELS <<<"$state"
+    PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFIED PR_ACTIVE_CLARIFICATION \
+    PR_CLARIFY_REPLIES PR_EXTRA_LABELS PR_CONDITIONAL_CLARIFY_HEAD <<<"$state"
 }
 
 checkpoint() {
@@ -54,6 +55,7 @@ run_pr_verdict() {  # PR, review | acceptance
 
   while :; do
     checkpoint "$pr" "$mode" "$head"
+    move_pr "$pr" reviewing
     live="$(pr_head_sha "$pr")"
     [ "$live" = "$head" ] || return 0
     rc=0
@@ -141,13 +143,14 @@ run_pr_clarification() {
 # An unopened handoff can be reconstructed from the linked issue. An ordinary
 # PR from the same repository still needs an explicit pipeline label or issue.
 intake_pr() {
-  local pr="$1" issue labels
+  local pr="$1" expected_issue="${2:-}" issue labels
   issue="$(issue_for_pr "$pr")"
   [ -n "$issue" ] || return 0
+  [ -z "$expected_issue" ] || [ "$issue" = "$expected_issue" ] || return 0
   labels="$(gh issue view "$issue" --json state,labels --jq 'select(.state=="OPEN") | .labels[].name')"
   case $'\n'"$labels"$'\n' in
     *$'\nagent:ready\n'*|*$'\nagent:implementing\n'*)
-      move_pr "$pr" review
+      [ -n "$PR_STAGE" ] || move_pr "$pr" review
       remove_label issue "$issue" agent:implementing
       remove_label issue "$issue" agent:ready
       ;;
@@ -157,7 +160,7 @@ intake_pr() {
 # Drain one PR while eligible; each completed action re-enters this selector.
 # Late events carry only the PR number. Progress depends on current GitHub state.
 drive_pr() {
-  local pr="$1" intake="${2:-0}" transition=0 announce=0 live
+  local pr="$1" intake="${2:-0}" linked_issue="${3:-}" transition=0 announce=0 live
   while [ "$transition" -lt 50 ]; do
     transition=$((transition + 1))
     read_pr "$pr"
@@ -165,20 +168,21 @@ drive_pr() {
     if [ "$PR_STAGE" != blocked ] && [ -n "$PR_EXTRA_LABELS" ]; then
       gh pr edit "$pr" --remove-label "$PR_EXTRA_LABELS" >/dev/null
     fi
+    if [ "$intake" -eq 1 ] && { [ -z "$PR_STAGE" ] || [ -n "$linked_issue" ]; }; then
+      intake=0
+      intake_pr "$pr" "$linked_issue"
+    fi
     case "$PR_STAGE" in
-      '')
-        [ "$intake" -eq 1 ] || return 0
-        intake=0
-        intake_pr "$pr"
-        ;;
+      '') return 0 ;;
       blocked) return 0 ;;
       clarify|clarifying)
         if [ "$PR_STAGE" = clarifying ] && [ "$PR_CLARIFIED" = true ]; then
           move_pr "$pr" review
+        elif [ "$PR_STAGE" = clarifying ] && [ -n "$PR_CONDITIONAL_CLARIFY_HEAD" ] &&
+          [ "$PR_CONDITIONAL_CLARIFY_HEAD" != "$PR_HEAD" ]; then
+          move_pr "$pr" review
         elif [ -n "$PR_REQUESTS" ]; then
           run_pr_clarification "$pr"
-        elif [ -n "$PR_PREVIOUS_HEAD" ] && [ "$PR_PREVIOUS_HEAD" != "$PR_HEAD" ]; then
-          move_pr "$pr" review
         else
           return 0
         fi
@@ -198,23 +202,24 @@ drive_pr() {
           run_pr_push "$pr" resolve
         fi
         ;;
-      review|reviewing)
+      review)
+        # A queued review is a new request, including an explicit re-review
+        # at the same head after the spec changes or a Resolve is blocked.
+        run_pr_verdict "$pr" review
+        ;;
+      reviewing)
         # Read the head again after interpreting the evidence before publishing
         # any transition. The next iteration checks it again before running.
         live="$(pr_head_sha "$pr")"
         [ "$live" = "$PR_HEAD" ] || continue
-        if [ "$PR_STAGE" = review ] && [ "$PR_ENGINEER" = pass ] && [ "$PR_PRODUCT" = pass ]; then
-          move_pr "$pr" reviewing
-          run_pr_verdict "$pr" review
-        elif [ "$PR_ENGINEER" = changes ] || [ "$PR_PRODUCT" = changes ]; then
+        if [ "$PR_ENGINEER" = changes ] || [ "$PR_PRODUCT" = changes ]; then
           move_pr "$pr" changes
         elif [ "$PR_ENGINEER" = defer ] || [ "$PR_PRODUCT" = defer ]; then
-          move_pr "$pr" clarify
+          checkpoint "$pr" conditional-clarify "$PR_HEAD" "$PR_REQUESTS"
+          move_pr "$pr" clarifying
         elif [ "$PR_ENGINEER" = none ]; then
-          move_pr "$pr" reviewing
           run_pr_verdict "$pr" review
         elif [ "$PR_PRODUCT" = none ]; then
-          move_pr "$pr" reviewing
           run_pr_verdict "$pr" acceptance
         else
           move_pr "$pr" accepted

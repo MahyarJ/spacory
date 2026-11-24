@@ -54,17 +54,22 @@ function mock() {
     if (verb === "list") {
       if (kind === "issue") {
         if (state.issueLabels.includes(arg("--label"))) output(12);
-      } else if (
-        state.exists &&
-        (!args.includes("--label") || state.labels.includes(arg("--label")))
-      )
-        output(34);
+        if (state.laterIssueLabels.includes(arg("--label"))) output(13);
+      } else if (state.exists) {
+        const matches = args.includes("--label")
+          ? state.labels.includes(arg("--label"))
+          : arg("--jq").includes("+#12");
+        if (matches) output(34);
+      }
       return;
     }
     if (verb === "view") {
       const fields = arg("--json");
       if (kind === "issue") {
-        for (const label of state.issueLabels) output(label);
+        for (const label of number === "12"
+          ? state.issueLabels
+          : state.laterIssueLabels)
+          output(label);
       } else if (fields === "headRefOid") output(state.head);
       else if (fields === "headRefName") output("branch");
       else if (fields === "mergeable") output("MERGEABLE");
@@ -79,7 +84,7 @@ function mock() {
       else if (fields.startsWith("state,")) {
         output({
           state: state.exists ? "OPEN" : "CLOSED",
-          isDraft: false,
+          isDraft: state.draft ?? false,
           isCrossRepository: false,
           labels: state.labels.map((name) => ({ name })),
           headRefOid: state.head,
@@ -89,7 +94,12 @@ function mock() {
       return;
     }
     if (verb === "edit") {
-      const key = kind === "pr" ? "labels" : "issueLabels";
+      const key =
+        kind === "pr"
+          ? "labels"
+          : number === "12"
+            ? "issueLabels"
+            : "laterIssueLabels";
       if (args.includes("--remove-label"))
         state[key] = state[key].filter(
           (label) => !arg("--remove-label").split(",").includes(label),
@@ -99,6 +109,14 @@ function mock() {
         !state[key].includes(arg("--add-label"))
       )
         state[key].push(arg("--add-label"));
+      if (
+        kind === "pr" &&
+        arg("--add-label") === "agent:clarifying" &&
+        state.pushOnClarify
+      ) {
+        state.head = state.pushOnClarify.repeat(40);
+        delete state.pushOnClarify;
+      }
       return save();
     }
     if (verb === "merge") {
@@ -114,9 +132,10 @@ function mock() {
   if (command === "git" || command === "notify") return;
   if (process.env.SPACORY_WEBHOOK_SECRET)
     throw new Error("Webhook secret leaked into agent environment");
-  const [mode, , context] = args;
+  const [mode, number, context] = args;
   state.calls.push({
     mode,
+    number,
     agent: command,
     head: state.head,
     context,
@@ -193,6 +212,7 @@ function fixture(t, overrides = {}, options = {}) {
     exists: true,
     labels: ["agent:review"],
     issueLabels: [],
+    laterIssueLabels: [],
     comments: [],
     calls: [],
     answers: [],
@@ -464,4 +484,76 @@ test("a stale base reconciles and requires approvals for the new head", (t) => {
     "acceptance",
   ]);
   assert.equal(state.calls.at(-1).head, sha("b"));
+});
+
+for (const draft of [false, true]) {
+  test(`recovery scans past an issue with an existing ${draft ? "draft" : "managed"} PR`, (t) => {
+    const f = fixture(t, {
+      draft,
+      labels: ["agent:blocked"],
+      issueLabels: ["agent:ready"],
+      laterIssueLabels: ["agent:ready"],
+    });
+    const state = f.dispatch("tick");
+    assert.deepEqual(state.issueLabels, draft ? ["agent:ready"] : []);
+    assert.deepEqual(
+      state.calls.map(({ mode, number }) => [mode, number]),
+      [["implement", "13"]],
+    );
+  });
+}
+
+test("manual clarification queued after a push waits for the question", (t) => {
+  const f = fixture(t, {
+    head: sha("b"),
+    labels: ["agent:clarify"],
+    comments: [
+      comment(100, marker("review", sha("a"))),
+      comment(
+        101,
+        `**Engineer review**\n**Head:** ${sha("a")}\n**Verdict:** approve`,
+      ),
+    ],
+  });
+  const waiting = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(waiting.labels, ["agent:clarify"]);
+  assert.deepEqual(calls(waiting), []);
+  waiting.comments.push(
+    comment(102, "Clarify the copy.\n/agent clarify product"),
+  );
+  f.set(waiting);
+  const done = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(done), ["clarify", "review", "acceptance"]);
+  assert.equal(done.calls[0].agent, "product");
+});
+
+test("a push invalidates a queued conditional clarification for the old head", (t) => {
+  const f = fixture(t, {
+    pushOnClarify: "b",
+    answers: [
+      {
+        mode: "review",
+        verdict: "approve pending non-code fixes",
+        clarify: "product",
+      },
+    ],
+  });
+  const state = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(state), ["review", "review", "acceptance"]);
+  assert.deepEqual(state.labels, ["agent:accepted"]);
+  assert.equal(state.calls[1].head, sha("b"));
+});
+
+test("an explicit review after blocked Resolve replaces the prior same-head verdict", (t) => {
+  const f = fixture(t, {
+    answers: [{ mode: "review", verdict: "changes requested" }],
+  });
+  const blocked = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(blocked.labels, ["agent:blocked"]);
+  blocked.labels = ["agent:review"];
+  f.set(blocked);
+  const done = f.dispatch("wake", "pr", "34");
+  assert.deepEqual(calls(done), ["review", "resolve", "review", "acceptance"]);
+  assert.deepEqual(done.labels, ["agent:accepted"]);
+  assert.equal(done.calls[2].head, sha("a"));
 });
