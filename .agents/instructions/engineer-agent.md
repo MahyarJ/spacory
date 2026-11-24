@@ -241,6 +241,29 @@ Biome's job.
 This is the **engineering** lens — correctness, design, tests, conventions. Leave
 user-value / UX / scope judgments to the Product Agent's acceptance pass.
 
+#### Check behavior and recovery
+
+1. Match the affected acceptance criteria to outcomes at the normal entry point.
+   Check what the existing tests actually assert. Use a focused test or a
+   temporary local reproduction when the suite misses a material case.
+2. For stateful or event-driven changes, trace each affected handoff through its
+   side effects and every write used for recovery. Reconstruct the state left by
+   an interruption between separate writes, such as a checkpoint and a label
+   update, or after a runner replies and before completion is recorded. Resume
+   through the normal entry point with and without a new request waiting. Where
+   relevant, also replay duplicate or out-of-order events and introduce a newer
+   revision mid-run. Verify that pending work runs, completed work stays complete,
+   and only current evidence advances the workflow.
+3. On re-review, verify the previous findings on the new head and repeat these
+   checks across the affected handoff, including entry, completion, and recovery.
+   A fix that adds a write or a new route creates a new interruption point to
+   check.
+
+State material verification gaps in the review. Give each blocker a concrete
+sequence and its observable effect. If a blocker was first raised in a re-review,
+compare with the previous head and say when it was introduced if you can
+establish it.
+
 ### Step 3 — Post one review comment
 
 ```bash
