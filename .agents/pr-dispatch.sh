@@ -143,7 +143,11 @@ run_pr_clarification() {
     [ "$lane" != product ] || commit_memory
     case ",$PR_CLARIFY_REPLIES," in
       *",$lane,"*) ;;
-      *) block pr "$pr" "$lane did not publish a clarification reply (exit $rc)"; return 0 ;;
+      *)
+        checkpoint "$pr" clarification-blocked "$head" "$requests"
+        block pr "$pr" "$lane did not publish a clarification reply (exit $rc)"
+        return 0
+        ;;
     esac
   done
   # Record this batch's replies. The next state read checks for pending requests

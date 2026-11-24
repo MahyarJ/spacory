@@ -10,6 +10,7 @@ const actions = new Set([
   "reconcile",
   "clarify",
   "conditional-clarify",
+  "clarification-blocked",
   "clarified",
 ]);
 const stages = new Set([
@@ -99,6 +100,24 @@ function combinedRole(roles) {
   return unique.size > 1 ? "both" : ([...unique][0] ?? "");
 }
 
+function reviewRequestedAfterBlock(timeline, clarification) {
+  const lastLabeled = (name) =>
+    timeline.findLastIndex(
+      (entry) => entry.event === "labeled" && entry.label?.name === name,
+    );
+  const blocked = lastLabeled("agent:blocked");
+  if (blocked < 0 || lastLabeled("agent:review") <= blocked) return false;
+  const checkpoint = timeline.findIndex(
+    (entry) =>
+      entry.event === "commented" && entry.id === clarification.commentId,
+  );
+  // Timeline position distinguishes a fresh label from an earlier one even
+  // when GitHub recorded the checkpoint and the label in the same second.
+  return checkpoint >= 0
+    ? checkpoint < blocked
+    : (timeline[blocked].created_at ?? "") > clarification.createdAt;
+}
+
 export function prState(
   pr,
   comments,
@@ -117,9 +136,17 @@ export function prState(
     if (String(comment.user?.id) !== actor) continue;
     const record = recordFrom(comment.body ?? "");
     if (record) {
+      if (record.action === "clarification-blocked") {
+        if (started.clarify) started.clarify.blocked = true;
+        continue;
+      }
       const action =
         record.action === "conditional-clarify" ? "clarify" : record.action;
-      started[action] = record;
+      started[action] = {
+        ...record,
+        commentId: comment.id,
+        createdAt: comment.created_at,
+      };
       delete result[action];
       if (action === "review") {
         delete result.acceptance;
@@ -205,7 +232,15 @@ export function prState(
       : "";
   const conditionalExpired =
     conditionalClarifyHead !== "" && conditionalClarifyHead !== pr.headRefOid;
-  const activeClarification = conditionalExpired ? undefined : started.clarify;
+  const reviewOverridesClarification =
+    stage === "review" &&
+    started.clarify &&
+    (started.clarify.blocked ||
+      reviewRequestedAfterBlock(labelHistory, started.clarify));
+  const activeClarification =
+    conditionalExpired || reviewOverridesClarification
+      ? undefined
+      : started.clarify;
   const activeRequests = activeClarification?.requests ?? [];
   const activeRole =
     activeClarification?.role ??
@@ -227,7 +262,8 @@ export function prState(
     clarifyRole: combinedRole(requests.values()),
     requests: [...requests.keys()].join(","),
     clarifyEnded:
-      Boolean(started.clarified && !started.clarify) || conditionalExpired,
+      !reviewOverridesClarification &&
+      (Boolean(started.clarified && !started.clarify) || conditionalExpired),
     activeClarification: activeRequests.join(","),
     activeClarifyRole: activeRole,
     clarifyReplies: [...clarifyReplies].join(","),
@@ -282,11 +318,20 @@ function main([command, number, action, head, requests = "", role]) {
   const comments = active
     ? paginated(`repos/:owner/:repo/issues/${number}/comments`)
     : [];
-  const labelHistory =
-    active && pipelineLabels(pr).length > 1
-      ? paginated(`repos/:owner/:repo/issues/${number}/timeline`)
-      : [];
+  const timeline = () =>
+    paginated(`repos/:owner/:repo/issues/${number}/timeline`);
+  const hasOverlappingLabels = active && pipelineLabels(pr).length > 1;
+  let labelHistory = hasOverlappingLabels ? timeline() : [];
   let state = prState(pr, comments, [], actor, labelHistory);
+  if (
+    active &&
+    !hasOverlappingLabels &&
+    state.stage === "review" &&
+    (state.activeClarification || state.conditionalClarifyHead)
+  ) {
+    labelHistory = timeline();
+    state = prState(pr, comments, [], actor, labelHistory);
+  }
   if (
     active &&
     (state.stage === "clarify" ||

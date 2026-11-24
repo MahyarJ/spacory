@@ -39,7 +39,9 @@ Reconcile, acceptance, or blocking resets the cap, as does a linked spec edit.
 A failed runner can retry while its expected artifact is missing. If the runner
 returns successfully without a verdict or required push, or retries run out, the
 dispatcher sets `agent:blocked`. Inspect the PR and logs, remove `agent:blocked`,
-and apply the label for the step you want to retry.
+and apply the label for the next step. After a blocked clarification, use
+`agent:clarify` to finish the pending batch or `agent:review` to start a fresh
+review after resolving the clarification yourself.
 
 ## Maintainer requests
 

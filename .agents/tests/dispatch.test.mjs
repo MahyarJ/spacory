@@ -26,7 +26,7 @@ function mock() {
   const output = (value) =>
     console.log(typeof value === "object" ? JSON.stringify(value) : value);
   const add = (body) => {
-    state.comments.push({
+    const comment = {
       id: 100 + state.comments.length,
       user: { id: 42 },
       author_association: "OWNER",
@@ -34,6 +34,12 @@ function mock() {
         Date.UTC(2026, 0, 1, 0, 0, state.comments.length + 1),
       ).toISOString(),
       body,
+    };
+    state.comments.push(comment);
+    state.timeline.push({
+      event: "commented",
+      id: comment.id,
+      created_at: comment.created_at,
     });
   };
   const arg = (name) => args[args.indexOf(name) + 1];
@@ -109,8 +115,16 @@ function mock() {
       if (
         args.includes("--add-label") &&
         !state[key].includes(arg("--add-label"))
-      )
-        state[key].push(arg("--add-label"));
+      ) {
+        const name = arg("--add-label");
+        state[key].push(name);
+        if (kind === "pr")
+          state.timeline.push({
+            event: "labeled",
+            label: { name },
+            created_at: state.comments.at(-1)?.created_at,
+          });
+      }
       if (
         kind === "pr" &&
         arg("--add-label") === "agent:clarifying" &&
@@ -171,9 +185,10 @@ function mock() {
     );
   }
   if (mode === "clarify") {
-    add(
-      `**${command === "engineer" ? "Engineer" : "Product"} clarification**\nSummary`,
-    );
+    if (!entry.noReply)
+      add(
+        `**${command === "engineer" ? "Engineer" : "Product"} clarification**\nSummary`,
+      );
     if (entry.comment) add(entry.comment);
   }
   save();
@@ -231,6 +246,7 @@ function fixture(t, overrides = {}, options = {}) {
     laterIssueLabels: [],
     comments: [],
     inlineComments: [],
+    timeline: [],
     calls: [],
     answers: [],
     merges: [],
@@ -683,6 +699,11 @@ test("recovery resumes a recorded clarification before the label swap", (t) => {
   const recorded = marker("clarify", head, ["comment-101"], "engineer");
   const f = fixture(t, {
     labels: ["agent:review"],
+    timeline: [
+      { event: "labeled", label: { name: "agent:blocked" } },
+      { event: "labeled", label: { name: "agent:review" } },
+      { event: "commented", id: 102 },
+    ],
     comments: [
       comment(100, marker("clarified", head, ["comment-99"])),
       comment(101, "Check one more detail.\n/agent clarify engineer"),
@@ -748,6 +769,57 @@ for (const productReplied of [true, false]) {
           JSON.parse(body.slice("<!-- spacory-dispatch ".length, -4)).requests,
       ),
       [[first], [late]],
+    );
+    assert.deepEqual(done.labels, ["agent:accepted"]);
+  });
+}
+
+for (const recovery of ["review", "legacy review", "clarify"]) {
+  test(`a maintainer can choose ${recovery} after a clarification blocks`, (t) => {
+    const chosenStep = recovery === "legacy review" ? "review" : recovery;
+    const question = "Clarify this PR before we merge.";
+    const f = fixture(t, {
+      labels: ["agent:clarify"],
+      comments: [comment(100, question)],
+      answers: [{ mode: "clarify" }, { mode: "clarify", noReply: true }],
+    });
+    const blocked = f.dispatch("wake", "pr", "34");
+    assert.deepEqual(blocked.labels, ["agent:blocked"]);
+    assert.deepEqual(
+      blocked.calls.map(({ agent }) => agent),
+      ["engineer", "product"],
+    );
+    blocked.labels = [`agent:${chosenStep}`];
+    // GitHub can emit both labels and the checkpoint within a single second.
+    const created_at = blocked.timeline.find(
+      ({ event }) => event === "commented",
+    ).created_at;
+    blocked.timeline.find(
+      ({ label }) => label?.name === "agent:blocked",
+    ).created_at = created_at;
+    blocked.timeline.push(
+      { event: "unlabeled", label: { name: "agent:blocked" }, created_at },
+      { event: "labeled", label: { name: `agent:${chosenStep}` }, created_at },
+    );
+    if (recovery === "review") blocked.timeline = [];
+    if (recovery === "legacy review") {
+      blocked.comments = blocked.comments.filter(
+        ({ body }) =>
+          !body.startsWith(
+            '<!-- spacory-dispatch {"action":"clarification-blocked"',
+          ),
+      );
+    }
+    f.set(blocked);
+    const done = f.dispatch("tick");
+    const expected = [
+      ["review", "engineer"],
+      ["acceptance", "product"],
+    ];
+    if (chosenStep === "clarify") expected.unshift(["clarify", "product"]);
+    assert.deepEqual(
+      done.calls.slice(2).map(({ mode, agent }) => [mode, agent]),
+      expected,
     );
     assert.deepEqual(done.labels, ["agent:accepted"]);
   });
