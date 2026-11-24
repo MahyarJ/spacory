@@ -263,8 +263,8 @@ function fixture(t, overrides = {}, options = {}) {
 }
 
 const calls = (state) => state.calls.map(({ mode }) => mode);
-const marker = (action, head) =>
-  `<!-- spacory-dispatch ${JSON.stringify({ action, head, requests: [] })} -->`;
+const marker = (action, head, requests = [], role) =>
+  `<!-- spacory-dispatch ${JSON.stringify({ action, head, requests, role })} -->`;
 const comment = (id, body, user = 42) => ({
   id,
   user: { id: user },
@@ -675,5 +675,80 @@ for (const timing of [
     }
     assert.deepEqual(done.labels, ["agent:accepted"]);
     assert.deepEqual(f.dispatch("wake", "pr", "34").calls, done.calls);
+  });
+}
+
+test("recovery resumes a recorded clarification before the label swap", (t) => {
+  const head = sha("a");
+  const recorded = marker("clarify", head, ["comment-101"], "engineer");
+  const f = fixture(t, {
+    labels: ["agent:review"],
+    comments: [
+      comment(100, marker("clarified", head, ["comment-99"])),
+      comment(101, "Check one more detail.\n/agent clarify engineer"),
+      comment(102, recorded),
+    ],
+  });
+  const done = f.dispatch("tick");
+  assert.deepEqual(
+    done.calls.map(({ mode, agent }) => [mode, agent]),
+    [
+      ["clarify", "engineer"],
+      ["review", "engineer"],
+      ["acceptance", "product"],
+    ],
+  );
+  assert.equal(done.comments.filter(({ body }) => body === recorded).length, 1);
+  assert.deepEqual(done.labels, ["agent:accepted"]);
+});
+
+for (const productReplied of [true, false]) {
+  test(`recovery drains a recorded batch with ${productReplied ? "both replies" : "one reply"} before a new question`, (t) => {
+    const head = sha("a");
+    const first = "comment-100";
+    const lateNumber = productReplied ? 104 : 103;
+    const late = `comment-${lateNumber}`;
+    const recorded = marker("clarify", head, [first]);
+    const f = fixture(t, {
+      labels: ["agent:clarifying"],
+      comments: [
+        comment(100, "Clarify how this should work."),
+        comment(101, recorded),
+        comment(102, "**Engineer clarification**\nFirst reply."),
+        ...(productReplied
+          ? [comment(103, "**Product clarification**\nFirst reply.")]
+          : []),
+        comment(
+          lateNumber,
+          "Check the technical edge case.\n/agent clarify engineer",
+        ),
+      ],
+    });
+    const done = f.dispatch("tick");
+    const clarifications = done.calls.filter(({ mode }) => mode === "clarify");
+    assert.deepEqual(
+      clarifications.map(({ agent }) => agent),
+      productReplied ? ["engineer"] : ["product", "engineer"],
+    );
+    assert.match(
+      clarifications.at(-1).context,
+      new RegExp(`requests in this run: ${late}\\.`),
+    );
+    if (!productReplied)
+      assert.match(
+        clarifications[0].context,
+        new RegExp(`requests in this run: ${first}\\.`),
+      );
+    const finished = done.comments.filter(({ body }) =>
+      body.startsWith('<!-- spacory-dispatch {"action":"clarified"'),
+    );
+    assert.deepEqual(
+      finished.map(
+        ({ body }) =>
+          JSON.parse(body.slice("<!-- spacory-dispatch ".length, -4)).requests,
+      ),
+      [[first], [late]],
+    );
+    assert.deepEqual(done.labels, ["agent:accepted"]);
   });
 }

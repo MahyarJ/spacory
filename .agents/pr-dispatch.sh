@@ -11,7 +11,7 @@ read_pr() {
   IFS='|' read -r PR_STAGE PR_HEAD PR_BASE PR_ELIGIBLE PR_ENGINEER PR_PRODUCT \
     PR_ENGINEER_ID PR_PREVIOUS_HEAD PR_PREVIOUS_ID PR_CHANGE_HEAD PR_RESOLVE_HEAD \
     PR_RECONCILE_HEAD PR_CLARIFY_ROLE PR_REQUESTS PR_CLARIFY_ENDED PR_ACTIVE_CLARIFICATION \
-    PR_CLARIFY_REPLIES PR_EXTRA_LABELS PR_CONDITIONAL_CLARIFY_HEAD <<<"$state"
+    PR_ACTIVE_CLARIFY_ROLE PR_CLARIFY_REPLIES PR_EXTRA_LABELS PR_CONDITIONAL_CLARIFY_HEAD <<<"$state"
 }
 
 checkpoint() {
@@ -116,14 +116,16 @@ run_pr_push() {  # PR, resolve | reconcile
 
 run_pr_clarification() {
   local pr="$1" head="$PR_HEAD" requests="$PR_REQUESTS" role="$PR_CLARIFY_ROLE"
-  local conditional_head="$PR_CONDITIONAL_CLARIFY_HEAD" detail lane live rc
-  if [ "$PR_STAGE" != clarifying ] || [ "$PR_ACTIVE_CLARIFICATION" != "$requests" ] ||
-    { [ -n "$conditional_head" ] && [ "$conditional_head" != "$head" ]; }; then
-    checkpoint "$pr" clarify "$head" "$requests"
-    move_pr "$pr" clarifying
+  local conditional_head='' detail lane live rc
+  if [ -n "$PR_ACTIVE_CLARIFICATION" ]; then
+    requests="$PR_ACTIVE_CLARIFICATION"
+    role="$PR_ACTIVE_CLARIFY_ROLE"
+    conditional_head="$PR_CONDITIONAL_CLARIFY_HEAD"
+  else
+    checkpoint "$pr" clarify "$head" "$requests" "$role"
     PR_CLARIFY_REPLIES=''
-    conditional_head=''
   fi
+  move_pr "$pr" clarifying
   detail="Handle these clarification requests in this run: $requests. IDs prefixed comment- are top-level PR conversation comments; IDs prefixed inline- are line comments. Reply to the requests in your lane and post the clarification summary comment."
   for lane in engineer product; do
     [ "$role" = "$lane" ] || [ "$role" = both ] || continue
@@ -137,6 +139,7 @@ run_pr_clarification() {
     read_pr "$pr"
     [ "$PR_ELIGIBLE" = true ] && [ "$PR_STAGE" = clarifying ] || return 0
     [ -z "$conditional_head" ] || [ "$PR_HEAD" = "$conditional_head" ] || return 0
+    [ "$PR_ACTIVE_CLARIFICATION" = "$requests" ] || return 0
     [ "$lane" != product ] || commit_memory
     case ",$PR_CLARIFY_REPLIES," in
       *",$lane,"*) ;;
@@ -179,6 +182,16 @@ drive_pr() {
     if [ "$intake" -eq 1 ] && { [ -z "$PR_STAGE" ] || [ -n "$linked_issue" ]; }; then
       intake=0
       intake_pr "$pr" "$linked_issue"
+    fi
+    if [ -n "$PR_ACTIVE_CLARIFICATION" ]; then
+      case "$PR_STAGE" in
+        clarify|clarifying|review|reviewing)
+          # A worker may have been interrupted before swapping labels or
+          # marking its batch complete. Recover that batch before starting one.
+          run_pr_clarification "$pr"
+          continue
+          ;;
+      esac
     fi
     case "$PR_STAGE" in
       '') return 0 ;;
@@ -224,7 +237,7 @@ drive_pr() {
         if [ "$PR_ENGINEER" = changes ] || [ "$PR_PRODUCT" = changes ]; then
           move_pr "$pr" changes
         elif [ "$PR_ENGINEER" = defer ] || [ "$PR_PRODUCT" = defer ]; then
-          checkpoint "$pr" conditional-clarify "$PR_HEAD" "$PR_REQUESTS"
+          checkpoint "$pr" conditional-clarify "$PR_HEAD" "$PR_REQUESTS" "$PR_CLARIFY_ROLE"
           move_pr "$pr" clarifying
         elif [ "$PR_ENGINEER" = none ]; then
           run_pr_verdict "$pr" review

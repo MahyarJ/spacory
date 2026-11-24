@@ -52,7 +52,9 @@ and apply the label for the step you want to retry.
   posted while a clarification is finishing. To target one role,
   put `/agent clarify engineer` or `/agent clarify product` on its own line in
   the comment. Inline review comments use the explicit command. A plain top-level
-  request can involve both roles. Completed requests are recorded by comment ID.
+  request can involve both roles. After an interruption, the dispatcher finishes
+  the recorded batch using saved replies before starting newer requests. Completed
+  requests are recorded by comment ID.
 - For clarification on an issue, apply `agent:clarify` after posting the question.
   Product answers and folds any decision back into the spec.
 - Apply `agent:review` to start a fresh review, including after a spec change on

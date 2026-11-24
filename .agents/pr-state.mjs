@@ -27,6 +27,7 @@ const stages = new Set([
 const sha = /^[0-9a-f]{40}$/;
 const requestId = /^(?:comment|inline)-[0-9]+$/;
 const maintainer = new Set(["OWNER", "MEMBER", "COLLABORATOR"]);
+const clarificationRoles = new Set(["engineer", "product", "both"]);
 
 function gh(...args) {
   return execFileSync("gh", args, {
@@ -43,7 +44,8 @@ function recordFrom(body) {
       actions.has(record.action) &&
       sha.test(record.head) &&
       Array.isArray(record.requests) &&
-      record.requests.every((id) => requestId.test(id))
+      record.requests.every((id) => requestId.test(id)) &&
+      (record.role === undefined || clarificationRoles.has(record.role))
     )
       return record;
   } catch {
@@ -90,6 +92,11 @@ function clarificationRequest(comment, inline, command) {
   if (inline || body.startsWith(prefix) || !body.trim()) return;
   if (/^\s*\S*\s*\*\*(?:Engineer|Product)\b/.test(body)) return;
   return "both";
+}
+
+function combinedRole(roles) {
+  const unique = new Set(roles);
+  return unique.size > 1 ? "both" : ([...unique][0] ?? "");
 }
 
 export function prState(
@@ -149,8 +156,7 @@ export function prState(
     if (verdict.verdict === "changes") lastChanges = verdict;
     if (verdict.role === "review") previous = result.review;
   }
-  const requests = [];
-  const roles = new Set();
+  const requests = new Map();
   const matching = (role) =>
     result[role]?.head === pr.headRefOid ? result[role] : undefined;
   const engineer = matching("review");
@@ -159,8 +165,7 @@ export function prState(
     (review) => review?.verdict === "defer",
   );
   if (deferred) {
-    roles.add(deferred.clarify);
-    requests.push(`comment-${deferred.id}`);
+    requests.set(`comment-${deferred.id}`, deferred.clarify);
   } else {
     for (const [list, kind] of [
       [comments, "comment"],
@@ -180,8 +185,7 @@ export function prState(
           continue;
         const role = clarificationRequest(comment, kind === "inline", command);
         if (!role) continue;
-        requests.push(id);
-        roles.add(role);
+        requests.set(id, role);
       }
     }
   }
@@ -199,6 +203,14 @@ export function prState(
     started.clarify?.action === "conditional-clarify"
       ? started.clarify.head
       : "";
+  const conditionalExpired =
+    conditionalClarifyHead !== "" && conditionalClarifyHead !== pr.headRefOid;
+  const activeClarification = conditionalExpired ? undefined : started.clarify;
+  const activeRequests = activeClarification?.requests ?? [];
+  const activeRole =
+    activeClarification?.role ??
+    combinedRole(activeRequests.map((id) => requests.get(id) ?? "both"));
+  for (const id of activeRequests) requests.delete(id);
   return {
     stage,
     head: pr.headRefOid,
@@ -212,13 +224,12 @@ export function prState(
     changeHead: lastChanges?.head ?? "",
     resolveHead: started.resolve?.head ?? "",
     reconcileHead: started.reconcile?.head ?? "",
-    clarifyRole: roles.size > 1 ? "both" : ([...roles][0] ?? ""),
-    requests: [...new Set(requests)].join(","),
+    clarifyRole: combinedRole(requests.values()),
+    requests: [...requests.keys()].join(","),
     clarifyEnded:
-      Boolean(started.clarified && !started.clarify) ||
-      (conditionalClarifyHead !== "" &&
-        conditionalClarifyHead !== pr.headRefOid),
-    activeClarification: started.clarify?.requests.join(",") ?? "",
+      Boolean(started.clarified && !started.clarify) || conditionalExpired,
+    activeClarification: activeRequests.join(","),
+    activeClarifyRole: activeRole,
     clarifyReplies: [...clarifyReplies].join(","),
     extraLabels: labels.filter((label) => label !== active).join(","),
     conditionalClarifyHead,
@@ -233,14 +244,15 @@ function paginated(endpoint) {
   return JSON.parse(gh("api", endpoint, "--paginate", "--slurp")).flat();
 }
 
-function main([command, number, action, head, requests = ""]) {
+function main([command, number, action, head, requests = "", role]) {
   if (!/^[1-9][0-9]*$/.test(number)) throw new Error("Invalid GitHub number");
   if (command === "record") {
     const ids = requests ? requests.split(",") : [];
     if (
       !actions.has(action) ||
       !sha.test(head) ||
-      !ids.every((id) => requestId.test(id))
+      !ids.every((id) => requestId.test(id)) ||
+      (role !== undefined && !clarificationRoles.has(role))
     ) {
       throw new Error("Invalid dispatcher checkpoint");
     }
@@ -249,7 +261,7 @@ function main([command, number, action, head, requests = ""]) {
       "comment",
       number,
       "--body",
-      `${prefix}${JSON.stringify({ action, head, requests: ids })} -->`,
+      `${prefix}${JSON.stringify({ action, head, requests: ids, role })} -->`,
     );
     return;
   }
@@ -279,7 +291,9 @@ function main([command, number, action, head, requests = ""]) {
     active &&
     (state.stage === "clarify" ||
       state.stage === "clarifying" ||
-      (state.stage === "review" && state.clarifyEnded))
+      (state.stage === "review" &&
+        (state.clarifyEnded || state.activeClarification)) ||
+      (state.stage === "reviewing" && state.activeClarification))
   ) {
     const inline = paginated(`repos/:owner/:repo/pulls/${number}/comments`);
     if (inline.length)
