@@ -48,7 +48,20 @@ function mock() {
     if (kind === "auth") return;
     if (kind === "api") {
       if (verb === "user") output(42);
-      else if (verb.endsWith("/comments"))
+      else if (verb === "graphql" && args.includes("--slurp")) {
+        output([
+          {
+            data: {
+              repository: {
+                pullRequest: {
+                  createdAt: state.createdAt,
+                  timelineItems: { nodes: state.reviewEvents },
+                },
+              },
+            },
+          },
+        ]);
+      } else if (verb.endsWith("/comments"))
         output([
           verb.includes("/pulls/") ? state.inlineComments : state.comments,
         ]);
@@ -240,6 +253,8 @@ function fixture(t, overrides = {}, options = {}) {
   const set = (state) => writeFileSync(file, JSON.stringify(state));
   set({
     head: sha("a"),
+    createdAt: "2026-01-01T00:00:00Z",
+    reviewEvents: [],
     exists: true,
     labels: ["agent:review"],
     issueLabels: [],
@@ -255,6 +270,11 @@ function fixture(t, overrides = {}, options = {}) {
   return {
     get,
     set,
+    usage: () =>
+      readFileSync(path.join(dir, "logs", "usage.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map(JSON.parse),
     dispatch: (...args) => {
       const run = spawnSync("bash", [path.join(dir, "dispatch.sh"), ...args], {
         cwd: root,
@@ -262,6 +282,7 @@ function fixture(t, overrides = {}, options = {}) {
           ...process.env,
           PATH: `${bin}:${process.env.PATH}`,
           FIXTURE_STATE: file,
+          SPACORY_AGENT_USAGE_LOG: path.join(dir, "logs", "usage.jsonl"),
           SPACORY_DISPATCH_LOCK: path.join(root, "dispatch.lock"),
           SPACORY_AGENT_RETRIES: "0",
           SPACORY_WEBHOOK_SECRET: "fixture-webhook-secret",
@@ -302,6 +323,11 @@ test("implementation, Engineer request, pushed fix and approval hand off directl
     ],
   });
   const state = f.dispatch("wake", "issue", "12");
+  assert.deepEqual(f.usage()[0], {
+    event: "eligible",
+    pr: 34,
+    at: state.createdAt,
+  });
   assert.deepEqual(calls(state), [
     "implement",
     "review",
@@ -319,11 +345,24 @@ test("implementation, Engineer request, pushed fix and approval hand off directl
 });
 
 test("a clean PR runs Engineer then Product exactly once", (t) => {
-  const f = fixture(t);
+  const queuedAt = "2026-01-01T00:06:00Z";
+  const f = fixture(t, {
+    reviewEvents: [
+      {
+        __typename: "LabeledEvent",
+        createdAt: queuedAt,
+        label: { name: "agent:review" },
+      },
+    ],
+  });
   const state = f.dispatch("wake", "pr", "34");
   assert.deepEqual(calls(state), ["review", "acceptance"]);
   assert.deepEqual(state.labels, ["agent:accepted"]);
   assert.deepEqual(calls(f.dispatch("wake", "pr", "34")), calls(state));
+  assert.deepEqual(
+    f.usage().filter(({ event }) => event === "eligible"),
+    [{ event: "eligible", pr: 34, at: queuedAt }],
+  );
 });
 
 test("a requested fix without a push blocks instead of restarting review", (t) => {

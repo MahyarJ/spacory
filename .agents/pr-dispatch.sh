@@ -53,6 +53,9 @@ run_pr_verdict() {  # PR, review | acceptance
     context="$context Review the full PR."
   fi
 
+  if [ "$mode" = review ]; then
+    node "$SCRIPT_DIR/usage.mjs" track-eligible "$pr" || true
+  fi
   while :; do
     checkpoint "$pr" "$mode" "$head"
     move_pr "$pr" reviewing
@@ -165,7 +168,10 @@ intake_pr() {
   labels="$(gh issue view "$issue" --json state,labels --jq 'select(.state=="OPEN") | .labels[].name')"
   case $'\n'"$labels"$'\n' in
     *$'\nagent:ready\n'*|*$'\nagent:implementing\n'*)
-      [ -n "$PR_STAGE" ] || move_pr "$pr" review
+      if [ -z "$PR_STAGE" ]; then
+        node "$SCRIPT_DIR/usage.mjs" track-eligible "$pr" "$issue" || true
+        move_pr "$pr" review
+      fi
       remove_label issue "$issue" agent:implementing
       remove_label issue "$issue" agent:ready
       ;;
@@ -250,6 +256,7 @@ drive_pr() {
         else
           move_pr "$pr" accepted
           node "$SCRIPT_DIR/usage.mjs" accepted "$pr" "$PR_HEAD" || true
+          node "$SCRIPT_DIR/usage.mjs" track-eligible "$pr" || true
           announce=1
         fi
         ;;

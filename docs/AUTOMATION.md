@@ -215,22 +215,63 @@ role, provider, configured or reported model, elapsed time, PR and SHA when
 available, and provider-reported input, cached input, and output tokens. Input
 includes cached tokens. Missing fields remain `null`. The log records token
 counts and session IDs. Provider tool payloads stay in the temporary capture. The
-report totals all Engineer and Product review attempts per PR and measures wall
-time from the first review to acceptance, including time spent on fixes.
+report totals all Engineer and Product review attempts per PR. It measures time
+from eligibility to the first review and from eligibility to acceptance, so the
+numbers include time spent waiting for a dispatcher and for fixes.
+
+The dispatcher records eligibility from GitHub rather than its local run start.
+For an implementation PR, it uses the opening or ready-for-review time and the
+linked issue's queue time. For a manually queued PR, it uses the `agent:review`
+label time, accounting for drafts. The report keeps elapsed times unknown for
+logs that lack eligibility evidence.
 
 ```bash
 node .agents/usage.mjs report .agents/logs/usage.jsonl
 node .agents/usage.mjs report engineer-first.jsonl parallel-baseline.jsonl
 ```
 
-To collect a baseline, apply the commit **Record provider usage and support
-reviewer session IDs** to an isolated copy of the old parallel dispatcher. Set `SPACORY_AGENT_USAGE_LOG` to a separate
-absolute file and use comparable disposable PRs with the same providers and
-models. Keep the instrumented files available in the runner's worktrees. Record
-the old dispatcher's acceptance timestamp from the GitHub label timeline with
-`node .agents/usage.mjs accepted PR_NUMBER HEAD_SHA ISO_TIMESTAMP` and the same
-log setting. Compare per-PR totals and time to acceptance across the two files.
-Older PRs without provider usage can supply timestamps but have no token baseline.
+To collect a parallel baseline, apply **Record provider usage and support
+reviewer session IDs** to an isolated copy of the old dispatcher. Use comparable
+PRs, providers, and models, and keep separate logs. Keep the instrumented files
+available in the runner's worktrees. With `SPACORY_AGENT_USAGE_LOG` pointing at
+the baseline log, import the observed eligibility and acceptance times from GitHub
+before running the report.
+
+```bash
+node .agents/usage.mjs eligible PR_NUMBER ELIGIBILITY_TIMESTAMP
+node .agents/usage.mjs accepted PR_NUMBER HEAD_SHA ACCEPTANCE_TIMESTAMP
+```
+
+### Controlled ordering comparison
+
+The two fixture PRs below were replayed with fresh, read-only Codex CLI sessions
+using `gpt-6.2-sol` at low reasoning effort. The criteria required accepting
+both endpoints of `[0, 10]`. The clean fixture used `x >= 0 && x <= 10`. The
+blocked fixture started with `x > 0 && x <= 10` and used the clean code as its
+next revision. Engineer checked the comparison and the regression. Product
+checked the user-visible endpoints and could cite Engineer evidence in the
+Engineer-first runs. The provider reported token usage for every review.
+
+| Fixture PR | Ordering | Review calls | Input tokens | Cached input | Output tokens | Eligibility to acceptance |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 9001, clean | Parallel, scheduled | 2 | 32,329 | 27,904 | 75 | 608.8 s |
+| 9001, clean | Engineer first, immediate | 2 | 34,323 | 27,904 | 77 | 14.2 s |
+| 9002, fix required | Parallel, scheduled | 4 | 68,598 | 55,808 | 156 | 1,806.2 s |
+| 9002, fix required | Engineer first, immediate | 3 | 51,505 | 41,856 | 125 | 18.8 s |
+
+Acceptance times combine measured CLI wall time with simulated scheduling. Both
+PRs become eligible just after a scheduled check. The parallel loop waits until
+minute 10 to review. For fixture 9002, Resolve occupies the minute-20 check and
+review resumes at minute 30. The immediate loop starts with a free runner, and
+both paths apply the fixture fix instantly. This isolates the review order and
+schedule effects from implementation time and live queue traffic.
+
+The blocked fixture skipped one Product pass and used about 25% fewer input
+tokens. The clean fixture used two passes in both orderings and slightly more
+input in the Engineer-first sample. In the clean case, the concurrent passes
+finished in 8.8 seconds once started, while the sequential passes took 14.2
+seconds. The end-to-end gain in this replay comes from removing the scheduled
+wait. Live timings depend on the runner's queue and real fix duration.
 
 Resumption is off by default. With `SPACORY_REVIEWER_RESUME=1`, an Engineer
 re-review can reopen the previous reviewer session for that PR, prior head, and

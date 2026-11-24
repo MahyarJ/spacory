@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -72,6 +73,85 @@ function read(file) {
   }
 }
 
+// Use GitHub's history so a late delivery or a busy runner doesn't erase queue time.
+export function reviewEligibleAt(createdAt, events, queuedAt) {
+  if (!createdAt || !queuedAt) return null;
+  const draftChanges = events.filter(({ __typename }) =>
+    ["ReadyForReviewEvent", "ConvertToDraftEvent"].includes(__typename),
+  );
+  const queued = queuedAt > createdAt ? queuedAt : createdAt;
+  let eligible =
+    draftChanges[0]?.__typename === "ReadyForReviewEvent" ? null : queued;
+  for (const event of draftChanges) {
+    if (event.__typename === "ConvertToDraftEvent") {
+      if (eligible && eligible < event.createdAt) return eligible;
+      eligible = null;
+    } else {
+      eligible = event.createdAt > queued ? event.createdAt : queued;
+    }
+  }
+  return eligible;
+}
+
+function githubPages(...args) {
+  return JSON.parse(
+    execFileSync("gh", ["api", ...args, "--paginate", "--slurp"], {
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    }),
+  );
+}
+
+function githubEligibility(pr, issue) {
+  const query = `query ($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        createdAt
+        timelineItems(first: 100, after: $endCursor, itemTypes: [LABELED_EVENT, READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT]) {
+          pageInfo { hasNextPage endCursor }
+          nodes {
+            __typename
+            ... on LabeledEvent { createdAt label { name } }
+            ... on ReadyForReviewEvent { createdAt }
+            ... on ConvertToDraftEvent { createdAt }
+          }
+        }
+      }
+    }
+  }`;
+  const pages = githubPages(
+    "graphql",
+    "-F",
+    "owner={owner}",
+    "-F",
+    "repo={repo}",
+    "-F",
+    `number=${pr}`,
+    "-f",
+    `query=${query}`,
+  );
+  const pullRequests = pages.map(({ data }) => data.repository.pullRequest);
+  const createdAt = pullRequests[0]?.createdAt;
+  const events = pullRequests
+    .flatMap(({ timelineItems }) => timelineItems.nodes)
+    .filter(Boolean);
+  let queuedAt = events.find(
+    ({ label }) => label?.name === "agent:review",
+  )?.createdAt;
+  if (issue) {
+    const issueEvents = githubPages(
+      `repos/:owner/:repo/issues/${issue}/timeline`,
+    ).flat();
+    queuedAt =
+      issueEvents.find(
+        ({ event, label }) =>
+          event === "labeled" &&
+          ["agent:ready", "agent:implementing"].includes(label?.name),
+      )?.created_at ?? createdAt;
+  }
+  return reviewEligibleAt(createdAt, events, queuedAt);
+}
+
 export function reviewerSession(
   records,
   { pr, previousHead, provider, model },
@@ -118,6 +198,16 @@ export function usageReport(records) {
     if (!byPr.has(run.pr)) byPr.set(run.pr, []);
     byPr.get(run.pr).push(run);
   }
+  const eligibleTimes = new Map();
+  for (const entry of records) {
+    if (entry.event !== "eligible") continue;
+    const at = Date.parse(entry.at);
+    if (Number.isFinite(at))
+      eligibleTimes.set(
+        entry.pr,
+        Math.min(at, eligibleTimes.get(entry.pr) ?? Infinity),
+      );
+  }
   const byPR = {};
   for (const [pr, runs] of byPr) {
     const first = Math.min(
@@ -126,11 +216,14 @@ export function usageReport(records) {
     const accepted = records.findLast(
       (entry) => entry.event === "accepted" && entry.pr === pr,
     );
+    const eligible = eligibleTimes.get(pr);
+    const acceptedAt = Date.parse(accepted?.at);
     byPR[pr] = {
       ...totals(runs),
-      secondsToAcceptance: accepted
-        ? (Date.parse(accepted.at) - first) / 1000
-        : null,
+      secondsToFirstReview:
+        first >= eligible ? (first - eligible) / 1000 : null,
+      secondsToAcceptance:
+        acceptedAt >= eligible ? (acceptedAt - eligible) / 1000 : null,
     };
   }
   const rereviews = reviews.filter(
@@ -177,6 +270,27 @@ function main([command, first, ...args], env) {
       model: model || null,
     });
     if (id) console.log(id);
+  } else if (command === "track-eligible") {
+    const pr = Number(first);
+    if (!Number.isSafeInteger(pr) || pr <= 0)
+      throw new Error("Expected a PR number");
+    if (
+      read(file).some((entry) => entry.event === "eligible" && entry.pr === pr)
+    )
+      return;
+    const [issue] = args;
+    if (issue !== undefined && !/^[1-9][0-9]*$/.test(issue))
+      throw new Error("Expected a linked issue number");
+    const at = githubEligibility(pr, issue);
+    if (at) append(file, { event: "eligible", pr, at });
+  } else if (command === "eligible") {
+    const [at] = args;
+    const pr = Number(first);
+    if (!Number.isSafeInteger(pr) || pr <= 0)
+      throw new Error("Expected a PR number");
+    if (!Number.isFinite(Date.parse(at)))
+      throw new Error("Expected an eligibility timestamp");
+    append(file, { event: "eligible", pr, at });
   } else if (command === "accepted") {
     const [head, at = new Date().toISOString()] = args;
     append(file, { event: "accepted", pr: Number(first), head, at });
