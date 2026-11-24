@@ -755,7 +755,7 @@ describe("FloorPlan touch gestures", () => {
     expect(loadPersistedHistory()?.past).toHaveLength(0);
   });
 
-  it("places, resizes and rotates a sink through the toolbar and preserves it in storage", () => {
+  it("keeps the basin flush when resizing and preserves its attachment in storage", () => {
     const original = enclosedPlan();
     original.items.push({
       id: "window",
@@ -778,31 +778,48 @@ describe("FloorPlan touch gestures", () => {
     fireEvent.click(button("Sink"));
     down(1, 500, 160, { pointerType: "mouse" });
     up(1, 500, 160);
+    expect(fixture()).toBeUndefined();
+    down(1, 420, 160, { pointerType: "mouse" });
+    up(1, 420, 160);
     expect(fixture()).toMatchObject({
       type: "sink",
-      position: { x: 500, y: 160 },
-      width: 60,
+      wallAttach: { wallId: "w2", offset: 130, length: 60 },
+      side: -1,
       depth: 50,
-      rotation: 0,
     });
-    expect(selection()).not.toBeNull();
+    const backEdge = "translate(405 160) rotate(270)";
+    expect(selection()?.parentElement?.getAttribute("transform")).toBe(
+      backEdge,
+    );
+    expect(screen.queryByRole("button", { name: /rotate/i })).toBeNull();
 
     const width = screen.getByRole("spinbutton", { name: "Width" });
     fireEvent.change(width, { target: { value: "90" } });
     fireEvent.keyDown(width, { key: "Enter" });
     expect(selection()?.getAttribute("width")).toBe("90");
-    fireEvent.click(button("Rotate clockwise 45°"));
+    const depth = screen.getByRole("spinbutton", { name: "Depth" });
+    fireEvent.change(depth, { target: { value: "75" } });
+    fireEvent.keyDown(depth, { key: "Enter" });
+    expect(selection()?.getAttribute("height")).toBe("75");
+    expect(selection()?.getAttribute("y")).toBe("0");
     expect(selection()?.parentElement?.getAttribute("transform")).toBe(
-      "translate(500 160) rotate(45)",
+      backEdge,
     );
     expect(loadPersistedHistory()?.past).toHaveLength(3);
 
     fireEvent.click(button("Undo"));
-    expect(fixture()).toMatchObject({ width: 90, rotation: 0 });
+    expect(fixture()).toMatchObject({
+      wallAttach: { offset: 115, length: 90 },
+      depth: 50,
+    });
     expect(loadPersistedHistory()?.present.fixtures).toEqual([fixture()]);
     fireEvent.click(button("Redo"));
     const restored = loadPersistedHistory()?.present;
-    expect(restored?.fixtures?.[0]).toMatchObject({ width: 90, rotation: 45 });
+    expect(restored?.fixtures?.[0]).toMatchObject({
+      wallAttach: { wallId: "w2", offset: 115, length: 90 },
+      side: -1,
+      depth: 75,
+    });
     expect(parsePlan(serializePlan(restored!)).fixtures).toEqual([fixture()]);
     expect(restored?.walls).toEqual(original.walls);
     expect(restored?.items).toEqual(original.items);
@@ -811,21 +828,57 @@ describe("FloorPlan touch gestures", () => {
     act(() => useApp.getState().loadPlan(restored!));
     expect(
       canvas.querySelector('[data-fixture="sink"]')?.getAttribute("transform"),
-    ).toBe("translate(500 160) rotate(45)");
+    ).toBe(backEdge);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
     fireEvent.click(button("Fit"));
     const { scale, panX, panY } = view();
-    const { maxX, minY, maxY } = getFixtureBounds(fixture()!);
+    const { maxX, minY, maxY } = getFixtureBounds(
+      fixture()!,
+      original.walls[1],
+    );
     expect(maxX * scale + panX).toBeLessThan(800);
     expect(minY * scale + panY).toBeGreaterThan(0);
     expect(maxY * scale + panY).toBeLessThan(600);
   });
 
-  it("moves and edits a duplicate independently with touch and imperial controls", () => {
+  it("places two basins back to back on an angled divider", () => {
+    setup({
+      plan: {
+        ...createInitialPlan(),
+        walls: [{ ...wall(100, 100, 500, 500, "divider"), thickness: 20 }],
+      },
+    });
+    render(<Toolbar />);
+    const sink = screen.getByRole("button", { name: "Sink" });
+    fireEvent.click(sink);
+    down(1, 285, 315);
+    up(1, 285, 315);
+    fireEvent.click(screen.getByRole("button", { name: "Sink" }));
+    down(1, 315, 285);
+    up(1, 315, 285);
+
+    const [first, second] = useApp.getState().plan.fixtures!;
+    expect(first.wallAttach).toEqual(second.wallAttach);
+    expect([first.side, second.side]).toEqual([1, -1]);
+    const basins = canvas.querySelectorAll('[data-fixture="sink"]');
+    expect(basins[0]?.getAttribute("transform")).toMatch(/rotate\(45\)$/);
+    expect(basins[1]?.getAttribute("transform")).toMatch(/rotate\(225\)$/);
+
+    // Touch padding must not select the basin on the other side.
+    down(1, 292, 308);
+    up(1, 292, 308);
+    expect(useApp.getState().selectedFixtures).toEqual(new Set([first.id]));
+  });
+
+  it("slides a duplicate along its host and transfers it to another face by touch", () => {
     setup({
       plan: {
         ...createInitialPlan(),
         meta: { ...createInitialPlan().meta, measurementSystem: "imperial" },
+        walls: [
+          wall(0, 160, 500, 160, "upper"),
+          wall(0, 400, 500, 400, "lower"),
+        ],
       },
     });
     render(
@@ -837,19 +890,23 @@ describe("FloorPlan touch gestures", () => {
     const button = (name: string) => screen.getByRole("button", { name });
     const fixtures = () => useApp.getState().plan.fixtures;
     fireEvent.click(button("Sink"));
-    down(1, 200, 200);
-    down(2, 300, 200);
-    up(2, 300, 200);
-    up(1, 200, 200);
+    down(1, 200, 180);
+    down(2, 300, 180);
+    up(2, 300, 180);
+    up(1, 200, 180);
     expect(fixtures()).toBeUndefined();
-    down(1, 200, 200);
-    up(1, 200, 200);
+    down(1, 200, 180);
+    up(1, 200, 180);
     const original = fixtures()?.[0];
 
     fireEvent.click(button("Duplicate"));
     const copy = fixtures()?.[1];
     expect(copy?.id).not.toBe(original?.id);
-    expect(copy?.position).toEqual({ x: 220, y: 220 });
+    expect(copy?.wallAttach).toEqual({
+      wallId: "upper",
+      offset: 250,
+      length: 60,
+    });
     const depthFeet = screen.getByRole("spinbutton", { name: "Depth feet" });
     const depthInches = screen.getByRole("spinbutton", {
       name: "Depth inches",
@@ -859,20 +916,34 @@ describe("FloorPlan touch gestures", () => {
     fireEvent.keyDown(depthInches, { key: "Enter" });
     expect(fixtures()?.[1].depth).toBeCloseTo(60.96);
 
-    down(1, 220, 220);
-    move(1, 260, 275);
-    cancel(1, 260, 275);
-    expect(fixtures()?.[1].position).toEqual(copy?.position);
+    down(1, 280, 190);
+    move(1, 320, 380);
+    expect(fixtures()?.[1].wallAttach.wallId).toBe("lower");
+    cancel(1, 320, 380);
+    expect(fixtures()?.[1].wallAttach).toEqual(copy?.wallAttach);
     expect(loadPersistedHistory()?.past).toHaveLength(3);
 
-    down(1, 220, 220);
-    move(1, 241, 246);
-    up(1, 260, 275);
-    expect(fixtures()?.[1].position).toEqual({ x: 260, y: 275 });
+    down(1, 280, 190);
+    move(1, 300, 280);
+    up(1, 320, 280);
+    expect(fixtures()?.[1]).toMatchObject({
+      wallAttach: { wallId: "upper", offset: 290 },
+      side: 1,
+    });
+    down(1, 320, 190);
+    move(1, 320, 275);
+    up(1, 320, 380);
+    expect(fixtures()?.[1]).toMatchObject({
+      wallAttach: { wallId: "lower", offset: 290 },
+      side: -1,
+    });
     expect(fixtures()?.[0]).toEqual(original);
-    expect(loadPersistedHistory()?.past).toHaveLength(4);
+    expect(loadPersistedHistory()?.past).toHaveLength(5);
     fireEvent.click(button("Undo"));
-    expect(fixtures()?.[1].position).toEqual(copy?.position);
+    expect(fixtures()?.[1]).toMatchObject({
+      wallAttach: { wallId: "upper", offset: 290 },
+      side: 1,
+    });
     fireEvent.click(button("Remove"));
     expect(fixtures()).toEqual([original]);
     fireEvent.click(button("Undo"));

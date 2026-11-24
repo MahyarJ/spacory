@@ -47,7 +47,8 @@ export function HintBar() {
           )}
           {fixturesOnly && (
             <>
-              Drag to move. Choose <strong>Remove</strong> or press{" "}
+              Drag along the wall or to another face. Choose{" "}
+              <strong>Remove</strong> or press{" "}
             </>
           )}
           {wallsOnly && (
@@ -74,7 +75,9 @@ export function HintBar() {
       );
     }
   } else if (tool === "sink") {
-    text = <span>Click or tap the canvas to place a sink.</span>;
+    text = (
+      <span>Click or tap near a wall face to place the sink on that side.</span>
+    );
   } else if (tool === "label") {
     text = (
       <span>

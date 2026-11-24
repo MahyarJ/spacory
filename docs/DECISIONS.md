@@ -1001,10 +1001,17 @@ The schema exposes only `MeasurementSystem`; it no longer advertises individuall
 selectable display units. Formatting accepts the system directly, while numeric
 editors share a `LengthUnit` type limited to cm/in.
 
-## Free-standing fixtures (#120)
+## Wall-backed basin (#120)
 
-Store fixtures in an optional `Plan.fixtures` array with center coordinates,
-width and depth in cm, and clockwise rotation in degrees. The center stays fixed
-when resizing or rotating. Keeping the field absent on legacy plans preserves
-the document shape expected by their saved undo history. Canvas and image
-export share fixture geometry, and framing uses the rotated footprint.
+Store the basin in `Plan.fixtures` with its wall id, the span of its back edge,
+its side relative to the wall direction, and its depth. The wall face provides
+the orientation and holds the back edge in place when the depth changes. Width
+edits keep the center of the back edge as far as the wall length allows. The
+same geometry drives the canvas, framing, and image exports. Wall splits and
+merges rebase the attachment with the wall spans used by openings, including
+flipping the stored side when a merged segment reverses direction.
+
+The wall anchor applies to this basin. A future countertop sink can use a
+countertop edge for orientation. Earlier draft sinks migrate to a nearby wall
+when there is room, while plans without a suitable wall keep their remaining
+content. Autosave resets undo and redo for timelines containing draft sinks.

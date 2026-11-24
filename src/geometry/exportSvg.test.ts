@@ -84,27 +84,32 @@ describe("buildExportSvg", () => {
     expect(markup).toContain("<circle");
   });
 
-  it("draws and frames a resized, rotated sink beyond the wall footprint", () => {
+  it("draws and frames a wall-backed basin beyond the angled wall footprint", () => {
     const { markup, width, height } = buildExportSvg({
-      ...planOf([wall(0, 0, 100, 0)]),
+      ...planOf([wall(0, 0, 100, 100)]),
       fixtures: [
         {
           id: "fixture",
           type: "sink",
-          position: { x: 200, y: 80 },
-          width: 100,
-          depth: 40,
-          rotation: 45,
+          wallAttach: { wallId: "w", offset: 20, length: 60 },
+          side: 1,
+          depth: 100,
         },
       ],
     });
-    const reach = 70 / Math.sqrt(2) + 0.75;
-    expect(width).toBeCloseTo(205 + reach + 2 * EXPORT_MARGIN);
-    expect(height).toBeCloseTo(85 + reach + 2 * EXPORT_MARGIN);
-    expect(markup).toContain(
-      'data-fixture="sink" transform="translate(200 80) rotate(45)"',
+    expect(width).toBeCloseTo(
+      105 + 85 / Math.sqrt(2) + 0.75 + 2 * EXPORT_MARGIN,
     );
-    expect(markup).toContain('<rect x="-50" y="-20" width="100" height="40"');
+    expect(height).toBeCloseTo(
+      5 + 185 / Math.sqrt(2) + 0.75 + 2 * EXPORT_MARGIN,
+    );
+    const [, backX, backY] =
+      markup.match(
+        /data-fixture="sink" transform="translate\((\S+) (\S+)\) rotate\(45\)"/,
+      ) ?? [];
+    expect(Number(backX)).toBeCloseTo(45 / Math.sqrt(2));
+    expect(Number(backY)).toBeCloseTo(55 / Math.sqrt(2));
+    expect(markup).toContain('<rect x="-30" y="0" width="60" height="100"');
     expect(markup).toMatch(/data-fixture="sink".*<rect.*<rect.*<circle.*<path/);
     expect(markup).not.toContain("data-fixture-selection");
   });

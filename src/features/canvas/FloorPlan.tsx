@@ -1,5 +1,6 @@
 import {
   assertNever,
+  type Fixture,
   type PlanLabel,
   type Point,
   type Wall,
@@ -17,7 +18,12 @@ import {
   pickWallEndpoint,
   type WallEndpointRef,
 } from "@geometry/connectivity";
-import { hitFixture } from "@geometry/fixtures";
+import {
+  dragFixtureMount,
+  fixtureMountEquals,
+  getFixtureGeometry,
+  hitFixture,
+} from "@geometry/fixtures";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
 import { computeWallGeometry } from "@geometry/junction";
 import {
@@ -87,6 +93,10 @@ export function FloorPlan() {
   const addWall = useApp((s) => s.addWall);
   const addItem = useApp((s) => s.addItem);
   const plan = useApp((s) => s.plan);
+  const wallsById = useMemo(
+    () => new Map(plan.walls.map((wall) => [wall.id, wall])),
+    [plan.walls],
+  );
   const tool = useApp((s) => s.tool);
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
@@ -162,7 +172,11 @@ export function FloorPlan() {
     null,
   );
   const roomTap = useRef(false);
-  const fixturePress = useRef<{ pointerId: number; start: Point } | null>(null);
+  const fixturePress = useRef<{
+    pointerId: number;
+    start: Point;
+    fixture?: Fixture;
+  } | null>(null);
   const labelPress = useRef<{
     pointerId: number;
     start: Point;
@@ -318,7 +332,10 @@ export function FloorPlan() {
             useApp.getState().labelEditor
           )
             useApp.getState().selectNone();
-          if (selectionDrag.current && useApp.getState().liveDragItems)
+          if (
+            (selectionDrag.current || fixturePress.current?.fixture) &&
+            useApp.getState().liveDragItems
+          )
             useApp.getState().cancelLiveDrag();
           labelPress.current = null;
           fixturePress.current = null;
@@ -466,6 +483,19 @@ export function FloorPlan() {
     return true;
   };
 
+  const moveFixtureDrag = (fixture: Fixture, start: Point, world: Point) => {
+    const state = useApp.getState();
+    const moved =
+      Math.hypot(world.x - start.x, world.y - start.y) * view.scale >
+      TAP_THRESHOLD;
+    const mount = moved
+      ? dragFixtureMount(world, start, fixture, state.plan.walls)
+      : fixture;
+    if (!mount || !state.liveDragItems) return false;
+    state.moveFixtureLive(fixture.id, mount);
+    return !fixtureMountEquals(fixture, mount);
+  };
+
   // Build and commit an opening item from a resolved offset/length. Shared by
   // both creation gestures (click-click and drag) so they produce identical
   // items given the same placement.
@@ -583,21 +613,27 @@ export function FloorPlan() {
 
       const fixture =
         e.button === 0 &&
-        plan.fixtures?.findLast((item) =>
-          hitFixture(
-            world,
-            item,
-            (e.pointerType === "touch" ? 10 : 2) / view.scale,
-          ),
-        );
+        plan.fixtures?.findLast((item) => {
+          const wall = wallsById.get(item.wallAttach.wallId);
+          return (
+            wall &&
+            hitFixture(
+              world,
+              item,
+              wall,
+              (e.pointerType === "touch" ? 10 : 2) / view.scale,
+            )
+          );
+        });
       if (fixture) {
-        if (!selectedFixtures.has(fixture.id))
+        if (!selectedFixtures.has(fixture.id) || !additive)
           selectFixture(fixture.id, additive);
-        startSelectionDrag(
-          world,
-          !e.altKey && useApp.getState().selectedWalls.size > 0,
-          TAP_THRESHOLD,
-        );
+        fixturePress.current = {
+          pointerId: e.pointerId,
+          start: world,
+          fixture,
+        };
+        useApp.getState().beginLiveDrag();
         return;
       }
 
@@ -752,6 +788,12 @@ export function FloorPlan() {
 
     const world = toWorld(e.clientX, e.clientY);
     setCursor(world);
+    const basinPress = fixturePress.current;
+    if (basinPress?.pointerId === e.pointerId && basinPress.fixture) {
+      if (e.buttons === 1 && tool === "select")
+        moveFixtureDrag(basinPress.fixture, basinPress.start, world);
+      return;
+    }
     const press = labelPress.current;
     if (press?.pointerId === e.pointerId) {
       if (press.label && tool === "select") moveSelectionDrag(world);
@@ -864,13 +906,22 @@ export function FloorPlan() {
     }
     if (releasePointer(e.pointerId)) return;
     if (isPanning) setIsPanning(false);
-    const placement = fixturePress.current;
-    if (placement?.pointerId === e.pointerId) {
+    const basinPress = fixturePress.current;
+    if (basinPress?.pointerId === e.pointerId) {
       fixturePress.current = null;
       const world = toWorld(e.clientX, e.clientY);
-      if (
+      if (basinPress.fixture) {
+        const state = useApp.getState();
+        if (!state.liveDragItems) return;
+        if (
+          tool === "select" &&
+          moveFixtureDrag(basinPress.fixture, basinPress.start, world)
+        )
+          state.commitPlan();
+        else state.cancelLiveDrag();
+      } else if (
         tool === "sink" &&
-        Math.hypot(world.x - placement.start.x, world.y - placement.start.y) *
+        Math.hypot(world.x - basinPress.start.x, world.y - basinPress.start.y) *
           view.scale <=
           TAP_THRESHOLD
       ) {
@@ -965,7 +1016,9 @@ export function FloorPlan() {
         if (segmentIntersectsRect(wall.a, wall.b, r)) selectWall(wall.id, true);
       }
       for (const fixture of plan.fixtures ?? []) {
-        if (pointInRect(fixture.position, r)) selectFixture(fixture.id, true);
+        const wall = wallsById.get(fixture.wallAttach.wallId);
+        if (wall && pointInRect(getFixtureGeometry(fixture, wall).center, r))
+          selectFixture(fixture.id, true);
       }
       const labels = labelFrames.filter(({ rect }) => rectsIntersect(rect, r));
       if (labels.length)
@@ -977,9 +1030,6 @@ export function FloorPlan() {
       return;
     }
     if (selectionDrag.current) {
-      if (tool === "select" && selectionDrag.current.threshold > 0) {
-        moveSelectionDrag(toWorld(e.clientX, e.clientY));
-      }
       finishSelectionDrag();
       return;
     }
@@ -1091,7 +1141,8 @@ export function FloorPlan() {
         className={clsx(
           styles.floorplan,
           tool === "select" &&
-            (hasLiveDrag && selectionDrag.current
+            (hasLiveDrag &&
+            (selectionDrag.current || fixturePress.current?.fixture)
               ? styles.moving
               : styles.select),
         )}
@@ -1116,6 +1167,7 @@ export function FloorPlan() {
           <ItemsLayer />
           <FixturesLayer
             fixtures={plan.fixtures}
+            wallsById={wallsById}
             selectedIds={selectedFixtures}
           />
           <DimensionsLayer dimensions={dimensions} scale={view.scale} />

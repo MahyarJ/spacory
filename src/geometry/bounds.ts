@@ -80,7 +80,9 @@ export function getPlanBounds(
   }
 
   for (const fixture of plan.fixtures ?? []) {
-    const { minX, minY, maxX, maxY } = getFixtureBounds(fixture);
+    const wall = wallsById.get(fixture.wallAttach.wallId);
+    if (!wall) continue;
+    const { minX, minY, maxX, maxY } = getFixtureBounds(fixture, wall);
     include(minX, minY, 0);
     include(maxX, maxY, 0);
   }

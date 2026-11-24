@@ -10,7 +10,6 @@ import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { ICON_SIZE } from "@ui/constants";
 import {
   Copy,
-  RotateCw,
   SquareCenterlineDashedHorizontal,
   SquareCenterlineDashedVertical,
   Trash2,
@@ -105,7 +104,7 @@ export function WallOptions() {
           <LengthField
             id="fixture-width-input"
             label="Width"
-            lengthCm={selectedFixture.width}
+            lengthCm={selectedFixture.wallAttach.length}
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
             onCommit={(width) => updateFixture(selectedFixture.id, { width })}
@@ -141,7 +140,6 @@ function SelectionActionButtons({
   const deleteSelected = useApp((s) => s.deleteSelected);
   const toggleHinge = useApp((s) => s.toggleSelectedDoorHingeEdge);
   const toggleSwing = useApp((s) => s.toggleSelectedDoorSwingSide);
-  const updateFixture = useApp((s) => s.updateFixture);
   const duplicateFixture = useApp((s) => s.duplicateFixture);
 
   // Icon-only, so each needs an explicit accessible name; the tooltip names the
@@ -174,17 +172,6 @@ function SelectionActionButtons({
       title: "Toggle swing (S)",
       icon: <SquareCenterlineDashedVertical size={ICON_SIZE} />,
       onClick: toggleSwing,
-    },
-    rotate: {
-      label: "Rotate clockwise 45°",
-      title: "Rotate clockwise 45°",
-      icon: <RotateCw size={ICON_SIZE} />,
-      onClick: () => {
-        if (fixture) {
-          const rotation = ((fixture.rotation % 360) + 360 + 45) % 360;
-          updateFixture(fixture.id, { rotation });
-        }
-      },
     },
     duplicate: {
       label: "Duplicate",

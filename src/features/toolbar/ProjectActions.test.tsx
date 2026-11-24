@@ -374,10 +374,9 @@ describe("ProjectActions — Export menu", () => {
         {
           id: "sink",
           type: "sink",
-          position: { x: 450, y: 160 },
-          width: 80,
+          wallAttach: { wallId: "w2", offset: 120, length: 80 },
+          side: -1,
           depth: 50,
-          rotation: 45,
         },
       ],
     });
@@ -425,7 +424,7 @@ describe("ProjectActions — Export menu", () => {
       preview
         .querySelector('[data-layer="fixtures"] [data-fixture="sink"]')
         ?.getAttribute("transform"),
-    ).toBe("translate(450 160) rotate(45)");
+    ).toBe("translate(405 160) rotate(270)");
     expect(
       preview.querySelector('[data-layer="plan-labels"] text')?.textContent,
     ).toBe("Terrace & 茶室 <🌿>");

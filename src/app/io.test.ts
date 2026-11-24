@@ -48,27 +48,28 @@ describe("stored fixtures", () => {
   const sink: Fixture = {
     id: "fixture-1",
     type: "sink",
-    position: { x: -150.5, y: 321 },
-    width: 80,
+    wallAttach: { wallId: "wall_1", offset: 110, length: 80 },
+    side: -1,
     depth: 45,
-    rotation: -30,
   };
 
-  it("round-trips a free-standing sink, and keeps the field absent on older plans", () => {
-    const emptyPlan = createInitialPlan();
+  it("round-trips a mounted basin and keeps the field absent on older plans", () => {
     expect(
-      parsePlan(serializePlan({ ...emptyPlan, fixtures: [sink] })).fixtures,
+      parsePlan(serializePlan({ ...plan, fixtures: [sink] })).fixtures,
     ).toEqual([sink]);
-    expect(parsePlan(serializePlan(emptyPlan))).not.toHaveProperty("fixtures");
+    expect(parsePlan(serializePlan(plan))).not.toHaveProperty("fixtures");
   });
 
   it.each([
     [{ ...sink, id: " " }, /id/],
     [{ ...sink, type: "toilet" }, /type/],
-    [{ ...sink, position: { x: Infinity, y: 0 } }, /position/],
-    [{ ...sink, width: 0 }, /width/],
+    [
+      { ...sink, wallAttach: { ...sink.wallAttach, offset: Infinity } },
+      /offset/,
+    ],
+    [{ ...sink, wallAttach: { ...sink.wallAttach, length: 0 } }, /width/],
     [{ ...sink, depth: "50" }, /depth/],
-    [{ ...sink, rotation: NaN }, /rotation/],
+    [{ ...sink, side: 0 }, /side/],
   ])("rejects invalid stored fixture data %#", (invalid, message) => {
     expect(() => coercePlan({ ...plan, fixtures: [invalid] })).toThrow(message);
   });
@@ -78,6 +79,31 @@ describe("stored fixtures", () => {
     expect(() =>
       coercePlan({ ...plan, fixtures: [sink, { ...sink }] }),
     ).toThrow(/unique/);
+  });
+
+  it("drops a missing host and migrates draft sinks that are near a wall", () => {
+    const draft = {
+      id: sink.id,
+      type: "sink",
+      width: 80,
+      depth: 45,
+      rotation: 45,
+    };
+    const parsed = coercePlan({
+      ...plan,
+      fixtures: [
+        { ...draft, position: { x: 150, y: -15 } },
+        { ...draft, id: "far", position: { x: -150, y: -150 } },
+        {
+          ...sink,
+          id: "orphan",
+          wallAttach: { ...sink.wallAttach, wallId: "missing" },
+        },
+      ],
+    });
+    expect(parsed.fixtures).toEqual([sink]);
+    expect(parsed.walls).toEqual(plan.walls);
+    expect(parsed.items).toEqual(plan.items);
   });
 });
 

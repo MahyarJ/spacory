@@ -2,7 +2,7 @@ import { isDoor, type Plan } from "@app/schema";
 import { getPlanBounds } from "./bounds";
 import {
   FIXTURE_STROKE_WIDTH,
-  fixtureTransform,
+  getFixtureGeometry,
   getFixtureSymbol,
 } from "./fixtures";
 import {
@@ -142,9 +142,12 @@ export function buildExportSvg(
 
   const fixtureShapes = plan.fixtures
     ?.map((fixture) => {
+      const wall = wallsById.get(fixture.wallAttach.wallId);
+      if (!wall) return "";
+      const { transform } = getFixtureGeometry(fixture, wall);
       const { rim, basin, drain, tap } = getFixtureSymbol(fixture);
       return (
-        `<g data-fixture="${fixture.type}" transform="${fixtureTransform(fixture)}" stroke="${EXPORT_WALL_COLOR}" stroke-width="${FIXTURE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">` +
+        `<g data-fixture="${fixture.type}" transform="${transform}" stroke="${EXPORT_WALL_COLOR}" stroke-width="${FIXTURE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">` +
         `<rect x="${rim.x}" y="${rim.y}" width="${rim.width}" height="${rim.height}" fill="${EXPORT_BACKGROUND}" />` +
         `<rect x="${basin.x}" y="${basin.y}" width="${basin.width}" height="${basin.height}" rx="${basin.rx}" fill="none" />` +
         `<circle cx="${drain.cx}" cy="${drain.cy}" r="${drain.r}" fill="none" />` +

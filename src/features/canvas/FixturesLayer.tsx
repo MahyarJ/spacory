@@ -1,27 +1,32 @@
-import type { Fixture } from "@app/schema";
+import type { Fixture, Wall } from "@app/schema";
 import {
   FIXTURE_STROKE_WIDTH,
-  fixtureTransform,
+  getFixtureGeometry,
   getFixtureSymbol,
 } from "@geometry/fixtures";
 
 export function FixturesLayer({
   fixtures,
+  wallsById,
   selectedIds,
 }: {
   fixtures?: Fixture[];
+  wallsById: ReadonlyMap<string, Wall>;
   selectedIds: ReadonlySet<string>;
 }) {
   return (
     <g data-layer="fixtures" pointerEvents="none">
       {fixtures?.map((fixture) => {
+        const wall = wallsById.get(fixture.wallAttach.wallId);
+        if (!wall) return null;
+        const { transform } = getFixtureGeometry(fixture, wall);
         const { rim, basin, drain, tap } = getFixtureSymbol(fixture);
         const selected = selectedIds.has(fixture.id);
         return (
           <g
             key={fixture.id}
             data-fixture={fixture.type}
-            transform={fixtureTransform(fixture)}
+            transform={transform}
             stroke="var(--sp-wall)"
             strokeWidth={FIXTURE_STROKE_WIDTH}
             strokeLinecap="round"

@@ -1,5 +1,6 @@
-import type { DoorItem, Plan, Wall } from "@app/schema";
+import type { DoorItem, Fixture, Plan, Wall } from "@app/schema";
 import { findConnectedEndpoints } from "@geometry/connectivity";
+import { getFixtureGeometry } from "@geometry/fixtures";
 import { getPointOnWall, getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HISTORY_STORAGE_KEY, loadPersistedHistory } from "./persistence";
@@ -56,6 +57,81 @@ function loadWithSelection(walls: Wall[], selected: string[]) {
   useApp.getState().loadPlan(planWith(walls));
   useApp.setState({ selectedWalls: new Set(selected) });
 }
+
+describe("basin attachments during wall edits", () => {
+  const basin: Fixture = {
+    id: "basin",
+    type: "sink",
+    wallAttach: { wallId: "divider", offset: 320, length: 60 },
+    side: 1,
+    depth: 50,
+  };
+  const state = useApp.getState;
+  const fixture = () => state().plan.fixtures![0];
+  const host = () =>
+    state().plan.walls.find(
+      (candidate) => candidate.id === fixture().wallAttach.wallId,
+    )!;
+
+  it("keeps the basin on its face as the host moves, splits, and merges", () => {
+    state().loadPlan({
+      ...planWith([wall("divider", 0, 100, 500, 100)]),
+      fixtures: [basin],
+    });
+    state().selectWall("divider");
+    state().beginLiveDrag();
+    state().translateSelectionLive(0, 20);
+    expect(getFixtureGeometry(fixture(), host()).back).toEqual({
+      x: 350,
+      y: 125,
+    });
+    state().commitPlan();
+
+    state().addWall(wall("stem", 250, 120, 250, 300));
+    expect(host().a).toEqual({ x: 250, y: 120 });
+    expect(fixture().wallAttach.offset).toBe(70);
+    expect(getFixtureGeometry(fixture(), host()).back).toEqual({
+      x: 350,
+      y: 125,
+    });
+
+    state().selectWall("stem");
+    state().deleteSelected();
+    expect(fixture()).toEqual(basin);
+    expect(getFixtureGeometry(fixture(), host()).back).toEqual({
+      x: 350,
+      y: 125,
+    });
+    state().undo();
+    expect(host().a).toEqual({ x: 250, y: 120 });
+  });
+
+  it("preserves the physical face when merging a reversed wall segment", () => {
+    const reversed: Fixture = {
+      ...basin,
+      side: -1,
+      wallAttach: { wallId: "right", offset: 120, length: 60 },
+    };
+    state().loadPlan({
+      ...planWith([
+        wall("divider", 0, 100, 250, 100),
+        wall("right", 500, 100, 250, 100),
+        wall("stem", 250, 100, 250, 300),
+      ]),
+      fixtures: [reversed],
+    });
+    const back = getFixtureGeometry(fixture(), host()).back;
+    state().selectWall("stem");
+    state().deleteSelected();
+    expect(fixture()).toEqual(basin);
+    expect(getFixtureGeometry(fixture(), host()).back).toEqual(back);
+    state().selectWall("divider");
+    state().deleteSelected();
+    expect(state().plan.fixtures).toEqual([]);
+    state().undo();
+    expect(fixture()).toEqual(basin);
+  });
+});
 
 describe("translateSelection", () => {
   it("moves a connected non-selected wall's shared endpoint along", () => {

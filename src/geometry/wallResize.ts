@@ -1,4 +1,4 @@
-import type { Item, Point, Wall } from "@app/schema";
+import type { Point, Wall, WallMountedObject } from "@app/schema";
 import {
   findConnectedEndpoints,
   pointsEqual,
@@ -44,9 +44,9 @@ export function getWallResizeContext(
 }
 
 /** Move the wall and its immediate junctions using membership from before the resize. */
-export function resizeWallInPlan(
+export function resizeWallInPlan<T extends WallMountedObject>(
   walls: Wall[],
-  items: Item[],
+  items: T[],
   wall: Wall,
   length: number,
   nextWallId: () => string,

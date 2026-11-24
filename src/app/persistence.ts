@@ -6,7 +6,7 @@ import { coercePlan } from "./io";
 export const HISTORY_STORAGE_KEY = "spacory.history";
 
 /** Bump if the persisted envelope shape changes incompatibly. */
-const HISTORY_FORMAT = 2;
+const HISTORY_FORMAT = 3;
 
 function getStorage(): Storage | null {
   try {
@@ -43,11 +43,26 @@ export function loadPersistedHistory(): History | null {
   if (!text) return null;
   try {
     const raw = JSON.parse(text);
-    if (raw?.format !== HISTORY_FORMAT) return null;
+    if (raw?.format !== HISTORY_FORMAT && raw?.format !== 2) return null;
+    const past = asPatchList(raw.past);
+    const future = asPatchList(raw.future);
+    // An old draft's fixture patches refer to free-standing geometry. Loading
+    // them after migrating the current plan could recreate invalid fixtures.
+    const draftTimeline =
+      raw.format === 2 &&
+      ((Array.isArray(raw.present?.fixtures) &&
+        raw.present.fixtures.length > 0) ||
+        [...past, ...future].some((step) =>
+          step.some(
+            (op) =>
+              typeof op?.path === "string" &&
+              (op.path === "/fixtures" || op.path.startsWith("/fixtures/")),
+          ),
+        ));
     return {
       present: coercePlan(raw.present),
-      past: asPatchList(raw.past),
-      future: asPatchList(raw.future),
+      past: draftTimeline ? [] : past,
+      future: draftTimeline ? [] : future,
     };
   } catch {
     return null;

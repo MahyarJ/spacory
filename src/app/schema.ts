@@ -62,18 +62,19 @@ export interface WindowItem extends ItemBase {
 
 export type Item = DoorItem | WindowItem;
 
-export type FixtureType = "sink";
-
-export interface Fixture {
+export interface WallBasin {
   id: string;
-  type: FixtureType;
-  /** World coordinates at the center of the fixture. */
-  position: Point;
-  width: number;
+  type: "sink";
+  /** Span of the back edge along the host wall. */
+  wallAttach: WallAttachment;
+  /** Sign of the perpendicular to the wall's a → b direction. */
+  side: 1 | -1;
   depth: number;
-  /** Clockwise rotation in degrees. */
-  rotation: number;
 }
+
+export type Fixture = WallBasin;
+export type FixtureType = Fixture["type"];
+export type WallMountedObject = Item | WallBasin;
 
 export const MIN_FIXTURE_DIMENSION = 1;
 

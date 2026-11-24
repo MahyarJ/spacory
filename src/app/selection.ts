@@ -34,12 +34,7 @@ export function hasSelectedDoor(plan: Plan, selItems: Set<string>) {
 }
 
 /** A verb the floating options bar can offer for the current selection. */
-export type SelectionAction =
-  | "remove"
-  | "hinge"
-  | "swing"
-  | "rotate"
-  | "duplicate";
+export type SelectionAction = "remove" | "hinge" | "swing" | "duplicate";
 
 /**
  * The action controls that apply to a selection, in the order the bar shows
@@ -47,7 +42,7 @@ export type SelectionAction =
  * testable without a DOM.
  *
  * `Delete` removes any selection. `H`/`S` apply when a door is selected.
- * A single fixture also offers Rotate and Duplicate.
+ * A single fixture also offers Duplicate.
  */
 export function selectionActions(
   plan: Plan,
@@ -58,8 +53,7 @@ export function selectionActions(
 ): SelectionAction[] {
   const count = selectionCount(selWalls, selItems, selLabels, selFixtures);
   if (count === 0) return [];
-  if (count === 1 && selFixtures?.size === 1)
-    return ["rotate", "duplicate", "remove"];
+  if (count === 1 && selFixtures?.size === 1) return ["duplicate", "remove"];
   return hasSelectedDoor(plan, selItems)
     ? ["remove", "hinge", "swing"]
     : ["remove"];

@@ -111,6 +111,50 @@ describe("savePersistedHistory / loadPersistedHistory", () => {
     expect(loaded?.future).toEqual([]);
   });
 
+  it("migrates an earlier sink draft without restoring its obsolete patches", () => {
+    const previewSink = {
+      id: "draft",
+      type: "sink",
+      width: 60,
+      depth: 50,
+      rotation: 45,
+      position: { x: 100, y: 20 },
+    };
+    const present = planNamed("kept", 200);
+    localStorage.setItem(
+      HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        format: 2,
+        present: { ...present, fixtures: [previewSink] },
+        past: [[{ op: "remove", path: "/fixtures" }]],
+        future: [[{ op: "replace", path: "/fixtures/0/rotation", value: 90 }]],
+      }),
+    );
+    const restored = loadPersistedHistory();
+    expect(restored?.present.walls).toEqual(present.walls);
+    expect(restored?.present.fixtures).toEqual([
+      {
+        id: "draft",
+        type: "sink",
+        wallAttach: { wallId: "w1", offset: 70, length: 60 },
+        side: 1,
+        depth: 50,
+      },
+    ]);
+    expect(restored?.past).toEqual([]);
+    expect(restored?.future).toEqual([]);
+
+    localStorage.setItem(
+      HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        format: 2,
+        ...sampleHistory(),
+      }),
+    );
+    expect(loadPersistedHistory()?.past).toEqual([undoPatch]);
+    expect(loadPersistedHistory()?.future).toEqual([redoPatch]);
+  });
+
   it("clears the stored history", () => {
     savePersistedHistory(sampleHistory());
     clearPersistedHistory();
