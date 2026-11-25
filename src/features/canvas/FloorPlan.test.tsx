@@ -973,16 +973,23 @@ describe("FloorPlan touch gestures", () => {
     expect(screen.getByText(/Move it away from the corner/)).toBeTruthy();
     expect(state().plan).toBe(mountedPlan);
 
+    const renderedSink = () => canvas.querySelector('[data-fixture="sink"]');
+    const originalTransform = renderedSink()?.getAttribute("transform");
+    expect(originalTransform).toBe("translate(365 105) rotate(0)");
     down(1, 365, 120);
     move(1, 390, 120);
     expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
       "valid",
     );
+    expect(renderedSink()).toBeNull();
     move(1, 210, 115);
     expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
       "blocked",
     );
+    expect(renderedSink()).toBeNull();
     up(1, 210, 115);
+    expect(fixturePreview()).toBeNull();
+    expect(renderedSink()?.getAttribute("transform")).toBe(originalTransform);
     expect(state().plan).toBe(mountedPlan);
     expect(loadPersistedHistory()?.past).toHaveLength(1);
   });

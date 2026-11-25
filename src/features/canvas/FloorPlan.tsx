@@ -1258,9 +1258,7 @@ export function FloorPlan() {
             wallsById={wallsById}
             selectedIds={selectedFixtures}
             hiddenId={
-              previewHost && !previewConflict
-                ? fixturePress.current?.fixture?.id
-                : undefined
+              previewHost ? fixturePress.current?.fixture?.id : undefined
             }
           />
           <DimensionsLayer dimensions={dimensions} scale={view.scale} />
