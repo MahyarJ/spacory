@@ -1,3 +1,4 @@
+import { fixtureConflictMessage } from "@app/fixtureMessage";
 import {
   assertNever,
   type Fixture,
@@ -20,12 +21,16 @@ import {
 } from "@geometry/connectivity";
 import {
   dragFixtureMount,
-  fixtureMountEquals,
+  getFixtureConflict,
   getFixtureGeometry,
   hitFixture,
+  MIN_SINK_TARGET_PX,
+  pickFixtureMount,
+  SINK_DEPTH,
+  SINK_WIDTH,
 } from "@geometry/fixtures";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
-import { computeWallGeometry } from "@geometry/junction";
+import { computeWallGeometry, paintedWallPolygons } from "@geometry/junction";
 import {
   MIN_OPENING_WIDTH,
   openingPlacementFromOffsets,
@@ -62,7 +67,7 @@ import { flushSync } from "react-dom";
 import { uid } from "../../util/uid";
 import { ConnectionPointsLayer } from "./ConnectionPointsLayer";
 import { DimensionsLayer } from "./DimensionsLayer";
-import { FixturesLayer } from "./FixturesLayer";
+import { FixturesLayer, SinkPreview } from "./FixturesLayer";
 import styles from "./FloorPlan.module.css";
 import { GridLayer } from "./GridLayer";
 import { InlineLabelEditor } from "./InlineLabelEditor";
@@ -128,7 +133,7 @@ export function FloorPlan() {
     [plan.walls],
   );
   const paintedWalls = useMemo(
-    () => [...wallGeometry.walls.values(), ...wallGeometry.junctions],
+    () => paintedWallPolygons(wallGeometry),
     [wallGeometry],
   );
   const roomNames = useMemo(
@@ -177,6 +182,10 @@ export function FloorPlan() {
     start: Point;
     fixture?: Fixture;
   } | null>(null);
+  const [fixturePointer, setFixturePointer] = useState<CanvasPoint | null>(
+    null,
+  );
+  const [fixtureHint, setFixtureHint] = useState("");
   const labelPress = useRef<{
     pointerId: number;
     start: Point;
@@ -254,6 +263,12 @@ export function FloorPlan() {
   // second finger abandoned.
   const multiTouch = useRef(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Clear the preview and hint when the active tool changes.
+  useEffect(() => {
+    setFixturePointer(null);
+    setFixtureHint("");
+  }, [tool]);
+
   useEffect(() => {
     const resize = () => {
       const el = svgRef.current;
@@ -279,7 +294,9 @@ export function FloorPlan() {
       if (state.selectedConnectionPoint) {
         state.translateSelectedConnectionPoint(dx, dy);
       } else {
-        state.translateSelection(dx, dy);
+        const conflict = state.translateSelection(dx, dy);
+        if (state.selectedFixtures.size)
+          setFixtureHint(conflict ? fixtureConflictMessage[conflict] : "");
       }
     };
 
@@ -339,6 +356,8 @@ export function FloorPlan() {
             useApp.getState().cancelLiveDrag();
           labelPress.current = null;
           fixturePress.current = null;
+          setFixturePointer(null);
+          setFixtureHint("");
           selectionDrag.current = null;
           setDrawingWall(null);
           setOpening(null);
@@ -428,6 +447,8 @@ export function FloorPlan() {
     roomTap.current = false;
     labelPress.current = null;
     fixturePress.current = null;
+    setFixturePointer(null);
+    setFixtureHint("");
     selectionDrag.current = null;
     setMovingPoint(null);
     setMovingEndpoint(null);
@@ -483,17 +504,36 @@ export function FloorPlan() {
     return true;
   };
 
-  const moveFixtureDrag = (fixture: Fixture, start: Point, world: Point) => {
-    const state = useApp.getState();
-    const moved =
-      Math.hypot(world.x - start.x, world.y - start.y) * view.scale >
-      TAP_THRESHOLD;
-    const mount = moved
-      ? dragFixtureMount(world, start, fixture, state.plan.walls)
-      : fixture;
-    if (!mount || !state.liveDragItems) return false;
-    state.moveFixtureLive(fixture.id, mount);
-    return !fixtureMountEquals(fixture, mount);
+  const fixtureProposalAt = (world: Point) => {
+    const minTargetSize = MIN_SINK_TARGET_PX / view.scale;
+    const press = fixturePress.current;
+    if (tool === "sink") {
+      const mount = pickFixtureMount(
+        world,
+        plan.walls,
+        SINK_WIDTH,
+        SINK_DEPTH,
+        minTargetSize,
+      );
+      return mount && { mount, depth: SINK_DEPTH };
+    }
+    if (
+      tool !== "select" ||
+      !press?.fixture ||
+      !hasLiveDrag ||
+      Math.hypot(world.x - press.start.x, world.y - press.start.y) *
+        view.scale <=
+        TAP_THRESHOLD
+    )
+      return null;
+    const mount = dragFixtureMount(
+      world,
+      press.start,
+      press.fixture,
+      plan.walls,
+      minTargetSize,
+    );
+    return mount && { mount, depth: press.fixture.depth };
   };
 
   // Build and commit an opening item from a resolved offset/length. Shared by
@@ -556,12 +596,15 @@ export function FloorPlan() {
     }
 
     if (e.button === 2 || tool === "pan") {
+      setFixturePointer(null);
+      setFixtureHint("");
       setIsPanning(true);
       return;
     }
 
     const world = toWorld(e.clientX, e.clientY);
     const additive = e.shiftKey;
+    setFixtureHint("");
 
     if (tool === "label" && e.button === 0) {
       labelPress.current = { pointerId: e.pointerId, start: world };
@@ -570,6 +613,7 @@ export function FloorPlan() {
 
     if (tool === "sink" && e.button === 0) {
       fixturePress.current = { pointerId: e.pointerId, start: world };
+      setFixturePointer(toCanvas(e.clientX, e.clientY));
       return;
     }
 
@@ -790,8 +834,16 @@ export function FloorPlan() {
     setCursor(world);
     const basinPress = fixturePress.current;
     if (basinPress?.pointerId === e.pointerId && basinPress.fixture) {
-      if (e.buttons === 1 && tool === "select")
-        moveFixtureDrag(basinPress.fixture, basinPress.start, world);
+      if (e.buttons === 1 && tool === "select") setFixturePointer(local);
+      return;
+    }
+    if (
+      tool === "sink" &&
+      !isPanning &&
+      (e.pointerType !== "touch" || basinPress?.pointerId === e.pointerId)
+    ) {
+      setFixturePointer(local);
+      setFixtureHint("");
       return;
     }
     const press = labelPress.current;
@@ -908,24 +960,37 @@ export function FloorPlan() {
     if (isPanning) setIsPanning(false);
     const basinPress = fixturePress.current;
     if (basinPress?.pointerId === e.pointerId) {
-      fixturePress.current = null;
       const world = toWorld(e.clientX, e.clientY);
+      const proposal = fixtureProposalAt(world);
+      fixturePress.current = null;
+      const state = useApp.getState();
       if (basinPress.fixture) {
-        const state = useApp.getState();
+        setFixturePointer(null);
         if (!state.liveDragItems) return;
-        if (
+        state.endLiveDrag();
+        const conflict =
           tool === "select" &&
-          moveFixtureDrag(basinPress.fixture, basinPress.start, world)
-        )
-          state.commitPlan();
-        else state.cancelLiveDrag();
+          proposal &&
+          state.moveFixture(basinPress.fixture.id, proposal.mount);
+        if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
       } else if (
         tool === "sink" &&
-        Math.hypot(world.x - basinPress.start.x, world.y - basinPress.start.y) *
-          view.scale <=
-          TAP_THRESHOLD
+        (e.pointerType === "touch" ||
+          Math.hypot(
+            world.x - basinPress.start.x,
+            world.y - basinPress.start.y,
+          ) *
+            view.scale <=
+            TAP_THRESHOLD)
       ) {
-        useApp.getState().placeFixture(tool, world);
+        if (!proposal) {
+          setFixturePointer(null);
+          setFixtureHint("Point closer to a wall face to place the sink.");
+        } else {
+          const conflict = state.placeFixture(proposal.mount);
+          setFixturePointer(conflict ? toCanvas(e.clientX, e.clientY) : null);
+          if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
+        }
       }
       return;
     }
@@ -1095,6 +1160,26 @@ export function FloorPlan() {
 
   const viewTransform = `translate(${view.panX} ${view.panY}) scale(${view.scale})`;
 
+  const fixtureProposal =
+    fixturePointer &&
+    fixtureProposalAt({
+      x: (fixturePointer.x - view.panX) / view.scale,
+      y: (fixturePointer.y - view.panY) / view.scale,
+    });
+  const previewFixture = fixtureProposal && {
+    ...fixtureProposal.mount,
+    depth: fixtureProposal.depth,
+  };
+  const previewHost =
+    previewFixture && wallsById.get(previewFixture.wallAttach.wallId);
+  const previewConflict =
+    previewFixture &&
+    previewHost &&
+    getFixtureConflict(previewFixture, previewHost, plan.items, paintedWalls);
+  const activeFixtureHint = previewConflict
+    ? fixtureConflictMessage[previewConflict]
+    : fixtureHint;
+
   const wallPreview = (() => {
     if (tool !== "wall" || !drawingWall || !cursor) return null;
     const snapped = snapToGrid(cursor, plan.meta.gridSize);
@@ -1149,6 +1234,9 @@ export function FloorPlan() {
         ref={svgRef}
         onContextMenu={(e) => e.preventDefault()}
         onPointerDown={onPointerDown}
+        onPointerLeave={() => {
+          if (!fixturePress.current) setFixturePointer(null);
+        }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
@@ -1169,6 +1257,11 @@ export function FloorPlan() {
             fixtures={plan.fixtures}
             wallsById={wallsById}
             selectedIds={selectedFixtures}
+            hiddenId={
+              previewHost && !previewConflict
+                ? fixturePress.current?.fixture?.id
+                : undefined
+            }
           />
           <DimensionsLayer dimensions={dimensions} scale={view.scale} />
           <SelectionLayer />
@@ -1194,8 +1287,20 @@ export function FloorPlan() {
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}
+          {previewFixture && previewHost && (
+            <SinkPreview
+              footprint={previewFixture}
+              wall={previewHost}
+              blocked={Boolean(previewConflict)}
+            />
+          )}
         </g>
       </svg>
+      {activeFixtureHint && (
+        <div className={styles.fixtureHint} role="status">
+          {activeFixtureHint}
+        </div>
+      )}
       {tool === "select" && selectedRoom && (
         <RoomNameOptions
           key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}

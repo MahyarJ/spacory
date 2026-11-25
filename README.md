@@ -27,10 +27,12 @@ connected room structures.
 - 🚪 **Openings** — place doors and windows along a wall by click-click or by
   dragging; toggle a door's hinge edge and swing side. Openings follow their
   wall as it moves and resizes
-- 🚰 **Fixtures** — choose **Sink** and click or tap near a wall face to place a
-  60 × 50 cm basin against it. Drag along the wall or to another face. Set
-  **Width** along the wall and **Depth** out from it, or use the options bar to
-  duplicate or remove the basin. Fit, autosave, JSON, SVG, and PNG include it.
+- 🚰 **Fixtures** — choose **Sink** to preview a 60 × 60 cm basin against a
+  wall face. Click or tap to place it, or touch and slide before releasing.
+  Drag along the wall or to another face. Set **Width** along the wall and
+  **Depth** out from it, or use the options bar to duplicate or remove the basin.
+  A red preview indicates a doorway or wall conflict. Fit, autosave, JSON, SVG,
+  and PNG include the basin.
 - 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and
   area in the plan’s units. With Select active, choose a room to add, edit, or
   clear its name. New names and edits can use up to 80 characters. Labels on

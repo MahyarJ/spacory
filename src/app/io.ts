@@ -1,4 +1,4 @@
-import { FIXTURE_FACE_REACH, pickFixtureMount } from "@geometry/fixtures";
+import { pickFixtureMount } from "@geometry/fixtures";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { isPlanLabelText } from "./planLabel";
 import {
@@ -94,12 +94,7 @@ function asFixture(v: unknown, i: number, walls: Wall[]): Fixture | null {
     v.width >= MIN_FIXTURE_DIMENSION
   ) {
     const position = asPoint(v.position, `${where}.position`);
-    const mount = pickFixtureMount(
-      position,
-      walls,
-      v.width,
-      FIXTURE_FACE_REACH + depth / 2,
-    );
+    const mount = pickFixtureMount(position, walls, v.width, 30 + depth / 2);
     return mount && { id: v.id, type: v.type, depth, ...mount };
   }
   const wallAttach = asWallAttachment(v.wallAttach, `${where}.wallAttach`);

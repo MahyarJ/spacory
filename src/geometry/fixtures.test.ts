@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   dragFixtureMount,
   getFixtureBounds,
+  getFixtureConflict,
   getFixtureGeometry,
   hitFixture,
   pickFixtureMount,
 } from "./fixtures";
+import { computeWallGeometry, paintedWallPolygons } from "./junction";
 
 const wall: Wall = {
   id: "divider",
@@ -54,12 +56,55 @@ describe("wall-backed basin geometry", () => {
   });
 
   it("requires a nearby wall that can fit the full width and clamps at the end", () => {
-    expect(pickFixtureMount({ x: 50, y: 110 }, [wall], 60)).toBeNull();
-    expect(pickFixtureMount({ x: 10, y: 5 }, [wall], 200)).toBeNull();
-    expect(pickFixtureMount({ x: 10, y: 5 }, [wall], 60)).toEqual({
+    expect(pickFixtureMount({ x: 50, y: 130 }, [wall], 60, 40)).toBeNull();
+    expect(pickFixtureMount({ x: 10, y: 5 }, [wall], 200, 40)).toBeNull();
+    expect(pickFixtureMount({ x: 10, y: 5 }, [wall], 60, 40)).toEqual({
       wallAttach: { wallId: "divider", offset: 0, length: 60 },
       side: -1,
     });
+  });
+
+  it("expands the target at low zoom while keeping the proposed dimensions", () => {
+    const horizontal: Wall = { ...wall, b: { x: 400, y: 0 } };
+    const beyondFront = { x: 200, y: 110 };
+    expect(pickFixtureMount(beyondFront, [horizontal], 60, 60)).toBeNull();
+    const targetAtQuarterScale = 32 / 0.25;
+    expect(
+      pickFixtureMount(beyondFront, [horizontal], 60, 60, targetAtQuarterScale),
+    ).toEqual({
+      wallAttach: { wallId: wall.id, offset: 170, length: 60 },
+      side: 1,
+    });
+    expect(
+      pickFixtureMount(
+        { x: 200, y: 134 },
+        [horizontal],
+        60,
+        60,
+        targetAtQuarterScale,
+      ),
+    ).toBeNull();
+  });
+
+  it("allows flush angled wall contact and a corner that touches only the front edge", () => {
+    expect(
+      getFixtureConflict(
+        sink,
+        wall,
+        [],
+        paintedWallPolygons(computeWallGeometry([wall])),
+      ),
+    ).toBeNull();
+    const horizontal: Wall = { ...wall, b: { x: 140, y: 0 } };
+    const corner = [
+      { x: 25, y: 45 },
+      { x: 65, y: 45 },
+      { x: 45, y: 55 },
+    ];
+    expect(getFixtureConflict(sink, horizontal, [], [corner])).toBeNull();
+    expect(
+      getFixtureConflict({ ...sink, depth: 40.01 }, horizontal, [], [corner]),
+    ).toBe("wall");
   });
 
   it("crosses to the opposite face of the same wall without sliding the basin", () => {

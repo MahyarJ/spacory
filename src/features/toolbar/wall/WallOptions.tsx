@@ -1,10 +1,12 @@
-import { type Fixture, MIN_FIXTURE_DIMENSION } from "@app/schema";
+import { fixtureConflictMessage, fixtureEditHelp } from "@app/fixtureMessage";
+import { MIN_FIXTURE_DIMENSION } from "@app/schema";
 import {
   type SelectionAction,
   selectionActions,
   selectionCount,
 } from "@app/selection";
 import { useApp } from "@app/store";
+import type { FixtureConflict } from "@geometry/fixtures";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { ICON_SIZE } from "@ui/constants";
@@ -14,6 +16,7 @@ import {
   SquareCenterlineDashedVertical,
   Trash2,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { LengthField } from "./LengthField";
 import { ThicknessOptions } from "./ThicknessOptions";
 import styles from "./WallOptions.module.css";
@@ -31,6 +34,8 @@ export function WallOptions() {
   const setWallLength = useApp((s) => s.setSelectedWallLength);
   const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
   const updateFixture = useApp((s) => s.updateFixture);
+  const duplicateFixture = useApp((s) => s.duplicateFixture);
+  const [fixtureError, setFixtureError] = useState<FixtureConflict>();
 
   const canEditMeasurement =
     tool === "select" &&
@@ -52,6 +57,8 @@ export function WallOptions() {
     canEditMeasurement && selectedFixtures.size === 1
       ? plan.fixtures?.find((fixture) => selectedFixtures.has(fixture.id))
       : undefined;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Clear feedback when the selected fixture or its geometry changes.
+  useEffect(() => setFixtureError(undefined), [selectedFixture]);
 
   const actions =
     tool === "select"
@@ -107,7 +114,10 @@ export function WallOptions() {
             lengthCm={selectedFixture.wallAttach.length}
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
-            onCommit={(width) => updateFixture(selectedFixture.id, { width })}
+            precise
+            onCommit={(width) =>
+              setFixtureError(updateFixture(selectedFixture.id, { width }))
+            }
           />
           <LengthField
             id="fixture-depth-input"
@@ -115,12 +125,26 @@ export function WallOptions() {
             lengthCm={selectedFixture.depth}
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
-            onCommit={(depth) => updateFixture(selectedFixture.id, { depth })}
+            precise
+            onCommit={(depth) =>
+              setFixtureError(updateFixture(selectedFixture.id, { depth }))
+            }
           />
         </div>
       )}
       {actions.length > 0 && (
-        <SelectionActionButtons actions={actions} fixture={selectedFixture} />
+        <SelectionActionButtons
+          actions={actions}
+          onDuplicate={
+            selectedFixture &&
+            (() => setFixtureError(duplicateFixture(selectedFixture.id)))
+          }
+        />
+      )}
+      {selectedFixture && fixtureError && (
+        <div className={styles.fixtureEditStatus} role="status">
+          {fixtureConflictMessage[fixtureError]} {fixtureEditHelp[fixtureError]}
+        </div>
       )}
     </div>
   );
@@ -132,21 +156,25 @@ export function WallOptions() {
  */
 function SelectionActionButtons({
   actions,
-  fixture,
+  onDuplicate,
 }: {
   actions: SelectionAction[];
-  fixture?: Fixture;
+  onDuplicate?: () => void;
 }) {
   const deleteSelected = useApp((s) => s.deleteSelected);
   const toggleHinge = useApp((s) => s.toggleSelectedDoorHingeEdge);
   const toggleSwing = useApp((s) => s.toggleSelectedDoorSwingSide);
-  const duplicateFixture = useApp((s) => s.duplicateFixture);
 
   // Icon-only, so each needs an explicit accessible name; the tooltip names the
   // accelerator too, so the bar teaches the shortcut instead of replacing it.
   const config: Record<
     SelectionAction,
-    { label: string; title: string; icon: React.ReactNode; onClick: () => void }
+    {
+      label: string;
+      title: string;
+      icon: React.ReactNode;
+      onClick?: () => void;
+    }
   > = {
     remove: {
       label: "Remove",
@@ -177,9 +205,7 @@ function SelectionActionButtons({
       label: "Duplicate",
       title: "Duplicate",
       icon: <Copy size={ICON_SIZE} />,
-      onClick: () => {
-        if (fixture) duplicateFixture(fixture.id);
-      },
+      onClick: onDuplicate,
     },
   };
 

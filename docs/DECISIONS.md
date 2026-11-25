@@ -1011,6 +1011,13 @@ same geometry drives the canvas, framing, and image exports. Wall splits and
 merges rebase the attachment with the wall spans used by openings, including
 flipping the stored side when a merged segment reverses direction.
 
+The placement preview and release use the same footprint and wall-face
+selection. At low zoom the pointer target expands in screen pixels while
+the drawn basin keeps its dimensions. Placement, drag, and dimensional edits
+reject positive-area overlap with the painted wall and junction polygons.
+Door openings are checked as spans on the host wall, across both faces. Edge
+contact is allowed. Rejected previews and edits leave plan history untouched.
+
 The wall anchor applies to this basin. A future countertop sink can use a
 countertop edge for orientation. Earlier draft sinks migrate to a nearby wall
 when there is room, while plans without a suitable wall keep their remaining

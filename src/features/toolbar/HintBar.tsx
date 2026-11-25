@@ -76,7 +76,10 @@ export function HintBar() {
     }
   } else if (tool === "sink") {
     text = (
-      <span>Click or tap near a wall face to place the sink on that side.</span>
+      <span>
+        Point near a wall face to preview. Click or tap to place. On touch,
+        slide to adjust before releasing.
+      </span>
     );
   } else if (tool === "label") {
     text = (
