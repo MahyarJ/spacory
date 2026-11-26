@@ -782,8 +782,8 @@ describe("FloorPlan touch gestures", () => {
     expect(fixture()).toBeUndefined();
     expect(fixturePreview()).toBeNull();
     expect(
-      screen.getByText("Point closer to a wall face to place the sink."),
-    ).toBeTruthy();
+      screen.queryByText("Point closer to a wall face to place the sink."),
+    ).toBeNull();
     expect(button("Sink").getAttribute("aria-pressed")).toBe("true");
     const backEdge = "translate(405 160) rotate(270)";
     move(1, 465, 160, { pointerType: "mouse", buttons: 0 });
@@ -879,8 +879,8 @@ describe("FloorPlan touch gestures", () => {
     expect(fixturePreview()).toBeNull();
     up(1, 130, 300);
     expect(
-      screen.getByText("Point closer to a wall face to place the sink."),
-    ).toBeTruthy();
+      screen.queryByText("Point closer to a wall face to place the sink."),
+    ).toBeNull();
     expect(state().tool).toBe("sink");
     down(1, 130, 300);
     move(1, 180, 185);
@@ -919,15 +919,15 @@ describe("FloorPlan touch gestures", () => {
     render(<WallOptionsBar />);
     const state = useApp.getState;
     move(1, 220, 180, { pointerType: "mouse", buttons: 0 });
-    expect(screen.getByText("The sink overlaps a doorway.")).toBeTruthy();
+    expect(screen.queryByText("The sink overlaps a doorway.")).toBeNull();
     for (const y of [180, 140]) {
       down(1, 220, y);
       expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
         "blocked",
       );
-      expect(screen.getByText("The sink overlaps a doorway.")).toBeTruthy();
+      expect(screen.queryByText("The sink overlaps a doorway.")).toBeNull();
       up(1, 220, y);
-      expect(screen.getByText("The sink overlaps a doorway.")).toBeTruthy();
+      expect(screen.queryByText("The sink overlaps a doorway.")).toBeNull();
       expect(state().plan).toBe(plan);
       expect(state().tool).toBe("sink");
     }
@@ -946,11 +946,11 @@ describe("FloorPlan touch gestures", () => {
     expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
       "blocked",
     );
-    expect(screen.getByText(/Move it clear of the doorway/)).toBeTruthy();
+    expect(screen.queryByText(/Move it clear of the doorway/)).toBeNull();
     fireEvent.keyDown(width, { key: "Enter" });
     expect(width.value).toBe("60");
     expect(fixturePreview()).toBeNull();
-    expect(screen.getByText(/Move it clear of the doorway/)).toBeTruthy();
+    expect(screen.queryByText(/Move it clear of the doorway/)).toBeNull();
     expect(state().plan).toBe(mountedPlan);
     expect(loadPersistedHistory()?.past).toHaveLength(1);
   });
@@ -974,8 +974,8 @@ describe("FloorPlan touch gestures", () => {
       "blocked",
     );
     expect(
-      screen.getByText("The sink overlaps a wall or corner."),
-    ).toBeTruthy();
+      screen.queryByText("The sink overlaps a wall or corner."),
+    ).toBeNull();
     up(1, 210, 110);
     expect(state().plan).toBe(plan);
     expect(loadPersistedHistory()?.past).toHaveLength(0);
@@ -1001,12 +1001,12 @@ describe("FloorPlan touch gestures", () => {
       fixturePreview()?.querySelector("rect")?.getAttribute("height"),
     ).toBe("90");
     expect(canvas.querySelector('[data-fixture="sink"]')).toBeNull();
-    expect(screen.getByText(/Move it away from the corner/)).toBeTruthy();
+    expect(screen.queryByText(/Move it away from the corner/)).toBeNull();
     expect(state().plan).toBe(mountedPlan);
     fireEvent.keyDown(depth, { key: "Enter" });
     expect(depth.value).toBe("60");
     expect(fixturePreview()).toBeNull();
-    expect(screen.getByText(/Move it away from the corner/)).toBeTruthy();
+    expect(screen.queryByText(/Move it away from the corner/)).toBeNull();
     fireEvent.change(depth, { target: { value: "45" } });
     expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
       "valid",
@@ -1032,15 +1032,15 @@ describe("FloorPlan touch gestures", () => {
     );
     expect(renderedSink()).toBeNull();
     expect(
-      screen.getByText("The sink overlaps a wall or corner."),
-    ).toBeTruthy();
+      screen.queryByText("The sink overlaps a wall or corner."),
+    ).toBeNull();
     up(1, 210, 115);
     expect(fixturePreview()).toBeNull();
     expect(renderedSink()?.getAttribute("transform")).toBe(originalTransform);
     expect(state().plan).toBe(mountedPlan);
     expect(
-      screen.getByText("The sink overlaps a wall or corner."),
-    ).toBeTruthy();
+      screen.queryByText("The sink overlaps a wall or corner."),
+    ).toBeNull();
     expect(loadPersistedHistory()?.past).toHaveLength(1);
   });
 
@@ -1101,7 +1101,7 @@ describe("FloorPlan touch gestures", () => {
     expect(
       canvas.querySelectorAll('[data-fixture-preview="blocked"]'),
     ).toHaveLength(2);
-    expect(screen.getByText("The sink overlaps a doorway.")).toBeTruthy();
+    expect(screen.queryByText("The sink overlaps a doorway.")).toBeNull();
     up(1, 220, 195, pointerType);
     expect(state().plan).toBe(moved);
     expect(state().selectedFixtures).toEqual(selection);
@@ -1167,14 +1167,14 @@ describe("FloorPlan touch gestures", () => {
       canvas.querySelectorAll('[data-fixture-preview="blocked"]'),
     ).toHaveLength(2);
     expect(
-      screen.getByText("The sink extends beyond the wall face."),
-    ).toBeTruthy();
+      screen.queryByText("The sink extends beyond the wall face."),
+    ).toBeNull();
     up(1, 230, 246);
     expect(state().plan).toBe(moved);
     expect(loadPersistedHistory()?.past).toHaveLength(1);
   });
 
-  it("explains why sinks on perpendicular walls stay put without painting red footprints", () => {
+  it("keeps sinks on perpendicular walls in place with their selection outlines", () => {
     const plan: Plan = {
       ...createInitialPlan(),
       walls: [
@@ -1207,12 +1207,12 @@ describe("FloorPlan touch gestures", () => {
     const reason =
       "The selected sinks are on walls at different angles. Move them separately.";
     fireEvent.keyDown(window, { key: "ArrowRight" });
-    expect(screen.getByText(reason)).toBeTruthy();
+    expect(screen.queryByText(reason)).toBeNull();
     expect(state().plan).toBe(plan);
 
     down(1, 110, 133);
     move(1, 160, 133);
-    expect(screen.getByText(reason)).toBeTruthy();
+    expect(screen.queryByText(reason)).toBeNull();
     expect(fixturePreview()).toBeNull();
     expect(canvas.querySelectorAll("[data-fixture-selection]")).toHaveLength(2);
     up(1, 160, 133);
@@ -1272,8 +1272,8 @@ describe("FloorPlan touch gestures", () => {
       "var(--sp-sink-blocked)",
     );
     expect(
-      screen.getByText("The sink extends beyond the wall face."),
-    ).toBeTruthy();
+      screen.queryByText("The sink extends beyond the wall face."),
+    ).toBeNull();
     up(1, x + 150, y + 55, pointerType);
     expect(state().plan).toBe(plan);
     expect(loadPersistedHistory()?.past).toHaveLength(0);

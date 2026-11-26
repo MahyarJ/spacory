@@ -49,3 +49,36 @@ it("shows thickness for wall-only selections and Delete for label selections", (
   expect(container.textContent).not.toContain("Click or tap again to edit");
   expect(screen.getByText("Delete", { selector: "kbd" })).toBeTruthy();
 });
+
+it("stays empty for sink placement and a sink-only selection", () => {
+  const state = useApp.getState;
+  state().loadPlan({
+    ...createInitialPlan(),
+    walls: [
+      {
+        id: "host",
+        a: { x: 0, y: 0 },
+        b: { x: 250, y: 0 },
+        thickness: 10,
+      },
+    ],
+    fixtures: [
+      {
+        id: "sink",
+        type: "sink",
+        side: 1,
+        depth: 60,
+        wallAttach: { wallId: "host", offset: 30, length: 60 },
+      },
+    ],
+  });
+  state().setTool("sink");
+  const { container } = render(<HintBar />);
+  expect(container.textContent).toBe("");
+
+  act(() => {
+    state().setTool("select");
+    state().selectFixture("sink");
+  });
+  expect(container.textContent).toBe("");
+});

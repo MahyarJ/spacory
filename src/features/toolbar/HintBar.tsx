@@ -17,7 +17,8 @@ export function HintBar() {
 
   const count = selectionCount(selW, selI, selectedLabels, selectedFixtures);
   const labelsOnly = count === selectedLabels.size;
-  const fixturesOnly = count === selectedFixtures.size;
+  const fixturesOnly =
+    selectedFixtures.size > 0 && count === selectedFixtures.size;
   const wallsOnly = isWallOnlySelection(
     selW,
     selI,
@@ -35,7 +36,7 @@ export function HintBar() {
         the label.
       </span>
     );
-  } else if (tool === "select") {
+  } else if (tool === "select" && !fixturesOnly) {
     if (count > 0) {
       text = (
         <span>
@@ -43,12 +44,6 @@ export function HintBar() {
             <>
               Drag to move. {count === 1 && "Click or tap again to edit. "}
               Choose <strong>Remove</strong> or press{" "}
-            </>
-          )}
-          {fixturesOnly && (
-            <>
-              Drag along the wall or to another face. Choose{" "}
-              <strong>Remove</strong> or press{" "}
             </>
           )}
           {wallsOnly && (
@@ -63,24 +58,17 @@ export function HintBar() {
             </>
           )}
           <kbd>Delete</kbd>
-          {labelsOnly || fixturesOnly ? "." : " remove selection"}
+          {labelsOnly ? "." : " remove selection"}
         </span>
       );
     } else {
       text = (
         <span>
-          Select a wall, opening, fixture, or label to edit it, or choose a room
-          to name it. Shift-click or drag to select multiple objects.
+          Select a wall, opening, or label to edit it, or choose a room to name
+          it. Shift-click or drag to select multiple objects.
         </span>
       );
     }
-  } else if (tool === "sink") {
-    text = (
-      <span>
-        Point near a wall face to preview. Click or tap to place. On touch,
-        slide to adjust before releasing.
-      </span>
-    );
   } else if (tool === "label") {
     text = (
       <span>

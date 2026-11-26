@@ -1023,8 +1023,8 @@ dimension and leaves plan history untouched.
 Selections with basins on separate walls, or with basins and labels, use one
 translation along their current wall faces. Parallel faces share a slide
 direction and preserve the group's spacing. Walls at different angles keep
-the selection in place and show a reason. A conflicting footprint turns
-every preview outline red and blocks the whole drop.
+the selection in place. A conflicting footprint turns every preview outline
+red and blocks the whole drop.
 
 The wall anchor applies to this basin. A future countertop sink can use a
 countertop edge for orientation. Earlier draft sinks migrate to a nearby wall

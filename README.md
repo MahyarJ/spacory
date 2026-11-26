@@ -35,8 +35,7 @@ connected room structures.
   Sinks on separate parallel walls keep their spacing when dragged together.
   Selected sinks and plan labels slide together along the sinks' wall faces.
   Placement, dragging, and dimension edits preview in blue when valid and
-  red when blocked, with a short explanation. Fit, autosave, JSON, SVG, and PNG
-  include the basin.
+  red when blocked. Fit, autosave, JSON, SVG, and PNG include the basin.
 - 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and
   area in the plan’s units. With Select active, choose a room to add, edit, or
   clear its name. New names and edits can use up to 80 characters. Labels on

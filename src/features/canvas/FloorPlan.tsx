@@ -1,4 +1,3 @@
-import { fixtureConflictMessage } from "@app/fixtureMessage";
 import {
   assertNever,
   type Fixture,
@@ -211,7 +210,6 @@ export function FloorPlan() {
   const [fixturePointer, setFixturePointer] = useState<CanvasPoint | null>(
     null,
   );
-  const [fixtureHint, setFixtureHint] = useState("");
   const labelPress = useRef<{
     pointerId: number;
     start: Point;
@@ -289,10 +287,9 @@ export function FloorPlan() {
   // second finger abandoned.
   const multiTouch = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Clear the preview and hint when the active tool changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Clear the preview when the active tool changes.
   useEffect(() => {
     setFixturePointer(null);
-    setFixtureHint("");
   }, [tool]);
 
   useEffect(() => {
@@ -320,9 +317,7 @@ export function FloorPlan() {
       if (state.selectedConnectionPoint) {
         state.translateSelectedConnectionPoint(dx, dy);
       } else {
-        const conflict = state.translateSelection(dx, dy);
-        if (state.selectedFixtures.size)
-          setFixtureHint(conflict ? fixtureConflictMessage[conflict] : "");
+        state.translateSelection(dx, dy);
       }
     };
 
@@ -383,7 +378,6 @@ export function FloorPlan() {
           labelPress.current = null;
           fixturePress.current = null;
           setFixturePointer(null);
-          setFixtureHint("");
           selectionDrag.current = null;
           setDrawingWall(null);
           setOpening(null);
@@ -474,7 +468,6 @@ export function FloorPlan() {
     labelPress.current = null;
     fixturePress.current = null;
     setFixturePointer(null);
-    setFixtureHint("");
     selectionDrag.current = null;
     setMovingPoint(null);
     setMovingEndpoint(null);
@@ -647,14 +640,12 @@ export function FloorPlan() {
 
     if (e.button === 2 || tool === "pan") {
       setFixturePointer(null);
-      setFixtureHint("");
       setIsPanning(true);
       return;
     }
 
     const world = toWorld(e.clientX, e.clientY);
     const additive = e.shiftKey;
-    setFixtureHint("");
 
     if (tool === "label" && e.button === 0) {
       labelPress.current = { pointerId: e.pointerId, start: world };
@@ -920,7 +911,6 @@ export function FloorPlan() {
       (e.pointerType !== "touch" || basinPress?.pointerId === e.pointerId)
     ) {
       setFixturePointer(local);
-      setFixtureHint("");
       return;
     }
     const press = labelPress.current;
@@ -1046,10 +1036,8 @@ export function FloorPlan() {
         if (!state.liveDragItems) return;
         state.endLiveDrag();
         if (tool === "select" && proposal) {
-          const conflict =
-            proposal.conflict ??
+          if (!proposal.conflict)
             state.moveFixtureSelection(proposal.moved, proposal.labels);
-          if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
         } else if (
           tool === "select" &&
           basinPress.drag.kind === "mixed" &&
@@ -1067,14 +1055,9 @@ export function FloorPlan() {
             view.scale <=
             TAP_THRESHOLD)
       ) {
-        if (!proposal?.placement) {
-          setFixturePointer(null);
-          setFixtureHint("Point closer to a wall face to place the sink.");
-        } else {
-          const conflict = state.placeFixture(proposal.placement);
-          setFixturePointer(conflict ? toCanvas(e.clientX, e.clientY) : null);
-          if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
-        }
+        const conflict =
+          proposal?.placement && state.placeFixture(proposal.placement);
+        setFixturePointer(conflict ? toCanvas(e.clientX, e.clientY) : null);
       }
       return;
     }
@@ -1278,9 +1261,6 @@ export function FloorPlan() {
         .find((reason) => reason !== null))
     : null;
   const previewConflict = pointerConflict ?? resizePreview?.conflict;
-  const activeFixtureHint = pointerConflict
-    ? fixtureConflictMessage[pointerConflict]
-    : fixtureHint;
   const hiddenFixtureIds = new Set(
     fixturePreviews.flatMap(({ footprint }) =>
       footprint.id === undefined ? [] : [footprint.id],
@@ -1408,11 +1388,6 @@ export function FloorPlan() {
           ))}
         </g>
       </svg>
-      {activeFixtureHint && (
-        <div className={styles.fixtureHint} role="status">
-          {activeFixtureHint}
-        </div>
-      )}
       {tool === "select" && selectedRoom && (
         <RoomNameOptions
           key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}
