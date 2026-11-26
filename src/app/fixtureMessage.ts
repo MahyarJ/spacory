@@ -3,7 +3,7 @@ import type { FixtureConflict } from "@geometry/fixtures";
 export const fixtureConflictMessage: Record<FixtureConflict, string> = {
   door: "The sink overlaps a doorway.",
   wall: "The sink overlaps a wall or corner.",
-  width: "The sink is wider than the wall face.",
+  width: "The sink extends beyond the wall face.",
 };
 
 export const fixtureEditHelp: Record<FixtureConflict, string> = {

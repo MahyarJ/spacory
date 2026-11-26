@@ -119,6 +119,74 @@ export function fixtureMountEquals(a: FixtureMount, b: FixtureMount): boolean {
   );
 }
 
+function dragOffset(offset: number, length: number, wall: Wall): number {
+  const last = getWallLength(wall) - length;
+  if (Math.abs(offset) <= CONTACT_EPSILON) return 0;
+  if (last >= 0 && Math.abs(offset - last) <= CONTACT_EPSILON) return last;
+  return offset;
+}
+
+/** Slide the selected sinks together, keeping their spacing on a shared wall. */
+export function moveFixtureGroup(
+  fixtures: Fixture[],
+  grabbed: Fixture,
+  mount: FixtureMount,
+  wallsById: ReadonlyMap<string, Wall>,
+): Fixture[] {
+  const source = wallsById.get(grabbed.wallAttach.wallId);
+  const target = wallsById.get(mount.wallAttach.wallId);
+  if (!source || !target) return [];
+  const moved = { ...grabbed, ...mount };
+  if (fixtures.length === 1) return [moved];
+
+  const centerOffset = ({ offset, length }: Fixture["wallAttach"]) =>
+    offset + length / 2;
+  const before = getFixtureGeometry(grabbed, source);
+  const after = getFixtureGeometry(moved, target);
+  const reversed =
+    before.along.x * after.along.x + before.along.y * after.along.y < 0;
+  return fixtures.map((fixture) => {
+    if (fixture.id === grabbed.id) return moved;
+    const { wallAttach, side } = fixture;
+    const { length } = wallAttach;
+    if (wallAttach.wallId === source.id) {
+      const spacing =
+        centerOffset(wallAttach) - centerOffset(grabbed.wallAttach);
+      return {
+        ...fixture,
+        side: side === grabbed.side ? mount.side : mount.side === 1 ? -1 : 1,
+        wallAttach: {
+          ...wallAttach,
+          wallId: target.id,
+          offset: dragOffset(
+            centerOffset(mount.wallAttach) +
+              (reversed ? -spacing : spacing) -
+              length / 2,
+            length,
+            target,
+          ),
+        },
+      };
+    }
+    const host = wallsById.get(wallAttach.wallId);
+    if (!host) return fixture;
+    const along = getWallDirection(host);
+    return {
+      ...fixture,
+      wallAttach: {
+        ...wallAttach,
+        offset: dragOffset(
+          wallAttach.offset +
+            (after.back.x - before.back.x) * along.x +
+            (after.back.y - before.back.y) * along.y,
+          length,
+          host,
+        ),
+      },
+    };
+  });
+}
+
 export function getFixtureGeometry(fixture: FixtureFootprint, wall: Wall) {
   const { wallAttach, side, depth } = fixture;
   const width = wallAttach.length;
@@ -146,9 +214,11 @@ export function getFixtureConflict(
 ): FixtureConflict | null {
   const { wallAttach, depth } = fixture;
   const { offset, length } = wallAttach;
+  const wallLength = getWallLength(wall);
   if (
+    length > wallLength ||
     offset < -CONTACT_EPSILON ||
-    offset + length > getWallLength(wall) + CONTACT_EPSILON
+    offset + length > wallLength + CONTACT_EPSILON
   )
     return "width";
 

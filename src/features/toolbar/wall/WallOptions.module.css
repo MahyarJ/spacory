@@ -189,6 +189,16 @@
     transform: translate(-50%, -50%);
   }
 }
+.fixtureResizeStatus {
+  flex-basis: 100%;
+  color: var(--sp-sink-blocked);
+  font-size: var(--sp-control-font-size);
+}
+
+.fixtureResizeStatus:empty {
+  display: none;
+}
+
 .visuallyHidden {
   position: absolute;
   width: 1px;

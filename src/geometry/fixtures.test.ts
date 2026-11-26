@@ -6,6 +6,7 @@ import {
   getFixtureConflict,
   getFixtureGeometry,
   hitFixture,
+  moveFixtureGroup,
   pickFixtureMount,
 } from "./fixtures";
 import { computeWallGeometry, paintedWallPolygons } from "./junction";
@@ -117,5 +118,50 @@ describe("wall-backed basin geometry", () => {
       wallAttach: sink.wallAttach,
       side: -1,
     });
+  });
+
+  it("preserves spacing on a reversed destination and slides sinks on separate hosts", () => {
+    const source = { ...wall, b: { x: 400, y: 0 } };
+    const target = {
+      ...wall,
+      id: "target",
+      a: { x: 500, y: 200 },
+      b: { x: 0, y: 200 },
+    };
+    const other = {
+      ...wall,
+      id: "other",
+      a: { x: 550, y: 0 },
+      b: { x: 550, y: 400 },
+    };
+    const neighbor: Fixture = {
+      ...sink,
+      id: "neighbor",
+      side: -1,
+      wallAttach: { ...sink.wallAttach, offset: 140 },
+    };
+    const separate: Fixture = {
+      ...sink,
+      id: "separate",
+      wallAttach: { ...sink.wallAttach, wallId: other.id, offset: 40 },
+    };
+    const mount = {
+      wallAttach: { wallId: target.id, offset: 210, length: 60 },
+      side: -1,
+    } as const;
+    const walls = new Map(
+      [source, target, other].map((host) => [host.id, host]),
+    );
+    expect(
+      moveFixtureGroup([sink, neighbor, separate], sink, mount, walls),
+    ).toEqual([
+      { ...sink, ...mount },
+      {
+        ...neighbor,
+        side: 1,
+        wallAttach: { wallId: target.id, offset: 90, length: 60 },
+      },
+      { ...separate, wallAttach: { ...separate.wallAttach, offset: 240 } },
+    ]);
   });
 });

@@ -34,8 +34,11 @@ export function WallOptions() {
   const setWallLength = useApp((s) => s.setSelectedWallLength);
   const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
   const updateFixture = useApp((s) => s.updateFixture);
+  const fixtureResizePreview = useApp((s) => s.fixtureResizePreview);
+  const hasLiveDrag = useApp((s) => s.liveDragItems !== null);
   const duplicateFixture = useApp((s) => s.duplicateFixture);
   const [duplicateError, setDuplicateError] = useState<FixtureConflict>();
+  const [resizeError, setResizeError] = useState<FixtureConflict>();
 
   const canEditMeasurement =
     tool === "select" &&
@@ -58,9 +61,20 @@ export function WallOptions() {
       ? plan.fixtures?.find((fixture) => selectedFixtures.has(fixture.id))
       : undefined;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Clear feedback when the selected fixture or its geometry changes.
-  useEffect(() => setDuplicateError(undefined), [selectedFixture]);
+  useEffect(() => {
+    setDuplicateError(undefined);
+    setResizeError(undefined);
+  }, [selectedFixture]);
+  useEffect(() => {
+    if (hasLiveDrag) setResizeError(undefined);
+  }, [hasLiveDrag]);
   const duplicateMessage =
     duplicateError && fixtureConflictMessage[duplicateError];
+  const resizeConflict =
+    fixtureResizePreview &&
+    fixtureResizePreview.fixture.id === selectedFixture?.id
+      ? fixtureResizePreview.conflict
+      : resizeError;
 
   const actions =
     tool === "select"
@@ -117,13 +131,16 @@ export function WallOptions() {
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
             precise
-            onCommit={(width) => updateFixture(selectedFixture.id, { width })}
+            onCommit={(width) =>
+              setResizeError(updateFixture(selectedFixture.id, { width }))
+            }
             renderDraft={(length) => (
               <FixtureResizeDraft
                 plan={plan}
                 fixture={selectedFixture}
                 dimension="width"
                 length={length}
+                setResizeError={setResizeError}
               />
             )}
           />
@@ -134,13 +151,16 @@ export function WallOptions() {
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
             precise
-            onCommit={(depth) => updateFixture(selectedFixture.id, { depth })}
+            onCommit={(depth) =>
+              setResizeError(updateFixture(selectedFixture.id, { depth }))
+            }
             renderDraft={(length) => (
               <FixtureResizeDraft
                 plan={plan}
                 fixture={selectedFixture}
                 dimension="depth"
                 length={length}
+                setResizeError={setResizeError}
               />
             )}
           />
@@ -157,9 +177,19 @@ export function WallOptions() {
         />
       )}
       {selectedFixture && (
-        <span className={styles.visuallyHidden} role="status">
-          {duplicateMessage}
-        </span>
+        <>
+          <div className={styles.fixtureResizeStatus} role="status">
+            {resizeConflict && (
+              <>
+                {fixtureConflictMessage[resizeConflict]}{" "}
+                {fixtureEditHelp[resizeConflict]}
+              </>
+            )}
+          </div>
+          <span className={styles.visuallyHidden} role="status">
+            {duplicateMessage}
+          </span>
+        </>
       )}
     </div>
   );
@@ -170,11 +200,13 @@ function FixtureResizeDraft({
   fixture,
   dimension,
   length,
+  setResizeError,
 }: {
   plan: Plan;
   fixture: Fixture;
   dimension: "width" | "depth";
   length: number | null;
+  setResizeError: (conflict?: FixtureConflict) => void;
 }) {
   const setPreview = useApp((s) => s.setFixtureResizePreview);
   const preview = useMemo(
@@ -186,18 +218,13 @@ function FixtureResizeDraft({
   );
   useLayoutEffect(() => {
     if (!preview) return;
+    setResizeError(undefined);
     setPreview(preview);
     return () => {
       if (useApp.getState().fixtureResizePreview === preview) setPreview(null);
     };
-  }, [preview, setPreview]);
-
-  const conflict = preview?.conflict;
-  return (
-    <span className={styles.visuallyHidden} role="status">
-      {conflict && fixtureEditHelp[conflict]}
-    </span>
-  );
+  }, [preview, setPreview, setResizeError]);
+  return null;
 }
 
 /**

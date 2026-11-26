@@ -73,18 +73,18 @@ export function FixturesLayer({
   fixtures,
   wallsById,
   selectedIds,
-  hiddenId,
+  hiddenIds,
 }: {
   fixtures?: Fixture[];
   wallsById: ReadonlyMap<string, Wall>;
   selectedIds: ReadonlySet<string>;
-  hiddenId?: string;
+  hiddenIds: ReadonlySet<string>;
 }) {
   return (
     <g data-layer="fixtures" pointerEvents="none">
       {fixtures?.map((fixture) => {
         const wall = wallsById.get(fixture.wallAttach.wallId);
-        if (!wall || fixture.id === hiddenId) return null;
+        if (!wall || hiddenIds.has(fixture.id)) return null;
         return (
           <g
             key={fixture.id}

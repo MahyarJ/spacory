@@ -1,3 +1,4 @@
+import { fixtureConflictMessage } from "@app/fixtureMessage";
 import {
   assertNever,
   type Fixture,
@@ -20,10 +21,12 @@ import {
 } from "@geometry/connectivity";
 import {
   dragFixtureMount,
+  type FixtureFootprint,
   getFixtureConflict,
   getFixtureGeometry,
   hitFixture,
   MIN_SINK_TARGET_PX,
+  moveFixtureGroup,
   pickFixtureMount,
   SINK_DEPTH,
   SINK_WIDTH,
@@ -181,10 +184,12 @@ export function FloorPlan() {
     pointerId: number;
     start: Point;
     fixture?: Fixture;
+    group?: Fixture[];
   } | null>(null);
   const [fixturePointer, setFixturePointer] = useState<CanvasPoint | null>(
     null,
   );
+  const [fixtureHint, setFixtureHint] = useState("");
   const labelPress = useRef<{
     pointerId: number;
     start: Point;
@@ -262,9 +267,10 @@ export function FloorPlan() {
   // second finger abandoned.
   const multiTouch = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Clear the preview when the active tool changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Clear the preview and hint when the active tool changes.
   useEffect(() => {
     setFixturePointer(null);
+    setFixtureHint("");
   }, [tool]);
 
   useEffect(() => {
@@ -292,7 +298,9 @@ export function FloorPlan() {
       if (state.selectedConnectionPoint) {
         state.translateSelectedConnectionPoint(dx, dy);
       } else {
-        state.translateSelection(dx, dy);
+        const conflict = state.translateSelection(dx, dy);
+        if (state.selectedFixtures.size)
+          setFixtureHint(conflict ? fixtureConflictMessage[conflict] : "");
       }
     };
 
@@ -353,6 +361,7 @@ export function FloorPlan() {
           labelPress.current = null;
           fixturePress.current = null;
           setFixturePointer(null);
+          setFixtureHint("");
           selectionDrag.current = null;
           setDrawingWall(null);
           setOpening(null);
@@ -443,6 +452,7 @@ export function FloorPlan() {
     labelPress.current = null;
     fixturePress.current = null;
     setFixturePointer(null);
+    setFixtureHint("");
     selectionDrag.current = null;
     setMovingPoint(null);
     setMovingEndpoint(null);
@@ -509,7 +519,7 @@ export function FloorPlan() {
         SINK_DEPTH,
         minTargetSize,
       );
-      return mount && { mount, depth: SINK_DEPTH };
+      return mount && { placement: mount, moved: [] };
     }
     if (
       tool !== "select" ||
@@ -527,7 +537,17 @@ export function FloorPlan() {
       plan.walls,
       minTargetSize,
     );
-    return mount && { mount, depth: press.fixture.depth };
+    return (
+      mount && {
+        placement: null,
+        moved: moveFixtureGroup(
+          press.group ?? [press.fixture],
+          press.fixture,
+          mount,
+          wallsById,
+        ),
+      }
+    );
   };
 
   // Build and commit an opening item from a resolved offset/length. Shared by
@@ -591,12 +611,14 @@ export function FloorPlan() {
 
     if (e.button === 2 || tool === "pan") {
       setFixturePointer(null);
+      setFixtureHint("");
       setIsPanning(true);
       return;
     }
 
     const world = toWorld(e.clientX, e.clientY);
     const additive = e.shiftKey;
+    setFixtureHint("");
 
     if (tool === "label" && e.button === 0) {
       labelPress.current = { pointerId: e.pointerId, start: world };
@@ -664,14 +686,18 @@ export function FloorPlan() {
           );
         });
       if (fixture) {
-        if (!selectedFixtures.has(fixture.id) || !additive)
+        if (!selectedFixtures.has(fixture.id))
           selectFixture(fixture.id, additive);
+        const state = useApp.getState();
         fixturePress.current = {
           pointerId: e.pointerId,
           start: world,
           fixture,
+          group: state.plan.fixtures?.filter(({ id }) =>
+            state.selectedFixtures.has(id),
+          ),
         };
-        useApp.getState().beginLiveDrag();
+        state.beginLiveDrag();
         return;
       }
 
@@ -837,6 +863,7 @@ export function FloorPlan() {
       (e.pointerType !== "touch" || basinPress?.pointerId === e.pointerId)
     ) {
       setFixturePointer(local);
+      setFixtureHint("");
       return;
     }
     const press = labelPress.current;
@@ -961,8 +988,10 @@ export function FloorPlan() {
         setFixturePointer(null);
         if (!state.liveDragItems) return;
         state.endLiveDrag();
-        if (tool === "select" && proposal)
-          state.moveFixture(basinPress.fixture.id, proposal.mount);
+        if (tool === "select" && proposal) {
+          const conflict = state.moveFixtures(proposal.moved);
+          if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
+        }
       } else if (
         tool === "sink" &&
         (e.pointerType === "touch" ||
@@ -973,8 +1002,14 @@ export function FloorPlan() {
             view.scale <=
             TAP_THRESHOLD)
       ) {
-        const conflict = proposal && state.placeFixture(proposal.mount);
-        setFixturePointer(conflict ? toCanvas(e.clientX, e.clientY) : null);
+        if (!proposal?.placement) {
+          setFixturePointer(null);
+          setFixtureHint("Point closer to a wall face to place the sink.");
+        } else {
+          const conflict = state.placeFixture(proposal.placement);
+          setFixturePointer(conflict ? toCanvas(e.clientX, e.clientY) : null);
+          if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
+        }
       }
       return;
     }
@@ -1150,10 +1185,6 @@ export function FloorPlan() {
       x: (fixturePointer.x - view.panX) / view.scale,
       y: (fixturePointer.y - view.panY) / view.scale,
     });
-  const pointerPreview = fixtureProposal && {
-    ...fixtureProposal.mount,
-    depth: fixtureProposal.depth,
-  };
   const resizePreview =
     tool === "select" &&
     !hasLiveDrag &&
@@ -1161,18 +1192,31 @@ export function FloorPlan() {
     selectedFixtures.has(fixtureResizePreview.fixture.id)
       ? fixtureResizePreview
       : null;
-  const previewFixture = pointerPreview ?? resizePreview?.fixture;
-  const previewHost =
-    previewFixture && wallsById.get(previewFixture.wallAttach.wallId);
-  const previewConflict =
-    pointerPreview && previewHost
-      ? getFixtureConflict(
-          pointerPreview,
-          previewHost,
-          plan.items,
-          paintedWalls,
+  const previewFootprints: Array<FixtureFootprint & { id?: string }> =
+    fixtureProposal?.placement
+      ? [{ ...fixtureProposal.placement, depth: SINK_DEPTH }]
+      : (fixtureProposal?.moved ??
+        (resizePreview ? [resizePreview.fixture] : []));
+  const fixturePreviews = previewFootprints.flatMap((footprint) => {
+    const wall = wallsById.get(footprint.wallAttach.wallId);
+    return wall ? [{ footprint, wall }] : [];
+  });
+  const pointerConflict = fixtureProposal
+    ? fixturePreviews
+        .map(({ footprint, wall }) =>
+          getFixtureConflict(footprint, wall, plan.items, paintedWalls),
         )
-      : resizePreview?.conflict;
+        .find((reason) => reason !== null)
+    : null;
+  const previewConflict = pointerConflict ?? resizePreview?.conflict;
+  const activeFixtureHint = pointerConflict
+    ? fixtureConflictMessage[pointerConflict]
+    : fixtureHint;
+  const hiddenFixtureIds = new Set(
+    fixturePreviews.flatMap(({ footprint }) =>
+      footprint.id === undefined ? [] : [footprint.id],
+    ),
+  );
 
   const wallPreview = (() => {
     if (tool !== "wall" || !drawingWall || !cursor) return null;
@@ -1251,12 +1295,7 @@ export function FloorPlan() {
             fixtures={plan.fixtures}
             wallsById={wallsById}
             selectedIds={selectedFixtures}
-            hiddenId={
-              previewHost
-                ? (fixturePress.current?.fixture?.id ??
-                  resizePreview?.fixture.id)
-                : undefined
-            }
+            hiddenIds={hiddenFixtureIds}
           />
           <DimensionsLayer dimensions={dimensions} scale={view.scale} />
           <SelectionLayer />
@@ -1282,15 +1321,21 @@ export function FloorPlan() {
           <MarqueeLayer />
           {wallPreview}
           {openingPreview}
-          {previewFixture && previewHost && (
+          {fixturePreviews.map(({ footprint, wall }) => (
             <SinkPreview
-              footprint={previewFixture}
-              wall={previewHost}
+              key={footprint.id ?? "placement"}
+              footprint={footprint}
+              wall={wall}
               blocked={Boolean(previewConflict)}
             />
-          )}
+          ))}
         </g>
       </svg>
+      {activeFixtureHint && (
+        <div className={styles.fixtureHint} role="status">
+          {activeFixtureHint}
+        </div>
+      )}
       {tool === "select" && selectedRoom && (
         <RoomNameOptions
           key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}

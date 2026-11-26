@@ -28,6 +28,20 @@
   font-size: 12px;
 }
 
+.fixtureHint {
+  position: absolute;
+  bottom: 48px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border: 1px solid var(--sp-grid);
+  border-radius: 8px;
+  background: var(--sp-panel);
+  color: var(--sp-text);
+  font-size: var(--sp-control-font-size);
+  pointer-events: none;
+}
+
 .select {
   cursor: default;
 }

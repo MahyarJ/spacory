@@ -113,7 +113,9 @@ interface AppState {
   fixtureResizePreview: FixtureResizePreview;
   setFixtureResizePreview: (preview: FixtureResizePreview) => void;
   duplicateFixture: (id: string) => FixtureConflict | undefined;
-  moveFixture: (id: string, mount: FixtureMount) => FixtureConflict | undefined;
+  moveFixtures: (
+    moves: Array<FixtureMount & { id: string }>,
+  ) => FixtureConflict | undefined;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setCanvasSize: (size: { width: number; height: number }) => void;
   /**
@@ -452,15 +454,14 @@ function commitFixtures(fixtures: Fixture[], state: AppState) {
   );
 }
 
-function fixtureConflict(plan: Plan, fixture: FixtureFootprint) {
+function fixtureConflict(
+  plan: Plan,
+  fixture: FixtureFootprint,
+  paintedWalls = paintedWallPolygons(computeWallGeometry(plan.walls)),
+) {
   const wall = plan.walls.find(({ id }) => id === fixture.wallAttach.wallId);
   if (!wall) return "width";
-  return getFixtureConflict(
-    fixture,
-    wall,
-    plan.items,
-    paintedWallPolygons(computeWallGeometry(plan.walls)),
-  );
+  return getFixtureConflict(fixture, wall, plan.items, paintedWalls);
 }
 
 export function previewFixtureResize(
@@ -772,21 +773,34 @@ export const useApp = create<AppState>((set, get) => ({
       selectedFixtures: new Set([copy.id]),
     });
   },
-  moveFixture: (id, mount) => {
+  moveFixtures: (moves) => {
     const state = get();
     const plan = history.present;
-    const fixture = plan.fixtures?.find((item) => item.id === id);
-    if (!plan.fixtures || !fixture || fixtureMountEquals(fixture, mount))
-      return;
-    const candidate = { ...fixture, ...mount };
-    const conflict = fixtureConflict(plan, candidate);
-    if (conflict) return conflict;
-    set(
-      commitFixtures(
-        plan.fixtures.map((item) => (item === fixture ? candidate : item)),
-        state,
-      ),
-    );
+    if (!plan.fixtures || moves.length === 0) return;
+    const byId = new Map(moves.map((move) => [move.id, move]));
+    const paintedWalls = paintedWallPolygons(computeWallGeometry(plan.walls));
+    const next: Fixture[] = [];
+    let changed = false;
+    for (const fixture of plan.fixtures) {
+      const move = byId.get(fixture.id);
+      if (!move) {
+        next.push(fixture);
+        continue;
+      }
+      const candidate = {
+        ...fixture,
+        wallAttach: move.wallAttach,
+        side: move.side,
+      };
+      const conflict = fixtureConflict(plan, candidate, paintedWalls);
+      if (conflict) return conflict;
+      if (fixtureMountEquals(fixture, move)) next.push(fixture);
+      else {
+        changed = true;
+        next.push(candidate);
+      }
+    }
+    if (changed) set(commitFixtures(next, state));
   },
   setView: (fn) =>
     set(({ view }) => {
