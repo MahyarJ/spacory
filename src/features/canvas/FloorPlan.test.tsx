@@ -1111,6 +1111,50 @@ describe("FloorPlan touch gestures", () => {
     expect(state().selectedFixtures).toEqual(selection);
   });
 
+  it("nudges a selected pair on one wall as a single edit when both sinks fit", () => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 160, 600, 160, "host")],
+      items: [
+        {
+          id: "door",
+          type: "door",
+          thickness: 18,
+          wallAttach: { wallId: "host", offset: 320, length: 60 },
+          props: { hingeEdge: "start", swingSide: "inside" },
+        },
+      ],
+      fixtures: [100, 260].map((offset, index) => ({
+        id: `sink-${index}`,
+        type: "sink",
+        depth: 60,
+        side: 1,
+        wallAttach: { wallId: "host", length: 60, offset },
+      })),
+    };
+    setup({ tool: "select", plan });
+    const state = useApp.getState;
+    down(1, 60, 178);
+    move(1, 340, 245);
+    up(1, 340, 245);
+    const selected = new Set(["sink-0", "sink-1"]);
+    expect(state().selectedFixtures).toEqual(selected);
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(state().plan).toBe(plan);
+    expect(state().selectedFixtures).toEqual(selected);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(
+      state().plan.fixtures?.map(({ wallAttach }) => wallAttach.offset),
+    ).toEqual([80, 240]);
+    expect(state().selectedFixtures).toEqual(selected);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(state().plan.fixtures).toEqual(plan.fixtures);
+  });
+
   it("slides sinks on separate parallel walls without reattaching either sink", () => {
     const plan: Plan = {
       ...createInitialPlan(),

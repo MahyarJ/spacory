@@ -14,7 +14,6 @@ import {
   type FixtureMoveConflict,
   fitFixtureSpan,
   fixtureMountEquals,
-  fixturesHaveDifferentWalls,
   getFixtureConflict,
   SINK_DEPTH,
   slideFixtureGroup,
@@ -626,7 +625,7 @@ function translatePlanSelection(
     selectedFixtures.size > 1
       ? plan.fixtures?.filter(({ id }) => selectedFixtures.has(id))
       : undefined);
-  if (fixtureGroup && (mixed || fixturesHaveDifferentWalls(fixtureGroup))) {
+  if (fixtureGroup?.length) {
     const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
     const { moved, delta, conflict } = slideFixtureGroup(
       fixtureGroup,
