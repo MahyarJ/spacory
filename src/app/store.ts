@@ -63,7 +63,6 @@ import {
   type WallMountedObject,
 } from "./schema";
 import {
-  getFixtureLabelSelection,
   isWallOnlySelection,
   type LabelMove,
   selectionCount,
@@ -601,11 +600,7 @@ function translateSelectedWallsFollowing(
 function translatePlanSelection(
   state: Pick<
     AppState,
-    | "plan"
-    | "selectedWalls"
-    | "selectedItems"
-    | "selectedLabels"
-    | "selectedFixtures"
+    "plan" | "selectedWalls" | "selectedLabels" | "selectedFixtures"
   >,
   dx: number,
   dy: number,
@@ -617,14 +612,14 @@ function translatePlanSelection(
   ) {
     return { next: plan };
   }
-  const mixed = getFixtureLabelSelection(state);
+  // Opening offsets stay fixed when nudging, so selected openings do not
+  // affect which sinks and labels move as a group.
   const fixtureGroup =
-    mixed?.fixtures ??
-    (!selectedWalls.size &&
-    !state.selectedItems.size &&
-    selectedFixtures.size > 1
+    !selectedWalls.size &&
+    selectedFixtures.size > 0 &&
+    (selectedFixtures.size > 1 || selectedLabels.size > 0)
       ? plan.fixtures?.filter(({ id }) => selectedFixtures.has(id))
-      : undefined);
+      : undefined;
   if (fixtureGroup?.length) {
     const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
     const { moved, delta, conflict } = slideFixtureGroup(
@@ -637,7 +632,9 @@ function translatePlanSelection(
       : moveFixtureSelectionInPlan(
           plan,
           moved,
-          mixed ? translateLabelSelection(mixed.labelIds, delta) : undefined,
+          selectedLabels.size
+            ? translateLabelSelection(selectedLabels, delta)
+            : undefined,
         );
   }
   let conflict: FixtureConflict | undefined;

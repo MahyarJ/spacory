@@ -63,7 +63,12 @@ function pointerEvent(
   id: number,
   x: number,
   y: number,
-  init: { button?: number; buttons?: number; pointerType?: string } = {},
+  init: {
+    button?: number;
+    buttons?: number;
+    pointerType?: string;
+    shiftKey?: boolean;
+  } = {},
 ): Event {
   const event = new MouseEvent(type, {
     bubbles: true,
@@ -72,6 +77,7 @@ function pointerEvent(
     clientY: y,
     button: init.button ?? 0,
     buttons: init.buttons ?? (type === "pointerup" ? 0 : 1),
+    shiftKey: init.shiftKey,
   });
   Object.defineProperty(event, "pointerId", { value: id });
   Object.defineProperty(event, "pointerType", {
@@ -105,7 +111,7 @@ describe("FloorPlan touch gestures", () => {
     id: number,
     x: number,
     y: number,
-    init?: { button?: number; buttons?: number; pointerType?: string },
+    init?: Parameters<typeof pointerEvent>[4],
   ) => fireEvent(canvas, pointerEvent("pointerdown", id, x, y, init));
   const move = (
     id: number,
@@ -1111,7 +1117,12 @@ describe("FloorPlan touch gestures", () => {
     expect(state().selectedFixtures).toEqual(selection);
   });
 
-  it("nudges a selected pair on one wall as a single edit when both sinks fit", () => {
+  it.each([
+    { withOpening: false },
+    { withOpening: true },
+  ])("nudges a pair of sinks as a single edit (opening selected: $withOpening)", ({
+    withOpening,
+  }) => {
     const plan: Plan = {
       ...createInitialPlan(),
       walls: [wall(0, 160, 600, 160, "host")],
@@ -1138,18 +1149,27 @@ describe("FloorPlan touch gestures", () => {
     move(1, 340, 245);
     up(1, 340, 245);
     const selected = new Set(["sink-0", "sink-1"]);
+    const selectedItems = new Set(withOpening ? ["door"] : []);
+    if (withOpening) {
+      down(1, 350, 160, { pointerType: "mouse", shiftKey: true });
+      up(1, 350, 160, "mouse");
+    }
     expect(state().selectedFixtures).toEqual(selected);
+    expect(state().selectedItems).toEqual(selectedItems);
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
     expect(state().plan).toBe(plan);
     expect(state().selectedFixtures).toEqual(selected);
+    expect(state().selectedItems).toEqual(selectedItems);
     expect(loadPersistedHistory()?.past).toHaveLength(0);
 
     fireEvent.keyDown(window, { key: "ArrowLeft" });
     expect(
       state().plan.fixtures?.map(({ wallAttach }) => wallAttach.offset),
     ).toEqual([80, 240]);
+    expect(state().plan.items).toEqual(plan.items);
     expect(state().selectedFixtures).toEqual(selected);
+    expect(state().selectedItems).toEqual(selectedItems);
     expect(loadPersistedHistory()?.past).toHaveLength(1);
     act(() => state().undo());
     expect(state().plan.fixtures).toEqual(plan.fixtures);
