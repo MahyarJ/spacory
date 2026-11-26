@@ -31,8 +31,8 @@ connected room structures.
   wall face. Click or tap to place it, or touch and slide before releasing.
   Drag along the wall or to another face. Set **Width** along the wall and
   **Depth** out from it, or use the options bar to duplicate or remove the basin.
-  A red preview indicates a doorway or wall conflict. Fit, autosave, JSON, SVG,
-  and PNG include the basin.
+  Placement, dragging, and dimension edits preview in blue when valid and
+  red when blocked. Fit, autosave, JSON, SVG, and PNG include the basin.
 - 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and
   area in the plan’s units. With Select active, choose a room to add, edit, or
   clear its name. New names and edits can use up to 80 characters. Labels on

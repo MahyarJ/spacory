@@ -1016,7 +1016,9 @@ selection. At low zoom the pointer target expands in screen pixels while
 the drawn basin keeps its dimensions. Placement, drag, and dimensional edits
 reject positive-area overlap with the painted wall and junction polygons.
 Door openings are checked as spans on the host wall, across both faces. Edge
-contact is allowed. Rejected previews and edits leave plan history untouched.
+contact is allowed. Width and Depth show the same blue or red footprint as
+placement while the user types. A rejected edit restores the committed
+dimension and leaves plan history untouched.
 
 The wall anchor applies to this basin. A future countertop sink can use a
 countertop edge for orientation. Earlier draft sinks migrate to a nearby wall

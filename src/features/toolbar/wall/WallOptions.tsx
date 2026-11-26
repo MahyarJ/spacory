@@ -1,11 +1,11 @@
 import { fixtureConflictMessage, fixtureEditHelp } from "@app/fixtureMessage";
-import { MIN_FIXTURE_DIMENSION } from "@app/schema";
+import { type Fixture, MIN_FIXTURE_DIMENSION, type Plan } from "@app/schema";
 import {
   type SelectionAction,
   selectionActions,
   selectionCount,
 } from "@app/selection";
-import { useApp } from "@app/store";
+import { previewFixtureResize, useApp } from "@app/store";
 import type { FixtureConflict } from "@geometry/fixtures";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
@@ -16,7 +16,7 @@ import {
   SquareCenterlineDashedVertical,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { LengthField } from "./LengthField";
 import { ThicknessOptions } from "./ThicknessOptions";
 import styles from "./WallOptions.module.css";
@@ -35,7 +35,7 @@ export function WallOptions() {
   const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
   const updateFixture = useApp((s) => s.updateFixture);
   const duplicateFixture = useApp((s) => s.duplicateFixture);
-  const [fixtureError, setFixtureError] = useState<FixtureConflict>();
+  const [duplicateError, setDuplicateError] = useState<FixtureConflict>();
 
   const canEditMeasurement =
     tool === "select" &&
@@ -58,7 +58,9 @@ export function WallOptions() {
       ? plan.fixtures?.find((fixture) => selectedFixtures.has(fixture.id))
       : undefined;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Clear feedback when the selected fixture or its geometry changes.
-  useEffect(() => setFixtureError(undefined), [selectedFixture]);
+  useEffect(() => setDuplicateError(undefined), [selectedFixture]);
+  const duplicateMessage =
+    duplicateError && fixtureConflictMessage[duplicateError];
 
   const actions =
     tool === "select"
@@ -115,9 +117,15 @@ export function WallOptions() {
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
             precise
-            onCommit={(width) =>
-              setFixtureError(updateFixture(selectedFixture.id, { width }))
-            }
+            onCommit={(width) => updateFixture(selectedFixture.id, { width })}
+            renderDraft={(length) => (
+              <FixtureResizeDraft
+                plan={plan}
+                fixture={selectedFixture}
+                dimension="width"
+                length={length}
+              />
+            )}
           />
           <LengthField
             id="fixture-depth-input"
@@ -126,9 +134,15 @@ export function WallOptions() {
             minCm={MIN_FIXTURE_DIMENSION}
             system={system}
             precise
-            onCommit={(depth) =>
-              setFixtureError(updateFixture(selectedFixture.id, { depth }))
-            }
+            onCommit={(depth) => updateFixture(selectedFixture.id, { depth })}
+            renderDraft={(length) => (
+              <FixtureResizeDraft
+                plan={plan}
+                fixture={selectedFixture}
+                dimension="depth"
+                length={length}
+              />
+            )}
           />
         </div>
       )}
@@ -137,16 +151,52 @@ export function WallOptions() {
           actions={actions}
           onDuplicate={
             selectedFixture &&
-            (() => setFixtureError(duplicateFixture(selectedFixture.id)))
+            (() => setDuplicateError(duplicateFixture(selectedFixture.id)))
           }
+          duplicateMessage={duplicateMessage}
         />
       )}
-      {selectedFixture && fixtureError && (
-        <div className={styles.fixtureEditStatus} role="status">
-          {fixtureConflictMessage[fixtureError]} {fixtureEditHelp[fixtureError]}
-        </div>
+      {selectedFixture && (
+        <span className={styles.visuallyHidden} role="status">
+          {duplicateMessage}
+        </span>
       )}
     </div>
+  );
+}
+
+function FixtureResizeDraft({
+  plan,
+  fixture,
+  dimension,
+  length,
+}: {
+  plan: Plan;
+  fixture: Fixture;
+  dimension: "width" | "depth";
+  length: number | null;
+}) {
+  const setPreview = useApp((s) => s.setFixtureResizePreview);
+  const preview = useMemo(
+    () =>
+      length === null
+        ? null
+        : previewFixtureResize(plan, fixture, { [dimension]: length }),
+    [plan, fixture, dimension, length],
+  );
+  useLayoutEffect(() => {
+    if (!preview) return;
+    setPreview(preview);
+    return () => {
+      if (useApp.getState().fixtureResizePreview === preview) setPreview(null);
+    };
+  }, [preview, setPreview]);
+
+  const conflict = preview?.conflict;
+  return (
+    <span className={styles.visuallyHidden} role="status">
+      {conflict && fixtureEditHelp[conflict]}
+    </span>
   );
 }
 
@@ -157,9 +207,11 @@ export function WallOptions() {
 function SelectionActionButtons({
   actions,
   onDuplicate,
+  duplicateMessage,
 }: {
   actions: SelectionAction[];
   onDuplicate?: () => void;
+  duplicateMessage?: string;
 }) {
   const deleteSelected = useApp((s) => s.deleteSelected);
   const toggleHinge = useApp((s) => s.toggleSelectedDoorHingeEdge);
@@ -203,7 +255,7 @@ function SelectionActionButtons({
     },
     duplicate: {
       label: "Duplicate",
-      title: "Duplicate",
+      title: duplicateMessage ?? "Duplicate",
       icon: <Copy size={ICON_SIZE} />,
       onClick: onDuplicate,
     },

@@ -44,6 +44,7 @@ export function LengthField({
   precise = false,
   hideLabel = false,
   renderControls,
+  renderDraft,
 }: {
   id: string;
   label: string;
@@ -55,6 +56,7 @@ export function LengthField({
   precise?: boolean;
   hideLabel?: boolean;
   renderControls?: (draftCm: number | null) => ReactNode;
+  renderDraft?: (draftCm: number | null) => ReactNode;
 }) {
   const [draft, setDraft] = useState(() =>
     displayValues(lengthCm, system, precise, singleUnit),
@@ -96,6 +98,7 @@ export function LengthField({
   };
   const fieldRef = useCommitOnClickAway(commit);
   const imperial = system === "imperial" && !singleUnit;
+  const draftCm = active ? draftLength() : null;
 
   return (
     <form
@@ -129,7 +132,11 @@ export function LengthField({
           event.preventDefault();
           commit();
         }
-        if (event.key === "Escape" && active && renderControls) {
+        if (
+          event.key === "Escape" &&
+          active &&
+          (renderControls || renderDraft)
+        ) {
           event.preventDefault();
           event.stopPropagation();
           finishEdit();
@@ -201,7 +208,8 @@ export function LengthField({
           <span className={styles.unit}>in</span>
         </>
       )}
-      {active && renderControls?.(draftLength())}
+      {active && renderControls?.(draftCm)}
+      {active && renderDraft?.(draftCm)}
     </form>
   );
 }

@@ -189,8 +189,11 @@
     transform: translate(-50%, -50%);
   }
 }
-.fixtureEditStatus {
-  flex-basis: 100%;
-  color: var(--sp-sink-blocked);
-  font-size: var(--sp-control-font-size);
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }

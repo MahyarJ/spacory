@@ -88,6 +88,7 @@ export type Tool =
   | FixtureType;
 
 type FixtureEdit = { width?: number; depth?: number };
+type FixtureResizePreview = ReturnType<typeof previewFixtureResize>;
 
 type WallLengthEdit = {
   wallId: string;
@@ -109,6 +110,8 @@ interface AppState {
   addItem: (i: Item) => void;
   placeFixture: (mount: FixtureMount) => FixtureConflict | undefined;
   updateFixture: (id: string, edit: FixtureEdit) => FixtureConflict | undefined;
+  fixtureResizePreview: FixtureResizePreview;
+  setFixtureResizePreview: (preview: FixtureResizePreview) => void;
   duplicateFixture: (id: string) => FixtureConflict | undefined;
   moveFixture: (id: string, mount: FixtureMount) => FixtureConflict | undefined;
   setView: (fn: (v: ViewState) => ViewState) => void;
@@ -460,6 +463,41 @@ function fixtureConflict(plan: Plan, fixture: FixtureFootprint) {
   );
 }
 
+export function previewFixtureResize(
+  plan: Plan,
+  fixture: Fixture,
+  edit: FixtureEdit,
+): { fixture: Fixture; conflict: FixtureConflict | null } | null {
+  const { offset, length, wallId } = fixture.wallAttach;
+  const width = edit.width ?? length;
+  const depth = edit.depth ?? fixture.depth;
+  if (
+    !Number.isFinite(width) ||
+    width < MIN_FIXTURE_DIMENSION ||
+    !Number.isFinite(depth) ||
+    depth < MIN_FIXTURE_DIMENSION ||
+    (width === length && depth === fixture.depth)
+  )
+    return null;
+
+  const wall = plan.walls.find((candidate) => candidate.id === wallId);
+  if (!wall) return null;
+
+  const center = offset + length / 2;
+  const tooWide = width > getWallLength(wall);
+  const wallAttach =
+    width === length
+      ? fixture.wallAttach
+      : tooWide
+        ? { wallId, offset: center - width / 2, length: width }
+        : fitFixtureSpan(wall, width, center);
+  const candidate = { ...fixture, wallAttach, depth };
+  return {
+    fixture: candidate,
+    conflict: tooWide ? "width" : fixtureConflict(plan, candidate),
+  };
+}
+
 function previewMountedFixtures(walls: Wall[]) {
   const { fixtures } = history.present;
   return fixtures ? { fixtures: reconcileItemsToWalls(walls, fixtures) } : {};
@@ -679,37 +717,21 @@ export const useApp = create<AppState>((set, get) => ({
       tool: "select",
     });
   },
+  fixtureResizePreview: null,
+  setFixtureResizePreview: (fixtureResizePreview) =>
+    set({ fixtureResizePreview }),
   updateFixture: (id, edit) => {
     const state = get();
-    const fixtures = history.present.fixtures;
+    const plan = history.present;
+    const { fixtures } = plan;
     const fixture = fixtures?.find((item) => item.id === id);
     if (state.liveDragItems || !fixtures || !fixture) return;
-    const { offset, length, wallId } = fixture.wallAttach;
-    const width = edit.width ?? length;
-    const depth = edit.depth ?? fixture.depth;
-    if (
-      !Number.isFinite(width) ||
-      width < MIN_FIXTURE_DIMENSION ||
-      !Number.isFinite(depth) ||
-      depth < MIN_FIXTURE_DIMENSION
-    )
-      return;
-    const wall = history.present.walls.find(
-      (candidate) => candidate.id === wallId,
-    );
-    if (!wall) return;
-    if (width > getWallLength(wall)) return "width";
-    const wallAttach =
-      width === length
-        ? fixture.wallAttach
-        : fitFixtureSpan(wall, width, offset + length / 2);
-    if (wallAttach.length === length && depth === fixture.depth) return;
-    const candidate = { ...fixture, wallAttach, depth };
-    const conflict = fixtureConflict(history.present, candidate);
-    if (conflict) return conflict;
+    const preview = previewFixtureResize(plan, fixture, edit);
+    if (!preview) return;
+    if (preview.conflict) return preview.conflict;
     set(
       commitFixtures(
-        fixtures.map((item) => (item === fixture ? candidate : item)),
+        fixtures.map((item) => (item === fixture ? preview.fixture : item)),
         state,
       ),
     );
