@@ -1,6 +1,19 @@
 import type { Plan, Point } from "@app/schema";
 
-export type LabelTranslation = { ids: ReadonlySet<string>; delta: Point };
+export type LabelMove = {
+  ids: ReadonlySet<string>;
+  movePoint: (point: Point) => Point;
+};
+
+export function translateLabelSelection(
+  ids: ReadonlySet<string>,
+  delta: Point,
+): LabelMove {
+  return {
+    ids,
+    movePoint: ({ x, y }) => ({ x: x + delta.x, y: y + delta.y }),
+  };
+}
 
 export function getFixtureLabelSelection({
   plan,

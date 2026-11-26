@@ -140,7 +140,8 @@ describe("wall-backed basin geometry", () => {
       side: -1,
     } as const;
     const walls = new Map([source, target].map((host) => [host.id, host]));
-    expect(moveFixtureGroup([sink, neighbor], sink, mount, walls)).toEqual([
+    const group = moveFixtureGroup([sink, neighbor], sink, mount, walls);
+    expect(group?.moved).toEqual([
       { ...sink, ...mount },
       {
         ...neighbor,
@@ -148,6 +149,7 @@ describe("wall-backed basin geometry", () => {
         wallAttach: { wallId: target.id, offset: 90, length: 60 },
       },
     ]);
+    expect(group?.movePoint({ x: 70, y: 50 })).toEqual({ x: 280, y: 250 });
   });
 
   it("projects movement along parallel hosts and blocks incompatible wall directions", () => {

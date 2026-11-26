@@ -1,5 +1,5 @@
 import type { PlanLabel } from "@app/schema";
-import type { LabelTranslation } from "@app/selection";
+import type { LabelMove } from "@app/selection";
 import {
   PLAN_LABEL_FONT_FAMILY,
   PLAN_LABEL_FONT_SIZE,
@@ -43,7 +43,7 @@ export function PlanLabelsLayer({
   frames: { label: PlanLabel; rect: ReturnType<typeof planLabelRect> }[];
   selectedIds: ReadonlySet<string>;
   editingId?: string;
-  preview?: LabelTranslation & { blocked: boolean };
+  preview?: LabelMove & { blocked: boolean };
 }) {
   return (
     <g data-layer="plan-labels" pointerEvents="none">
@@ -51,8 +51,7 @@ export function PlanLabelsLayer({
         if (label.id === editingId) return null;
         const selected = selectedIds.has(label.id);
         const drag = preview?.ids.has(label.id) ? preview : undefined;
-        const x = label.position.x + (drag?.delta.x ?? 0);
-        const y = label.position.y + (drag?.delta.y ?? 0);
+        const { x, y } = drag?.movePoint(label.position) ?? label.position;
         return (
           <g
             key={label.id}

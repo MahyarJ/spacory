@@ -7,7 +7,8 @@ import {
 } from "@app/schema";
 import {
   getFixtureLabelSelection,
-  type LabelTranslation,
+  type LabelMove,
+  translateLabelSelection,
 } from "@app/selection";
 import { useApp } from "@app/store";
 import {
@@ -33,6 +34,7 @@ import {
   hitFixture,
   MIN_SINK_TARGET_PX,
   moveFixtureGroup,
+  nearestFixtureCenter,
   pickFixtureMount,
   SINK_DEPTH,
   SINK_WIDTH,
@@ -104,13 +106,15 @@ type FixtureDrag =
   | {
       kind: "mixed";
       selection: NonNullable<ReturnType<typeof getFixtureLabelSelection>>;
+      grabbed: Fixture;
+      mountGrab?: Point;
       labelOnTap?: string;
     };
 
 type FixtureProposal = {
   placement: FixtureMount | null;
   moved: Fixture[];
-  labels?: LabelTranslation;
+  labels?: LabelMove;
   conflict?: FixtureMoveConflict;
 };
 
@@ -547,36 +551,51 @@ export function FloorPlan() {
       return null;
     const drag = press.drag;
     const group = drag.kind === "mixed" ? drag.selection.fixtures : drag.group;
-    if (drag.kind === "mixed" || fixturesHaveDifferentWalls(group)) {
-      const travel = { x: world.x - press.start.x, y: world.y - press.start.y };
-      const { moved, delta, conflict } = slideFixtureGroup(
-        group,
-        travel,
-        wallsById,
+    const travel = { x: world.x - press.start.x, y: world.y - press.start.y };
+    const labelGrab = drag.kind === "mixed" ? drag.mountGrab : undefined;
+    const targetPoint = labelGrab
+      ? { x: labelGrab.x + travel.x, y: labelGrab.y + travel.y }
+      : world;
+    const mount = fixturesHaveDifferentWalls(group)
+      ? null
+      : dragFixtureMount(
+          targetPoint,
+          labelGrab ?? press.start,
+          drag.grabbed,
+          plan.walls,
+          minTargetSize,
+        );
+    const changesFace =
+      mount &&
+      (mount.wallAttach.wallId !== drag.grabbed.wallAttach.wallId ||
+        mount.side !== drag.grabbed.side);
+    if (mount && (drag.kind === "sinks" || changesFace)) {
+      const move = moveFixtureGroup(group, drag.grabbed, mount, wallsById);
+      return (
+        move && {
+          placement: null,
+          moved: move.moved,
+          labels:
+            drag.kind === "mixed"
+              ? { ids: drag.selection.labelIds, movePoint: move.movePoint }
+              : undefined,
+        }
       );
-      return {
-        placement: null,
-        moved,
-        labels:
-          drag.kind === "mixed"
-            ? { ids: drag.selection.labelIds, delta }
-            : undefined,
-        conflict,
-      };
     }
-    const mount = dragFixtureMount(
-      world,
-      press.start,
-      drag.grabbed,
-      plan.walls,
-      minTargetSize,
+    const { moved, delta, conflict } = slideFixtureGroup(
+      group,
+      travel,
+      wallsById,
     );
-    return (
-      mount && {
-        placement: null,
-        moved: moveFixtureGroup(drag.group, drag.grabbed, mount, wallsById),
-      }
-    );
+    return {
+      placement: null,
+      moved,
+      labels:
+        drag.kind === "mixed"
+          ? translateLabelSelection(drag.selection.labelIds, delta)
+          : undefined,
+      conflict,
+    };
   };
 
   // Build and commit an opening item from a resolved offset/length. Shared by
@@ -683,13 +702,17 @@ export function FloorPlan() {
         if (!alreadySelected) selectLabels([label.id], additive);
         const state = useApp.getState();
         const mixed = getFixtureLabelSelection(state);
-        if (mixed) {
+        const anchor =
+          mixed && nearestFixtureCenter(mixed.fixtures, world, wallsById);
+        if (mixed && anchor) {
           fixturePress.current = {
             pointerId: e.pointerId,
             start: world,
             drag: {
               kind: "mixed",
               selection: mixed,
+              grabbed: anchor.fixture,
+              mountGrab: anchor.center,
               labelOnTap: additive ? undefined : label.id,
             },
           };
@@ -736,7 +759,7 @@ export function FloorPlan() {
           pointerId: e.pointerId,
           start: world,
           drag: mixed
-            ? { kind: "mixed", selection: mixed }
+            ? { kind: "mixed", selection: mixed, grabbed: fixture }
             : {
                 kind: "sinks",
                 grabbed: fixture,

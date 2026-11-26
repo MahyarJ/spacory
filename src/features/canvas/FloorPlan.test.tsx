@@ -1307,6 +1307,83 @@ describe("FloorPlan touch gestures", () => {
     expect(state().plan.fixtures).toEqual(plan.fixtures);
   });
 
+  it.each([
+    { grab: "label", pointerType: "mouse", x: 205, y: 250 },
+    { grab: "sink", pointerType: "touch", x: 150, y: 155 },
+  ])("reattaches sinks and their label together when dragging the $grab", ({
+    pointerType,
+    x,
+    y,
+  }) => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [
+        wall(0, 120, 500, 120, "source"),
+        wall(650, 40, 650, 430, "target"),
+      ],
+      labels: [
+        { id: "kitchen", text: "Kitchen", position: { x: 200, y: 255 } },
+      ],
+      fixtures: [120, 300].map((offset, index) => ({
+        id: `sink-${index}`,
+        type: "sink",
+        side: 1,
+        depth: 60,
+        wallAttach: { wallId: "source", offset, length: 60 },
+      })),
+    };
+    setup({ tool: "select", plan });
+    const state = useApp.getState;
+    const input = { pointerType };
+    down(1, 60, 148, input);
+    move(1, 400, 280, input);
+    up(1, 400, 280, pointerType);
+    expect(state().selectedFixtures).toEqual(new Set(["sink-0", "sink-1"]));
+    expect(state().selectedLabels).toEqual(new Set(["kitchen"]));
+
+    down(1, x, y, input);
+    move(1, x + 475, y + 130, input);
+    expect(
+      canvas.querySelectorAll('[data-fixture-preview="blocked"]'),
+    ).toHaveLength(2);
+    expect(
+      canvas
+        .querySelector('[data-label-preview="blocked"]')
+        ?.getAttribute("transform"),
+    ).toBe("translate(515 335)");
+    up(1, x + 475, y + 130, pointerType);
+    expect(state().plan).toBe(plan);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+
+    down(1, x, y, input);
+    move(1, x + 475, y - 30, input);
+    expect(
+      Array.from(
+        canvas.querySelectorAll('[data-fixture-preview="valid"]'),
+        (node) => node.getAttribute("transform"),
+      ),
+    ).toEqual([
+      "translate(645 125) rotate(90)",
+      "translate(645 305) rotate(90)",
+    ]);
+    expect(
+      canvas
+        .querySelector('[data-label-preview="valid"]')
+        ?.getAttribute("transform"),
+    ).toBe("translate(515 175)");
+    expect(state().plan).toBe(plan);
+    up(1, x + 475, y - 30, pointerType);
+    expect(state().plan.fixtures?.map(({ wallAttach }) => wallAttach)).toEqual([
+      { wallId: "target", offset: 55, length: 60 },
+      { wallId: "target", offset: 235, length: 60 },
+    ]);
+    expect(state().plan.labels?.[0].position).toEqual({ x: 515, y: 175 });
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+    act(() => state().undo());
+    expect(state().plan.fixtures).toEqual(plan.fixtures);
+    expect(state().plan.labels).toEqual(plan.labels);
+  });
+
   it("keeps a typed width when the canvas press also starts a sink drag", () => {
     setup({
       tool: "sink",

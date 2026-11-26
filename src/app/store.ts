@@ -66,8 +66,9 @@ import {
 import {
   getFixtureLabelSelection,
   isWallOnlySelection,
-  type LabelTranslation,
+  type LabelMove,
   selectionCount,
+  translateLabelSelection,
 } from "./selection";
 import {
   applyThemeAttr,
@@ -123,7 +124,7 @@ interface AppState {
   duplicateFixture: (id: string) => FixtureConflict | undefined;
   moveFixtureSelection: (
     moves: Array<FixtureMount & { id: string }>,
-    labels?: LabelTranslation,
+    labels?: LabelMove,
   ) => FixtureConflict | undefined;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setCanvasSize: (size: { width: number; height: number }) => void;
@@ -479,7 +480,7 @@ function fixtureConflict(
 function moveFixtureSelectionInPlan(
   plan: Plan,
   moves: Array<FixtureMount & { id: string }>,
-  labels?: LabelTranslation,
+  labels?: LabelMove,
 ): { next: Plan; conflict?: FixtureConflict } {
   if (!plan.fixtures || moves.length === 0) return { next: plan };
   const byId = new Map(moves.map((move) => [move.id, move]));
@@ -505,29 +506,20 @@ function moveFixtureSelectionInPlan(
       fixtures.push(candidate);
     }
   }
-  const translatedLabels =
-    labels && plan.labels && (labels.delta.x !== 0 || labels.delta.y !== 0)
-      ? plan.labels.map((label) =>
-          labels.ids.has(label.id)
-            ? {
-                ...label,
-                position: {
-                  x: label.position.x + labels.delta.x,
-                  y: label.position.y + labels.delta.y,
-                },
-              }
-            : label,
-        )
-      : plan.labels;
+  const movedLabels = labels
+    ? plan.labels?.map((label) => {
+        if (!labels.ids.has(label.id)) return label;
+        const position = labels.movePoint(label.position);
+        if (position.x === label.position.x && position.y === label.position.y)
+          return label;
+        changed = true;
+        return { ...label, position };
+      })
+    : plan.labels;
   return {
-    next:
-      changed || translatedLabels !== plan.labels
-        ? {
-            ...plan,
-            fixtures,
-            ...(translatedLabels ? { labels: translatedLabels } : {}),
-          }
-        : plan,
+    next: changed
+      ? { ...plan, fixtures, ...(movedLabels ? { labels: movedLabels } : {}) }
+      : plan,
   };
 }
 
@@ -646,7 +638,7 @@ function translatePlanSelection(
       : moveFixtureSelectionInPlan(
           plan,
           moved,
-          mixed ? { ids: mixed.labelIds, delta } : undefined,
+          mixed ? translateLabelSelection(mixed.labelIds, delta) : undefined,
         );
   }
   let conflict: FixtureConflict | undefined;

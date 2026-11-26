@@ -33,7 +33,8 @@ connected room structures.
   **Width** along the wall and **Depth** out from it, or use the options bar to
   duplicate or remove the basin.
   Sinks on separate parallel walls keep their spacing when dragged together.
-  Selected sinks and plan labels slide together along the sinks' wall faces.
+  Selected sinks and plan labels slide together and can move from a shared
+  wall onto another face.
   Placement, dragging, and dimension edits preview in blue when valid and
   red when blocked. Fit, autosave, JSON, SVG, and PNG include the basin.
 - 🏠 **Rooms** — enclosed wall layouts automatically show a subtle room fill and

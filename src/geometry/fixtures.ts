@@ -132,6 +132,25 @@ export function fixturesHaveDifferentWalls(fixtures: readonly Fixture[]) {
   return fixtures.some(({ wallAttach }) => wallAttach.wallId !== hostId);
 }
 
+export function nearestFixtureCenter(
+  fixtures: readonly Fixture[],
+  point: Point,
+  wallsById: ReadonlyMap<string, Wall>,
+) {
+  let nearest: { fixture: Fixture; center: Point } | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const fixture of fixtures) {
+    const wall = wallsById.get(fixture.wallAttach.wallId);
+    if (!wall) continue;
+    const { center } = getFixtureGeometry(fixture, wall);
+    const distance = Math.hypot(center.x - point.x, center.y - point.y);
+    if (distance >= bestDistance) continue;
+    nearest = { fixture, center };
+    bestDistance = distance;
+  }
+  return nearest;
+}
+
 /** Find a single translation along the group's current wall faces. */
 export function slideFixtureGroup(
   fixtures: Fixture[],
@@ -180,20 +199,22 @@ export function moveFixtureGroup(
   grabbed: Fixture,
   mount: FixtureMount,
   wallsById: ReadonlyMap<string, Wall>,
-): Fixture[] {
+): { moved: Fixture[]; movePoint: (point: Point) => Point } | null {
   const source = wallsById.get(grabbed.wallAttach.wallId);
   const target = wallsById.get(mount.wallAttach.wallId);
-  if (!source || !target) return [];
-  const moved = { ...grabbed, ...mount };
-  if (fixtures.length === 1) return [moved];
+  if (!source || !target) return null;
+  const mounted = { ...grabbed, ...mount };
 
   const centerOffset = ({ offset, length }: Fixture["wallAttach"]) =>
     offset + length / 2;
-  const before = getWallDirection(source);
-  const after = getWallDirection(target);
-  const reversed = before.x * after.x + before.y * after.y < 0;
-  return fixtures.map((fixture) => {
-    if (fixture.id === grabbed.id) return moved;
+  const before = getFixtureGeometry(grabbed, source);
+  const after = getFixtureGeometry(mounted, target);
+  const direction =
+    before.along.x * after.along.x + before.along.y * after.along.y < 0
+      ? -1
+      : 1;
+  const moved = fixtures.map((fixture) => {
+    if (fixture.id === grabbed.id) return mounted;
     const { wallAttach, side } = fixture;
     const { length } = wallAttach;
     const spacing = centerOffset(wallAttach) - centerOffset(grabbed.wallAttach);
@@ -204,15 +225,25 @@ export function moveFixtureGroup(
         ...wallAttach,
         wallId: target.id,
         offset: dragOffset(
-          centerOffset(mount.wallAttach) +
-            (reversed ? -spacing : spacing) -
-            length / 2,
+          centerOffset(mount.wallAttach) + direction * spacing - length / 2,
           length,
           target,
         ),
       },
     };
   });
+  // Labels use the same wall-relative axes and back-edge anchor as the sinks.
+  const movePoint = (point: Point) => {
+    const x = point.x - before.back.x;
+    const y = point.y - before.back.y;
+    const along = direction * (x * before.along.x + y * before.along.y);
+    const outward = x * before.outward.x + y * before.outward.y;
+    return {
+      x: after.back.x + along * after.along.x + outward * after.outward.x,
+      y: after.back.y + along * after.along.y + outward * after.outward.y,
+    };
+  };
+  return { moved, movePoint };
 }
 
 export function getFixtureGeometry(fixture: FixtureFootprint, wall: Wall) {
