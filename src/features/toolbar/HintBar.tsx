@@ -36,7 +36,7 @@ export function HintBar() {
         the label.
       </span>
     );
-  } else if (tool === "select" && !fixturesOnly) {
+  } else if (tool === "select") {
     if (count > 0) {
       text = (
         <span>
@@ -44,6 +44,11 @@ export function HintBar() {
             <>
               Drag to move. {count === 1 && "Click or tap again to edit. "}
               Choose <strong>Remove</strong> or press{" "}
+            </>
+          )}
+          {fixturesOnly && (
+            <>
+              Drag or use <kbd>Arrows</kbd> to move{" · "}
             </>
           )}
           {wallsOnly && (
@@ -58,7 +63,7 @@ export function HintBar() {
             </>
           )}
           <kbd>Delete</kbd>
-          {labelsOnly ? "." : " remove selection"}
+          {labelsOnly ? "." : fixturesOnly ? " to remove" : " remove selection"}
         </span>
       );
     } else {
@@ -69,6 +74,8 @@ export function HintBar() {
         </span>
       );
     }
+  } else if (tool === "sink") {
+    text = <span>Click or tap near a wall face to place a sink.</span>;
   } else if (tool === "label") {
     text = (
       <span>

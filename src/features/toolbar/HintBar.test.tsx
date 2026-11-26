@@ -50,7 +50,7 @@ it("shows thickness for wall-only selections and Delete for label selections", (
   expect(screen.getByText("Delete", { selector: "kbd" })).toBeTruthy();
 });
 
-it("stays empty for sink placement and a sink-only selection", () => {
+it("keeps the toolbar row in place for sink placement and selection", () => {
   const state = useApp.getState;
   state().loadPlan({
     ...createInitialPlan(),
@@ -72,13 +72,20 @@ it("stays empty for sink placement and a sink-only selection", () => {
       },
     ],
   });
-  state().setTool("sink");
+  state().setTool("wall");
   const { container } = render(<HintBar />);
-  expect(container.textContent).toBe("");
+  const row = container.firstElementChild;
+  expect(row).not.toBeNull();
+
+  act(() => state().setTool("sink"));
+  expect(container.firstElementChild).toBe(row);
+  expect(row?.textContent).toContain("near a wall face to place a sink");
 
   act(() => {
     state().setTool("select");
     state().selectFixture("sink");
   });
-  expect(container.textContent).toBe("");
+  expect(container.firstElementChild).toBe(row);
+  expect(screen.getByText("Arrows", { selector: "kbd" })).toBeTruthy();
+  expect(screen.getByText("Delete", { selector: "kbd" })).toBeTruthy();
 });
