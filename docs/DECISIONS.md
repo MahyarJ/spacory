@@ -1026,6 +1026,9 @@ Walls at different angles keep the selection in place. When basins share a
 wall, selected labels keep their position relative to the basins as the
 group slides or moves onto another face. A conflicting footprint turns every
 preview outline red and blocks the whole drop.
+When the pointer leaves wall range, the group slides along its current faces
+within the travel available to all selected basins. The label follows that
+same constrained movement.
 
 The wall anchor applies to this basin. A future countertop sink can use a
 countertop edge for orientation. Earlier draft sinks migrate to a nearby wall

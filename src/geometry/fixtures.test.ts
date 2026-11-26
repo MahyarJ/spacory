@@ -119,6 +119,7 @@ describe("wall-backed basin geometry", () => {
       wallAttach: sink.wallAttach,
       side: -1,
     });
+    expect(dragFixtureMount({ x: 300, y: 250 }, grab, sink, [wall])).toBeNull();
   });
 
   it("preserves spacing when moving sinks from the same wall to a reversed destination", () => {
@@ -199,5 +200,39 @@ describe("wall-backed basin geometry", () => {
       delta: { x: 0, y: 0 },
       conflict: "alignment",
     });
+  });
+
+  it("limits off-wall travel to the common span, including a reversed host", () => {
+    const forward = { ...wall, b: { x: 180, y: 0 } };
+    const reverse: Wall = {
+      ...wall,
+      id: "reverse",
+      a: { x: 180, y: 180 },
+      b: { x: 0, y: 180 },
+    };
+    const reversed = {
+      ...sink,
+      id: "reverse-sink",
+      wallAttach: { ...sink.wallAttach, wallId: reverse.id, offset: 35 },
+    };
+    const hosts = new Map([
+      [forward.id, forward],
+      [reverse.id, reverse],
+    ]);
+    const selection = [sink, reversed];
+    const right = slideFixtureGroup(selection, { x: 500, y: 200 }, hosts, {
+      clampToWallSpans: true,
+    });
+    expect(right.delta).toEqual({ x: 35, y: 0 });
+    expect(right.moved.map(({ wallAttach }) => wallAttach.offset)).toEqual([
+      55, 0,
+    ]);
+    const left = slideFixtureGroup(selection, { x: -500, y: 200 }, hosts, {
+      clampToWallSpans: true,
+    });
+    expect(left.delta.x).toBe(-20);
+    expect(left.moved.map(({ wallAttach }) => wallAttach.offset)).toEqual([
+      0, 55,
+    ]);
   });
 });

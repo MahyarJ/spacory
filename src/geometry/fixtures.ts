@@ -79,7 +79,7 @@ export function pickFixtureMount(
   return best;
 }
 
-/** Slide against the grab-time attachment unless the pointer reaches another face. */
+/** Resolve the nearby wall face a drag is targeting. */
 export function dragFixtureMount(
   point: Point,
   grab: Point,
@@ -88,22 +88,22 @@ export function dragFixtureMount(
   minTargetSize = 0,
 ): FixtureMount | null {
   const { wallId, offset, length } = fixture.wallAttach;
-  const mount = pickFixtureMount(
+  const target = pickFixtureMount(
     point,
     walls,
     length,
     fixture.depth,
     minTargetSize,
   );
-  if (mount && mount.wallAttach.wallId !== wallId) return mount;
+  if (!target || target.wallAttach.wallId !== wallId) return target;
   const wall = walls.find((candidate) => candidate.id === wallId);
   if (!wall) return null;
 
   const { x, y } = getWallDirection(wall);
   const travel = (point.x - grab.x) * x + (point.y - grab.y) * y;
   const side =
-    mount && Math.abs(sideOfWall(point, wall)) >= wall.thickness / 2
-      ? mount.side
+    Math.abs(sideOfWall(point, wall)) >= wall.thickness / 2
+      ? target.side
       : fixture.side;
   return {
     wallAttach: fitFixtureSpan(wall, length, offset + length / 2 + travel),
@@ -156,6 +156,7 @@ export function slideFixtureGroup(
   fixtures: Fixture[],
   travel: Point,
   wallsById: ReadonlyMap<string, Wall>,
+  { clampToWallSpans = false }: { clampToWallSpans?: boolean } = {},
 ): { moved: Fixture[]; delta: Point; conflict?: FixtureMoveConflict } {
   const direction = fixtures.map((fixture) => {
     const wall = wallsById.get(fixture.wallAttach.wallId);
@@ -172,7 +173,22 @@ export function slideFixtureGroup(
   ) {
     return { moved: fixtures, delta: { x: 0, y: 0 }, conflict: "alignment" };
   }
-  const distance = travel.x * along.x + travel.y * along.y;
+  let distance = travel.x * along.x + travel.y * along.y;
+  if (clampToWallSpans) {
+    let min = Number.NEGATIVE_INFINITY;
+    let max = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < fixtures.length; index++) {
+      const { wallId, offset, length } = fixtures[index].wallAttach;
+      const roomBefore = offset;
+      const roomAfter = getWallLength(wallsById.get(wallId)!) - offset - length;
+      const axis = direction[index]!;
+      const reversed = axis.x * along.x + axis.y * along.y < 0;
+      // Intersect the travel allowed by each host, preserving group spacing.
+      min = Math.max(min, -(reversed ? roomAfter : roomBefore));
+      max = Math.min(max, reversed ? roomBefore : roomAfter);
+    }
+    distance = min <= max ? Math.max(min, Math.min(distance, max)) : 0;
+  }
   const delta = { x: distance * along.x, y: distance * along.y };
   const moved = fixtures.map((fixture) => {
     const { wallId, offset, length } = fixture.wallAttach;

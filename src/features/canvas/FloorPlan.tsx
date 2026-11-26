@@ -556,15 +556,20 @@ export function FloorPlan() {
     const targetPoint = labelGrab
       ? { x: labelGrab.x + travel.x, y: labelGrab.y + travel.y }
       : world;
-    const mount = fixturesHaveDifferentWalls(group)
-      ? null
-      : dragFixtureMount(
-          targetPoint,
-          labelGrab ?? press.start,
-          drag.grabbed,
-          plan.walls,
-          minTargetSize,
-        );
+    const differentWalls = fixturesHaveDifferentWalls(group);
+    const target = dragFixtureMount(
+      targetPoint,
+      labelGrab ?? press.start,
+      drag.grabbed,
+      plan.walls,
+      minTargetSize,
+    );
+    const targetWallId = target?.wallAttach.wallId;
+    const hasWallTarget =
+      targetWallId !== undefined &&
+      (!differentWalls ||
+        group.some(({ wallAttach }) => wallAttach.wallId === targetWallId));
+    const mount = differentWalls ? null : target;
     const changesFace =
       mount &&
       (mount.wallAttach.wallId !== drag.grabbed.wallAttach.wallId ||
@@ -586,6 +591,7 @@ export function FloorPlan() {
       group,
       travel,
       wallsById,
+      { clampToWallSpans: !hasWallTarget },
     );
     return {
       placement: null,

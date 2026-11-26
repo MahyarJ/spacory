@@ -1261,7 +1261,7 @@ describe("FloorPlan touch gestures", () => {
     expect(loadPersistedHistory()?.past).toHaveLength(0);
 
     down(1, x, y, input);
-    move(1, x + 150, y + 55, input);
+    move(1, x + 150, y + 10, input);
     expect(previewSinks("blocked")).toEqual([
       "translate(300 125) rotate(0)",
       "translate(500 125) rotate(0)",
@@ -1274,7 +1274,7 @@ describe("FloorPlan touch gestures", () => {
     expect(
       screen.queryByText("The sink extends beyond the wall face."),
     ).toBeNull();
-    up(1, x + 150, y + 55, pointerType);
+    up(1, x + 150, y + 10, pointerType);
     expect(state().plan).toBe(plan);
     expect(loadPersistedHistory()?.past).toHaveLength(0);
     expect(canvas.querySelector("[data-label-preview]")).toBeNull();
@@ -1296,11 +1296,23 @@ describe("FloorPlan touch gestures", () => {
         ?.getAttribute("transform"),
     ).toBe("translate(265 255)");
     expect(state().plan).toBe(plan);
-    up(1, x + 65, y + 55, pointerType);
-    expect(state().plan.labels?.[0].position).toEqual({ x: 265, y: 255 });
+    move(1, x + 600, y + 240, input);
+    expect(previewSinks("valid")).toEqual([
+      "translate(250 125) rotate(0)",
+      "translate(450 125) rotate(0)",
+    ]);
+    expect(previewSinks("blocked")).toEqual([]);
+    expect(
+      canvas
+        .querySelector('[data-label-preview="valid"]')
+        ?.getAttribute("transform"),
+    ).toBe("translate(300 255)");
+    expect(state().plan).toBe(plan);
+    up(1, x + 600, y + 240, pointerType);
+    expect(state().plan.labels?.[0].position).toEqual({ x: 300, y: 255 });
     expect(
       state().plan.fixtures?.map(({ wallAttach }) => wallAttach.offset),
-    ).toEqual([185, 385]);
+    ).toEqual([220, 420]);
     expect(loadPersistedHistory()?.past).toHaveLength(1);
     act(() => state().undo());
     expect(state().plan.labels).toEqual(plan.labels);
