@@ -8,6 +8,7 @@ import {
   hitFixture,
   moveFixtureGroup,
   pickFixtureMount,
+  slideFixtureGroup,
 } from "./fixtures";
 import { computeWallGeometry, paintedWallPolygons } from "./junction";
 
@@ -163,5 +164,54 @@ describe("wall-backed basin geometry", () => {
       },
       { ...separate, wallAttach: { ...separate.wallAttach, offset: 240 } },
     ]);
+  });
+
+  it("projects mixed movement along parallel hosts and blocks incompatible wall directions", () => {
+    const parallel: Wall = {
+      ...wall,
+      id: "parallel",
+      a: { x: 0, y: 200 },
+      b: { x: -100, y: 100 },
+    };
+    const other = {
+      ...sink,
+      id: "other",
+      wallAttach: { ...sink.wallAttach, wallId: parallel.id },
+    };
+    const selection = [sink, other];
+    const travel = { x: 20, y: 0 };
+    const translated = slideFixtureGroup(
+      selection,
+      travel,
+      new Map([
+        [wall.id, wall],
+        [parallel.id, parallel],
+      ]),
+    );
+    expect(translated.conflict).toBeUndefined();
+    expect(translated.delta.x).toBeCloseTo(10);
+    expect(translated.delta.y).toBeCloseTo(10);
+    expect(translated.moved[0].wallAttach.offset).toBeCloseTo(
+      20 + 10 * Math.sqrt(2),
+    );
+    expect(translated.moved[1].wallAttach.offset).toBeCloseTo(
+      20 - 10 * Math.sqrt(2),
+    );
+
+    const perpendicular = { ...parallel, b: { x: 100, y: 100 } };
+    expect(
+      slideFixtureGroup(
+        selection,
+        travel,
+        new Map([
+          [wall.id, wall],
+          [parallel.id, perpendicular],
+        ]),
+      ),
+    ).toEqual({
+      moved: selection,
+      delta: { x: 0, y: 0 },
+      conflict: "alignment",
+    });
   });
 });

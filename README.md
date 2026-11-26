@@ -32,6 +32,7 @@ connected room structures.
   Drag a basin or a selected group along the wall or to another face. Set
   **Width** along the wall and **Depth** out from it, or use the options bar to
   duplicate or remove the basin.
+  Selected sinks and plan labels slide together along the sinks' wall faces.
   Placement, dragging, and dimension edits preview in blue when valid and
   red when blocked, with a short explanation. Fit, autosave, JSON, SVG, and PNG
   include the basin.

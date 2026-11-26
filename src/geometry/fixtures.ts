@@ -18,6 +18,7 @@ const CONTACT_EPSILON = 1e-7;
 export type FixtureMount = Pick<Fixture, "wallAttach" | "side">;
 export type FixtureFootprint = FixtureMount & Pick<Fixture, "depth">;
 export type FixtureConflict = "door" | "wall" | "width";
+export type FixtureMoveConflict = FixtureConflict | "alignment";
 
 export function fitFixtureSpan(
   wall: Wall,
@@ -124,6 +125,48 @@ function dragOffset(offset: number, length: number, wall: Wall): number {
   if (Math.abs(offset) <= CONTACT_EPSILON) return 0;
   if (last >= 0 && Math.abs(offset - last) <= CONTACT_EPSILON) return last;
   return offset;
+}
+
+/** Find a single translation for a group containing labels and attached sinks. */
+export function slideFixtureGroup(
+  fixtures: Fixture[],
+  travel: Point,
+  wallsById: ReadonlyMap<string, Wall>,
+): { moved: Fixture[]; delta: Point; conflict?: FixtureMoveConflict } {
+  const direction = fixtures.map((fixture) => {
+    const wall = wallsById.get(fixture.wallAttach.wallId);
+    return wall && getWallDirection(wall);
+  });
+  const along = direction[0];
+  if (
+    !along ||
+    direction.some(
+      (axis) =>
+        !axis ||
+        Math.abs(axis.x * along.y - axis.y * along.x) > CONTACT_EPSILON,
+    )
+  ) {
+    return { moved: fixtures, delta: { x: 0, y: 0 }, conflict: "alignment" };
+  }
+  const distance = travel.x * along.x + travel.y * along.y;
+  const delta = { x: distance * along.x, y: distance * along.y };
+  const moved = fixtures.map((fixture) => {
+    const { wallId, offset, length } = fixture.wallAttach;
+    const wall = wallsById.get(wallId)!;
+    const axis = getWallDirection(wall);
+    return {
+      ...fixture,
+      wallAttach: {
+        ...fixture.wallAttach,
+        offset: dragOffset(
+          offset + delta.x * axis.x + delta.y * axis.y,
+          length,
+          wall,
+        ),
+      },
+    };
+  });
+  return { moved, delta };
 }
 
 /** Slide the selected sinks together, keeping their spacing on a shared wall. */

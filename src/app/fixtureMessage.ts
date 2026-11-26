@@ -1,9 +1,10 @@
-import type { FixtureConflict } from "@geometry/fixtures";
+import type { FixtureConflict, FixtureMoveConflict } from "@geometry/fixtures";
 
-export const fixtureConflictMessage: Record<FixtureConflict, string> = {
+export const fixtureConflictMessage: Record<FixtureMoveConflict, string> = {
   door: "The sink overlaps a doorway.",
   wall: "The sink overlaps a wall or corner.",
   width: "The sink extends beyond the wall face.",
+  alignment: "These sinks cannot slide together along their wall faces.",
 };
 
 export const fixtureEditHelp: Record<FixtureConflict, string> = {

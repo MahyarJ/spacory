@@ -1,4 +1,30 @@
-import type { Plan } from "@app/schema";
+import type { Plan, Point } from "@app/schema";
+
+export type LabelTranslation = { ids: ReadonlySet<string>; delta: Point };
+
+export function getFixtureLabelSelection({
+  plan,
+  selectedWalls,
+  selectedItems,
+  selectedFixtures,
+  selectedLabels,
+}: {
+  plan: Plan;
+  selectedWalls: ReadonlySet<string>;
+  selectedItems: ReadonlySet<string>;
+  selectedFixtures: ReadonlySet<string>;
+  selectedLabels: ReadonlySet<string>;
+}) {
+  if (
+    selectedWalls.size ||
+    selectedItems.size ||
+    !selectedFixtures.size ||
+    !selectedLabels.size
+  )
+    return null;
+  const fixtures = plan.fixtures?.filter(({ id }) => selectedFixtures.has(id));
+  return fixtures?.length ? { fixtures, labelIds: selectedLabels } : null;
+}
 
 export function selectionCount(
   selWalls: ReadonlySet<string>,

@@ -6,6 +6,10 @@ import {
   type Point,
   type Wall,
 } from "@app/schema";
+import {
+  getFixtureLabelSelection,
+  type LabelTranslation,
+} from "@app/selection";
 import { useApp } from "@app/store";
 import {
   type CanvasPoint,
@@ -22,6 +26,8 @@ import {
 import {
   dragFixtureMount,
   type FixtureFootprint,
+  type FixtureMount,
+  type FixtureMoveConflict,
   getFixtureConflict,
   getFixtureGeometry,
   hitFixture,
@@ -30,6 +36,7 @@ import {
   pickFixtureMount,
   SINK_DEPTH,
   SINK_WIDTH,
+  slideFixtureGroup,
 } from "@geometry/fixtures";
 import { hitConnectionPoint, hitItem, hitWall } from "@geometry/hit";
 import { computeWallGeometry, paintedWallPolygons } from "@geometry/junction";
@@ -90,6 +97,21 @@ type Opening = {
   startOffset: number;
   currentOffset: number;
   thickness: number;
+};
+
+type FixtureDrag =
+  | { kind: "sinks"; grabbed: Fixture; group: Fixture[] }
+  | {
+      kind: "mixed";
+      selection: NonNullable<ReturnType<typeof getFixtureLabelSelection>>;
+      labelOnTap?: string;
+    };
+
+type FixtureProposal = {
+  placement: FixtureMount | null;
+  moved: Fixture[];
+  labels?: LabelTranslation;
+  conflict?: FixtureMoveConflict;
 };
 
 const TAP_THRESHOLD = 5; // CSS pixels, regardless of zoom
@@ -183,8 +205,7 @@ export function FloorPlan() {
   const fixturePress = useRef<{
     pointerId: number;
     start: Point;
-    fixture?: Fixture;
-    group?: Fixture[];
+    drag?: FixtureDrag;
   } | null>(null);
   const [fixturePointer, setFixturePointer] = useState<CanvasPoint | null>(
     null,
@@ -354,7 +375,7 @@ export function FloorPlan() {
           )
             useApp.getState().selectNone();
           if (
-            (selectionDrag.current || fixturePress.current?.fixture) &&
+            (selectionDrag.current || fixturePress.current?.drag) &&
             useApp.getState().liveDragItems
           )
             useApp.getState().cancelLiveDrag();
@@ -508,7 +529,7 @@ export function FloorPlan() {
     return true;
   };
 
-  const fixtureProposalAt = (world: Point) => {
+  const fixtureProposalAt = (world: Point): FixtureProposal | null => {
     const minTargetSize = MIN_SINK_TARGET_PX / view.scale;
     const press = fixturePress.current;
     if (tool === "sink") {
@@ -523,29 +544,39 @@ export function FloorPlan() {
     }
     if (
       tool !== "select" ||
-      !press?.fixture ||
+      !press?.drag ||
       !hasLiveDrag ||
       Math.hypot(world.x - press.start.x, world.y - press.start.y) *
         view.scale <=
         TAP_THRESHOLD
     )
       return null;
+    const drag = press.drag;
+    if (drag.kind === "mixed") {
+      const travel = { x: world.x - press.start.x, y: world.y - press.start.y };
+      const { moved, delta, conflict } = slideFixtureGroup(
+        drag.selection.fixtures,
+        travel,
+        wallsById,
+      );
+      return {
+        placement: null,
+        moved,
+        labels: { ids: drag.selection.labelIds, delta },
+        conflict,
+      };
+    }
     const mount = dragFixtureMount(
       world,
       press.start,
-      press.fixture,
+      drag.grabbed,
       plan.walls,
       minTargetSize,
     );
     return (
       mount && {
         placement: null,
-        moved: moveFixtureGroup(
-          press.group ?? [press.fixture],
-          press.fixture,
-          mount,
-          wallsById,
-        ),
+        moved: moveFixtureGroup(drag.group, drag.grabbed, mount, wallsById),
       }
     );
   };
@@ -654,6 +685,21 @@ export function FloorPlan() {
           selectedItems.size === 0 &&
           selectedFixtures.size === 0;
         if (!alreadySelected) selectLabels([label.id], additive);
+        const state = useApp.getState();
+        const mixed = getFixtureLabelSelection(state);
+        if (mixed) {
+          fixturePress.current = {
+            pointerId: e.pointerId,
+            start: world,
+            drag: {
+              kind: "mixed",
+              selection: mixed,
+              labelOnTap: additive ? undefined : label.id,
+            },
+          };
+          state.beginLiveDrag();
+          return;
+        }
         labelPress.current = {
           pointerId: e.pointerId,
           start: world,
@@ -689,13 +735,19 @@ export function FloorPlan() {
         if (!selectedFixtures.has(fixture.id))
           selectFixture(fixture.id, additive);
         const state = useApp.getState();
+        const mixed = getFixtureLabelSelection(state);
         fixturePress.current = {
           pointerId: e.pointerId,
           start: world,
-          fixture,
-          group: state.plan.fixtures?.filter(({ id }) =>
-            state.selectedFixtures.has(id),
-          ),
+          drag: mixed
+            ? { kind: "mixed", selection: mixed }
+            : {
+                kind: "sinks",
+                grabbed: fixture,
+                group: state.plan.fixtures?.filter(({ id }) =>
+                  state.selectedFixtures.has(id),
+                ) ?? [fixture],
+              },
         };
         state.beginLiveDrag();
         return;
@@ -853,7 +905,7 @@ export function FloorPlan() {
     const world = toWorld(e.clientX, e.clientY);
     setCursor(world);
     const basinPress = fixturePress.current;
-    if (basinPress?.pointerId === e.pointerId && basinPress.fixture) {
+    if (basinPress?.pointerId === e.pointerId && basinPress.drag) {
       if (e.buttons === 1 && tool === "select") setFixturePointer(local);
       return;
     }
@@ -984,13 +1036,21 @@ export function FloorPlan() {
       const proposal = fixtureProposalAt(world);
       fixturePress.current = null;
       const state = useApp.getState();
-      if (basinPress.fixture) {
+      if (basinPress.drag) {
         setFixturePointer(null);
         if (!state.liveDragItems) return;
         state.endLiveDrag();
         if (tool === "select" && proposal) {
-          const conflict = state.moveFixtures(proposal.moved);
+          const conflict =
+            proposal.conflict ??
+            state.moveFixtureSelection(proposal.moved, proposal.labels);
           if (conflict) setFixtureHint(fixtureConflictMessage[conflict]);
+        } else if (
+          tool === "select" &&
+          basinPress.drag.kind === "mixed" &&
+          basinPress.drag.labelOnTap
+        ) {
+          selectLabels([basinPress.drag.labelOnTap]);
         }
       } else if (
         tool === "sink" &&
@@ -1202,11 +1262,12 @@ export function FloorPlan() {
     return wall ? [{ footprint, wall }] : [];
   });
   const pointerConflict = fixtureProposal
-    ? fixturePreviews
+    ? (fixtureProposal.conflict ??
+      fixturePreviews
         .map(({ footprint, wall }) =>
           getFixtureConflict(footprint, wall, plan.items, paintedWalls),
         )
-        .find((reason) => reason !== null)
+        .find((reason) => reason !== null))
     : null;
   const previewConflict = pointerConflict ?? resizePreview?.conflict;
   const activeFixtureHint = pointerConflict
@@ -1265,7 +1326,7 @@ export function FloorPlan() {
           styles.floorplan,
           tool === "select" &&
             (hasLiveDrag &&
-            (selectionDrag.current || fixturePress.current?.fixture)
+            (selectionDrag.current || fixturePress.current?.drag)
               ? styles.moving
               : styles.select),
         )}
@@ -1309,6 +1370,12 @@ export function FloorPlan() {
             frames={labelFrames}
             selectedIds={selectedLabels}
             editingId={editingLabel?.id}
+            preview={
+              fixtureProposal?.labels && {
+                ...fixtureProposal.labels,
+                blocked: Boolean(pointerConflict),
+              }
+            }
           />
           {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: The SVG preview has no tab stop or pointer events. The editor exposes its text. */}
           <g

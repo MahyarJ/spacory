@@ -11,10 +11,12 @@ import {
   type FixtureConflict,
   type FixtureFootprint,
   type FixtureMount,
+  type FixtureMoveConflict,
   fitFixtureSpan,
   fixtureMountEquals,
   getFixtureConflict,
   SINK_DEPTH,
+  slideFixtureGroup,
 } from "@geometry/fixtures";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { computeWallGeometry, paintedWallPolygons } from "@geometry/junction";
@@ -60,7 +62,12 @@ import {
   type Wall,
   type WallMountedObject,
 } from "./schema";
-import { isWallOnlySelection, selectionCount } from "./selection";
+import {
+  getFixtureLabelSelection,
+  isWallOnlySelection,
+  type LabelTranslation,
+  selectionCount,
+} from "./selection";
 import {
   applyThemeAttr,
   initialTheme,
@@ -113,8 +120,9 @@ interface AppState {
   fixtureResizePreview: FixtureResizePreview;
   setFixtureResizePreview: (preview: FixtureResizePreview) => void;
   duplicateFixture: (id: string) => FixtureConflict | undefined;
-  moveFixtures: (
+  moveFixtureSelection: (
     moves: Array<FixtureMount & { id: string }>,
+    labels?: LabelTranslation,
   ) => FixtureConflict | undefined;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setCanvasSize: (size: { width: number; height: number }) => void;
@@ -171,7 +179,10 @@ interface AppState {
   setMarquee: (m: AppState["marquee"]) => void;
   /** Replace the whole plan (e.g. on import); resets undo history and selection. */
   loadPlan: (p: Plan) => void;
-  translateSelection: (dx: number, dy: number) => FixtureConflict | undefined;
+  translateSelection: (
+    dx: number,
+    dy: number,
+  ) => FixtureMoveConflict | undefined;
   /** Move selected walls and labels together without writing to history. */
   translateSelectionLive: (dx: number, dy: number) => void;
   /**
@@ -464,6 +475,61 @@ function fixtureConflict(
   return getFixtureConflict(fixture, wall, plan.items, paintedWalls);
 }
 
+function moveFixtureSelectionInPlan(
+  plan: Plan,
+  moves: Array<FixtureMount & { id: string }>,
+  labels?: LabelTranslation,
+): { next: Plan; conflict?: FixtureConflict } {
+  if (!plan.fixtures || moves.length === 0) return { next: plan };
+  const byId = new Map(moves.map((move) => [move.id, move]));
+  const paintedWalls = paintedWallPolygons(computeWallGeometry(plan.walls));
+  const fixtures: Fixture[] = [];
+  let changed = false;
+  for (const fixture of plan.fixtures) {
+    const move = byId.get(fixture.id);
+    if (!move) {
+      fixtures.push(fixture);
+      continue;
+    }
+    const candidate = {
+      ...fixture,
+      wallAttach: move.wallAttach,
+      side: move.side,
+    };
+    const conflict = fixtureConflict(plan, candidate, paintedWalls);
+    if (conflict) return { next: plan, conflict };
+    if (fixtureMountEquals(fixture, move)) fixtures.push(fixture);
+    else {
+      changed = true;
+      fixtures.push(candidate);
+    }
+  }
+  const translatedLabels =
+    labels && plan.labels && (labels.delta.x !== 0 || labels.delta.y !== 0)
+      ? plan.labels.map((label) =>
+          labels.ids.has(label.id)
+            ? {
+                ...label,
+                position: {
+                  x: label.position.x + labels.delta.x,
+                  y: label.position.y + labels.delta.y,
+                },
+              }
+            : label,
+        )
+      : plan.labels;
+  return {
+    next:
+      changed || translatedLabels !== plan.labels
+        ? {
+            ...plan,
+            fixtures,
+            ...(translatedLabels ? { labels: translatedLabels } : {}),
+          }
+        : plan,
+  };
+}
+
 export function previewFixtureResize(
   plan: Plan,
   fixture: Fixture,
@@ -541,23 +607,35 @@ function translateSelectedWallsFollowing(
 }
 
 function translatePlanSelection(
-  {
-    plan,
-    selectedWalls,
-    selectedLabels,
-    selectedFixtures,
-  }: Pick<
+  state: Pick<
     AppState,
-    "plan" | "selectedWalls" | "selectedLabels" | "selectedFixtures"
+    | "plan"
+    | "selectedWalls"
+    | "selectedItems"
+    | "selectedLabels"
+    | "selectedFixtures"
   >,
   dx: number,
   dy: number,
-): { next: Plan; conflict?: FixtureConflict } {
+): { next: Plan; conflict?: FixtureMoveConflict } {
+  const { plan, selectedWalls, selectedLabels, selectedFixtures } = state;
   if (
     (dx === 0 && dy === 0) ||
     (!selectedWalls.size && !selectedLabels.size && !selectedFixtures.size)
   ) {
     return { next: plan };
+  }
+  const mixed = getFixtureLabelSelection(state);
+  if (mixed) {
+    const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
+    const { moved, delta, conflict } = slideFixtureGroup(
+      mixed.fixtures,
+      { x: dx, y: dy },
+      walls,
+    );
+    return conflict
+      ? { next: plan, conflict }
+      : moveFixtureSelectionInPlan(plan, moved, { ids: mixed.labelIds, delta });
   }
   let conflict: FixtureConflict | undefined;
   const fixtures =
@@ -773,34 +851,22 @@ export const useApp = create<AppState>((set, get) => ({
       selectedFixtures: new Set([copy.id]),
     });
   },
-  moveFixtures: (moves) => {
+  moveFixtureSelection: (moves, labels) => {
     const state = get();
     const plan = history.present;
-    if (!plan.fixtures || moves.length === 0) return;
-    const byId = new Map(moves.map((move) => [move.id, move]));
-    const paintedWalls = paintedWallPolygons(computeWallGeometry(plan.walls));
-    const next: Fixture[] = [];
-    let changed = false;
-    for (const fixture of plan.fixtures) {
-      const move = byId.get(fixture.id);
-      if (!move) {
-        next.push(fixture);
-        continue;
-      }
-      const candidate = {
-        ...fixture,
-        wallAttach: move.wallAttach,
-        side: move.side,
-      };
-      const conflict = fixtureConflict(plan, candidate, paintedWalls);
-      if (conflict) return conflict;
-      if (fixtureMountEquals(fixture, move)) next.push(fixture);
-      else {
-        changed = true;
-        next.push(candidate);
-      }
+    const { next, conflict } = moveFixtureSelectionInPlan(plan, moves, labels);
+    if (next !== plan) {
+      set(
+        commit(
+          {
+            ...next,
+            meta: { ...next.meta, updatedAt: new Date().toISOString() },
+          },
+          state,
+        ),
+      );
     }
-    if (changed) set(commitFixtures(next, state));
+    return conflict;
   },
   setView: (fn) =>
     set(({ view }) => {
