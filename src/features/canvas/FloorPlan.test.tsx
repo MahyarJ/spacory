@@ -1111,6 +1111,115 @@ describe("FloorPlan touch gestures", () => {
     expect(state().selectedFixtures).toEqual(selection);
   });
 
+  it("slides sinks on separate parallel walls without reattaching either sink", () => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 100, 500, 100, "upper"), wall(500, 250, 0, 250, "lower")],
+      fixtures: [
+        {
+          id: "upper-sink",
+          type: "sink",
+          side: 1,
+          depth: 60,
+          wallAttach: { wallId: "upper", offset: 80, length: 60 },
+        },
+        {
+          id: "lower-sink",
+          type: "sink",
+          side: 1,
+          depth: 60,
+          wallAttach: { wallId: "lower", offset: 90, length: 60 },
+        },
+      ],
+    };
+    setup({ tool: "select", plan });
+    const state = useApp.getState;
+    down(1, 45, 122);
+    move(1, 450, 230);
+    up(1, 450, 230);
+    expect(state().selectedFixtures).toEqual(
+      new Set(["upper-sink", "lower-sink"]),
+    );
+
+    down(1, 110, 133);
+    // The pointer is near the lower face, but each selected sink keeps its own wall.
+    move(1, 160, 246);
+    expect(
+      Array.from(
+        canvas.querySelectorAll('[data-fixture-preview="valid"]'),
+        (node) => node.getAttribute("transform"),
+      ),
+    ).toEqual([
+      "translate(160 105) rotate(0)",
+      "translate(430 245) rotate(180)",
+    ]);
+    up(1, 160, 246);
+    const moved = state().plan;
+    expect(moved.fixtures?.map(({ wallAttach }) => wallAttach)).toEqual([
+      { wallId: "upper", offset: 130, length: 60 },
+      { wallId: "lower", offset: 40, length: 60 },
+    ]);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+
+    down(1, 160, 133);
+    move(1, 230, 246);
+    expect(
+      canvas.querySelectorAll('[data-fixture-preview="blocked"]'),
+    ).toHaveLength(2);
+    expect(
+      screen.getByText("The sink extends beyond the wall face."),
+    ).toBeTruthy();
+    up(1, 230, 246);
+    expect(state().plan).toBe(moved);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+  });
+
+  it("explains why sinks on perpendicular walls stay put without painting red footprints", () => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [
+        wall(0, 100, 500, 100, "horizontal"),
+        wall(420, 160, 420, 400, "vertical"),
+      ],
+      fixtures: [
+        {
+          id: "first",
+          type: "sink",
+          side: 1,
+          depth: 60,
+          wallAttach: { wallId: "horizontal", offset: 80, length: 60 },
+        },
+        {
+          id: "second",
+          type: "sink",
+          side: 1,
+          depth: 60,
+          wallAttach: { wallId: "vertical", offset: 50, length: 60 },
+        },
+      ],
+    };
+    setup({ tool: "select", plan });
+    const state = useApp.getState;
+    act(() => {
+      state().selectFixture("first");
+      state().selectFixture("second", true);
+    });
+    const reason =
+      "The selected sinks are on walls at different angles. Move them separately.";
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByText(reason)).toBeTruthy();
+    expect(state().plan).toBe(plan);
+
+    down(1, 110, 133);
+    move(1, 160, 133);
+    expect(screen.getByText(reason)).toBeTruthy();
+    expect(fixturePreview()).toBeNull();
+    expect(canvas.querySelectorAll("[data-fixture-selection]")).toHaveLength(2);
+    up(1, 160, 133);
+    expect(state().plan).toBe(plan);
+    expect(loadPersistedHistory()?.past).toHaveLength(0);
+  });
+
   it.each([
     { grab: "label", pointerType: "mouse", x: 205, y: 250 },
     { grab: "sink", pointerType: "touch", x: 150, y: 155 },

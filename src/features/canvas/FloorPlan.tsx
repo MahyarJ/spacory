@@ -28,6 +28,7 @@ import {
   type FixtureFootprint,
   type FixtureMount,
   type FixtureMoveConflict,
+  fixturesHaveDifferentWalls,
   getFixtureConflict,
   getFixtureGeometry,
   hitFixture,
@@ -552,17 +553,21 @@ export function FloorPlan() {
     )
       return null;
     const drag = press.drag;
-    if (drag.kind === "mixed") {
+    const group = drag.kind === "mixed" ? drag.selection.fixtures : drag.group;
+    if (drag.kind === "mixed" || fixturesHaveDifferentWalls(group)) {
       const travel = { x: world.x - press.start.x, y: world.y - press.start.y };
       const { moved, delta, conflict } = slideFixtureGroup(
-        drag.selection.fixtures,
+        group,
         travel,
         wallsById,
       );
       return {
         placement: null,
         moved,
-        labels: { ids: drag.selection.labelIds, delta },
+        labels:
+          drag.kind === "mixed"
+            ? { ids: drag.selection.labelIds, delta }
+            : undefined,
         conflict,
       };
     }
@@ -1252,11 +1257,14 @@ export function FloorPlan() {
     selectedFixtures.has(fixtureResizePreview.fixture.id)
       ? fixtureResizePreview
       : null;
+  const incompatibleWalls = fixtureProposal?.conflict === "alignment";
   const previewFootprints: Array<FixtureFootprint & { id?: string }> =
-    fixtureProposal?.placement
-      ? [{ ...fixtureProposal.placement, depth: SINK_DEPTH }]
-      : (fixtureProposal?.moved ??
-        (resizePreview ? [resizePreview.fixture] : []));
+    incompatibleWalls
+      ? []
+      : fixtureProposal?.placement
+        ? [{ ...fixtureProposal.placement, depth: SINK_DEPTH }]
+        : (fixtureProposal?.moved ??
+          (resizePreview ? [resizePreview.fixture] : []));
   const fixturePreviews = previewFootprints.flatMap((footprint) => {
     const wall = wallsById.get(footprint.wallAttach.wallId);
     return wall ? [{ footprint, wall }] : [];
@@ -1371,10 +1379,12 @@ export function FloorPlan() {
             selectedIds={selectedLabels}
             editingId={editingLabel?.id}
             preview={
-              fixtureProposal?.labels && {
-                ...fixtureProposal.labels,
-                blocked: Boolean(pointerConflict),
-              }
+              !incompatibleWalls && fixtureProposal?.labels
+                ? {
+                    ...fixtureProposal.labels,
+                    blocked: Boolean(pointerConflict),
+                  }
+                : undefined
             }
           />
           {/* biome-ignore lint/a11y/noAriaHiddenOnFocusable: The SVG preview has no tab stop or pointer events. The editor exposes its text. */}

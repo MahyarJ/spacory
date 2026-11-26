@@ -127,7 +127,12 @@ function dragOffset(offset: number, length: number, wall: Wall): number {
   return offset;
 }
 
-/** Find a single translation for a group containing labels and attached sinks. */
+export function fixturesHaveDifferentWalls(fixtures: readonly Fixture[]) {
+  const hostId = fixtures[0]?.wallAttach.wallId;
+  return fixtures.some(({ wallAttach }) => wallAttach.wallId !== hostId);
+}
+
+/** Find a single translation along the group's current wall faces. */
 export function slideFixtureGroup(
   fixtures: Fixture[],
   travel: Point,
@@ -169,7 +174,7 @@ export function slideFixtureGroup(
   return { moved, delta };
 }
 
-/** Slide the selected sinks together, keeping their spacing on a shared wall. */
+/** Move sinks that share one wall, including reattaching them to another wall. */
 export function moveFixtureGroup(
   fixtures: Fixture[],
   grabbed: Fixture,
@@ -184,46 +189,26 @@ export function moveFixtureGroup(
 
   const centerOffset = ({ offset, length }: Fixture["wallAttach"]) =>
     offset + length / 2;
-  const before = getFixtureGeometry(grabbed, source);
-  const after = getFixtureGeometry(moved, target);
-  const reversed =
-    before.along.x * after.along.x + before.along.y * after.along.y < 0;
+  const before = getWallDirection(source);
+  const after = getWallDirection(target);
+  const reversed = before.x * after.x + before.y * after.y < 0;
   return fixtures.map((fixture) => {
     if (fixture.id === grabbed.id) return moved;
     const { wallAttach, side } = fixture;
     const { length } = wallAttach;
-    if (wallAttach.wallId === source.id) {
-      const spacing =
-        centerOffset(wallAttach) - centerOffset(grabbed.wallAttach);
-      return {
-        ...fixture,
-        side: side === grabbed.side ? mount.side : mount.side === 1 ? -1 : 1,
-        wallAttach: {
-          ...wallAttach,
-          wallId: target.id,
-          offset: dragOffset(
-            centerOffset(mount.wallAttach) +
-              (reversed ? -spacing : spacing) -
-              length / 2,
-            length,
-            target,
-          ),
-        },
-      };
-    }
-    const host = wallsById.get(wallAttach.wallId);
-    if (!host) return fixture;
-    const along = getWallDirection(host);
+    const spacing = centerOffset(wallAttach) - centerOffset(grabbed.wallAttach);
     return {
       ...fixture,
+      side: side === grabbed.side ? mount.side : mount.side === 1 ? -1 : 1,
       wallAttach: {
         ...wallAttach,
+        wallId: target.id,
         offset: dragOffset(
-          wallAttach.offset +
-            (after.back.x - before.back.x) * along.x +
-            (after.back.y - before.back.y) * along.y,
+          centerOffset(mount.wallAttach) +
+            (reversed ? -spacing : spacing) -
+            length / 2,
           length,
-          host,
+          target,
         ),
       },
     };

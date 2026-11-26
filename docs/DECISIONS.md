@@ -1020,10 +1020,11 @@ contact is allowed. Width and Depth show the same blue or red footprint as
 placement while the user types. A rejected edit restores the committed
 dimension and leaves plan history untouched.
 
-A selection of basins and labels uses one translation along the basins'
-current wall faces. The slide requires parallel hosts and preserves the
-spacing of every selected object. Any conflicting footprint blocks the
-whole drop and turns every selection outline red.
+Selections with basins on separate walls, or with basins and labels, use one
+translation along their current wall faces. Parallel faces share a slide
+direction and preserve the group's spacing. Walls at different angles keep
+the selection in place and show a reason. A conflicting footprint turns
+every preview outline red and blocks the whole drop.
 
 The wall anchor applies to this basin. A future countertop sink can use a
 countertop edge for orientation. Earlier draft sinks migrate to a nearby wall

@@ -4,7 +4,8 @@ export const fixtureConflictMessage: Record<FixtureMoveConflict, string> = {
   door: "The sink overlaps a doorway.",
   wall: "The sink overlaps a wall or corner.",
   width: "The sink extends beyond the wall face.",
-  alignment: "These sinks cannot slide together along their wall faces.",
+  alignment:
+    "The selected sinks are on walls at different angles. Move them separately.",
 };
 
 export const fixtureEditHelp: Record<FixtureConflict, string> = {

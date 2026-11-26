@@ -14,6 +14,7 @@ import {
   type FixtureMoveConflict,
   fitFixtureSpan,
   fixtureMountEquals,
+  fixturesHaveDifferentWalls,
   getFixtureConflict,
   SINK_DEPTH,
   slideFixtureGroup,
@@ -626,16 +627,27 @@ function translatePlanSelection(
     return { next: plan };
   }
   const mixed = getFixtureLabelSelection(state);
-  if (mixed) {
+  const fixtureGroup =
+    mixed?.fixtures ??
+    (!selectedWalls.size &&
+    !state.selectedItems.size &&
+    selectedFixtures.size > 1
+      ? plan.fixtures?.filter(({ id }) => selectedFixtures.has(id))
+      : undefined);
+  if (fixtureGroup && (mixed || fixturesHaveDifferentWalls(fixtureGroup))) {
     const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
     const { moved, delta, conflict } = slideFixtureGroup(
-      mixed.fixtures,
+      fixtureGroup,
       { x: dx, y: dy },
       walls,
     );
     return conflict
       ? { next: plan, conflict }
-      : moveFixtureSelectionInPlan(plan, moved, { ids: mixed.labelIds, delta });
+      : moveFixtureSelectionInPlan(
+          plan,
+          moved,
+          mixed ? { ids: mixed.labelIds, delta } : undefined,
+        );
   }
   let conflict: FixtureConflict | undefined;
   const fixtures =
