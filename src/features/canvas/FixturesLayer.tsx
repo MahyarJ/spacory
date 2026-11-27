@@ -3,7 +3,7 @@ import {
   FIXTURE_STROKE_WIDTH,
   type FixtureFootprint,
   getFixtureGeometry,
-  getFixtureSymbol,
+  getSinkSymbol,
 } from "@geometry/fixtures";
 
 function SinkSymbol({
@@ -17,7 +17,7 @@ function SinkSymbol({
   preview?: boolean;
   selected?: boolean;
 }) {
-  const { rim, basin, drain, tap } = getFixtureSymbol(footprint);
+  const { rim, basin, drain, tap } = getSinkSymbol(footprint);
   return (
     <>
       <rect

@@ -3,7 +3,7 @@ import { getPlanBounds } from "./bounds";
 import {
   FIXTURE_STROKE_WIDTH,
   getFixtureGeometry,
-  getFixtureSymbol,
+  getSinkSymbol,
 } from "./fixtures";
 import {
   DOOR_HINGE_RADIUS,
@@ -145,7 +145,7 @@ export function buildExportSvg(
       const wall = wallsById.get(fixture.wallAttach.wallId);
       if (!wall) return "";
       const { transform } = getFixtureGeometry(fixture, wall);
-      const { rim, basin, drain, tap } = getFixtureSymbol(fixture);
+      const { rim, basin, drain, tap } = getSinkSymbol(fixture);
       return (
         `<g data-fixture="${fixture.type}" transform="${transform}" stroke="${EXPORT_WALL_COLOR}" stroke-width="${FIXTURE_STROKE_WIDTH}" stroke-linecap="round" stroke-linejoin="round">` +
         `<rect x="${rim.x}" y="${rim.y}" width="${rim.width}" height="${rim.height}" fill="${EXPORT_BACKGROUND}" />` +

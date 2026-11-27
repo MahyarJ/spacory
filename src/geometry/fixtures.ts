@@ -480,7 +480,7 @@ export function hitFixture(
   );
 }
 
-export function getFixtureSymbol(fixture: FixtureFootprint) {
+export function getSinkSymbol(fixture: FixtureFootprint) {
   const {
     wallAttach: { length: width },
     depth,
