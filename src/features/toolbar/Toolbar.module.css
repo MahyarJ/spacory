@@ -9,12 +9,13 @@
 }
 
 .panel {
+  --panel-padding: 2px;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   min-inline-size: 0;
   margin: 0;
-  padding: 3px;
+  padding: var(--panel-padding);
   color: var(--sp-text);
   background: var(--sp-panel);
   border: 1px solid var(--sp-border);
@@ -39,6 +40,7 @@
   justify-self: center;
   justify-content: center;
   flex-wrap: wrap;
+  row-gap: calc(var(--sp-touch-target) - var(--sp-toolbar-button-height));
   width: max-content;
   max-width: 100%;
 }
@@ -76,13 +78,13 @@
 }
 
 .projectButton {
-  gap: var(--sp-project-button-gap, 6px);
-  padding-inline: var(--sp-project-button-padding, 8px);
+  gap: 4px;
+  padding-inline: 4px;
 }
 
 .projectButton svg:first-child {
-  width: var(--sp-project-icon-size, 18px);
-  height: var(--sp-project-icon-size, 18px);
+  width: 16px;
+  height: 16px;
   flex: none;
 }
 
@@ -114,7 +116,7 @@
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .fixturePicker {
@@ -142,7 +144,7 @@
 }
 
 .optionsSurface {
-  padding: 12px;
+  padding: 10px;
   color: var(--sp-text);
   background: var(--sp-panel);
   border: 1px solid var(--sp-border);
@@ -155,9 +157,9 @@
   position: absolute;
   z-index: 10;
   inset-block-start: calc(100% + 6px);
-  inset-inline-end: -4px;
+  inset-inline-end: calc(-1px - var(--panel-padding));
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-inline-size: 13rem;
   max-block-size: min(20rem, 75dvh);
   overflow: auto;
@@ -203,12 +205,19 @@
   .iconButton,
   .textButton,
   .fixtureChevron {
+    position: relative;
     min-width: var(--sp-touch-target);
-    min-height: var(--sp-touch-target);
   }
 
-  .settingsPanel {
-    gap: 18px;
-    padding-block: 16px;
+  /* Extend each target within its own column. Wrapped rows leave room for
+     the overhang from both rows. */
+  .iconButton::after,
+  .textButton::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    height: var(--sp-touch-target);
+    transform: translateY(-50%);
   }
 }
