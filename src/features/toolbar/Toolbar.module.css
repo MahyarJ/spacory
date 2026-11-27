@@ -28,9 +28,9 @@
   display: var(--sp-toolbar-wordmark-display, block);
   align-self: center;
   margin: 0;
-  color: var(--sp-text);
+  color: var(--sp-accent);
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 700;
   text-shadow: 0 0 6px var(--sp-bg);
 }
 
