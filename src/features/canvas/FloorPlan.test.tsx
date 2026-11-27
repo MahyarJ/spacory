@@ -1518,6 +1518,44 @@ describe("FloorPlan touch gestures", () => {
     expect(useApp.getState().selectedFixtures).toEqual(new Set([first.id]));
   });
 
+  it("duplicates a sink in a clear span when both default offsets hit doorways", () => {
+    const plan: Plan = {
+      ...createInitialPlan(),
+      walls: [wall(0, 160, 600, 160, "host")],
+      items: [120, 350].map((offset, index) => ({
+        id: `door-${index}`,
+        type: "door",
+        thickness: 18,
+        wallAttach: { wallId: "host", offset, length: 80 },
+        props: { hingeEdge: "start", swingSide: "inside" },
+      })),
+    };
+    setup({ plan, tool: "sink" });
+    render(<WallOptionsBar />);
+    down(1, 280, 195, { pointerType: "mouse" });
+    up(1, 280, 195, "mouse");
+    const state = useApp.getState;
+    const original = state().plan.fixtures?.[0];
+    expect(original?.wallAttach.offset).toBe(250);
+    expect(loadPersistedHistory()?.past).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    expect(canvas.querySelectorAll('[data-fixture="sink"]')).toHaveLength(2);
+    const copy = state().plan.fixtures![1];
+    expect(copy.id).not.toBe(original?.id);
+    expect(copy).toMatchObject({
+      wallAttach: { wallId: "host", offset: 430, length: 60 },
+      side: original?.side,
+      depth: original?.depth,
+    });
+    expect(state().selectedFixtures).toEqual(new Set([copy.id]));
+    expect(state().plan.items).toEqual(plan.items);
+    expect(loadPersistedHistory()?.past).toHaveLength(2);
+    act(() => state().undo());
+    expect(state().plan.fixtures).toEqual([original]);
+  });
+
   it("slides a duplicate along its host and transfers it to another face by touch", () => {
     setup({
       plan: {

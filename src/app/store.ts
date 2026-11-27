@@ -12,6 +12,7 @@ import {
   type FixtureFootprint,
   type FixtureMount,
   type FixtureMoveConflict,
+  findFixtureDuplicateSpan,
   fitFixtureSpan,
   fixtureMountEquals,
   getFixtureConflict,
@@ -119,7 +120,7 @@ interface AppState {
   updateFixture: (id: string, edit: FixtureEdit) => FixtureConflict | undefined;
   fixtureResizePreview: FixtureResizePreview;
   setFixtureResizePreview: (preview: FixtureResizePreview) => void;
-  duplicateFixture: (id: string) => FixtureConflict | undefined;
+  duplicateFixture: (id: string) => void;
   moveFixtureSelection: (
     moves: Array<FixtureMount & { id: string }>,
     labels?: LabelMove,
@@ -817,34 +818,22 @@ export const useApp = create<AppState>((set, get) => ({
   },
   duplicateFixture: (id) => {
     const state = get();
-    const { fixtures, meta, walls } = history.present;
+    const { fixtures, items, meta, walls } = history.present;
     const fixture = fixtures?.find((item) => item.id === id);
     if (state.liveDragItems || !fixtures || !fixture) return;
-    const { wallId, offset, length } = fixture.wallAttach;
+    const { wallId } = fixture.wallAttach;
     const wall = walls.find((candidate) => candidate.id === wallId);
     if (!wall) return;
-    const shift = length + meta.gridSize;
-    const ahead = getWallLength(wall) - offset - length;
-    const direction = ahead >= shift || ahead >= offset ? 1 : -1;
-    const copyAt = (direction: number) => ({
-      ...fixture,
-      wallAttach: fitFixtureSpan(
-        wall,
-        length,
-        offset + length / 2 + direction * shift,
-      ),
-    });
-    let copy = copyAt(direction);
-    const conflict = fixtureConflict(history.present, copy);
-    if (conflict) {
-      copy = copyAt(-direction);
-      if (
-        fixtureMountEquals(fixture, copy) ||
-        fixtureConflict(history.present, copy)
-      )
-        return conflict;
-    }
-    copy.id = uid("fixture");
+    const wallAttach = findFixtureDuplicateSpan(
+      fixture,
+      wall,
+      fixtures,
+      items,
+      paintedWallPolygons(computeWallGeometry(walls)),
+      meta.gridSize,
+    );
+    if (!wallAttach) return;
+    const copy = { ...fixture, wallAttach, id: uid("fixture") };
     set({
       ...commitFixtures([...fixtures, copy], state),
       ...emptySelection(),

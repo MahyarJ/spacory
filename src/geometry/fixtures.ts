@@ -1,4 +1,4 @@
-import type { Fixture, Item, Point, Wall } from "@app/schema";
+import type { Fixture, Item, Point, Wall, WallAttachment } from "@app/schema";
 import type { Bounds } from "./bounds";
 import {
   getPointOnWall,
@@ -281,6 +281,96 @@ export function getFixtureGeometry(fixture: FixtureFootprint, wall: Wall) {
   return { back, center, outward, along: { x, y }, transform };
 }
 
+function spansOverlap(a: WallAttachment, b: WallAttachment): boolean {
+  return (
+    Math.min(a.offset + a.length, b.offset + b.length) -
+      Math.max(a.offset, b.offset) >
+    CONTACT_EPSILON
+  );
+}
+
+export function findFixtureDuplicateSpan(
+  fixture: Fixture,
+  wall: Wall,
+  fixtures: readonly Fixture[],
+  items: Item[],
+  paintedWalls: readonly (readonly Point[])[],
+  gap: number,
+): WallAttachment | null {
+  const { offset, length } = fixture.wallAttach;
+  const last = getWallLength(wall) - length;
+  if (last < 0) return null;
+
+  const onFace = fixtures.filter(
+    (other) =>
+      other.wallAttach.wallId === wall.id && other.side === fixture.side,
+  );
+  const attachAt = (offset: number) => ({ ...fixture.wallAttach, offset });
+  const fits = (offset: number) => {
+    const wallAttach = attachAt(offset);
+    return (
+      !onFace.some((other) => spansOverlap(wallAttach, other.wallAttach)) &&
+      !getFixtureConflict({ ...fixture, wallAttach }, wall, items, paintedWalls)
+    );
+  };
+
+  const shift = length + gap;
+  const ahead = last - offset;
+  const direction = ahead >= shift || ahead >= offset ? 1 : -1;
+  const preferred = [direction, -direction]
+    .map((sign) => Math.max(0, Math.min(last, offset + sign * shift)))
+    .find(fits);
+  if (preferred !== undefined) return attachAt(preferred);
+
+  // A copy can start immediately after an obstacle or end immediately before
+  // it. Use those boundaries so narrow gaps are found regardless of grid size.
+  const offsets = new Set([0, last]);
+  for (const obstacle of [
+    ...items.filter((item) => item.type === "door"),
+    ...onFace,
+  ]) {
+    const span = obstacle.wallAttach;
+    if (span.wallId !== wall.id) continue;
+    offsets.add(span.offset - length);
+    offsets.add(span.offset + span.length);
+  }
+  const frame = getFixtureGeometry(fixture, wall);
+  const centerOffset = offset + length / 2;
+  for (const polygon of paintedWalls) {
+    const local = polygonInFixtureFrame(polygon, frame);
+    const inDepth = clipPolygon(
+      clipPolygon(local, "y", 0, 1),
+      "y",
+      fixture.depth,
+      -1,
+    );
+    if (Math.abs(doubledArea(inDepth)) <= CONTACT_EPSILON) continue;
+    for (const { x } of inDepth) {
+      offsets.add(centerOffset + x - length);
+      offsets.add(centerOffset + x);
+    }
+  }
+
+  const fallback = [...offsets]
+    .filter((start) => start >= 0 && start <= last)
+    .sort(
+      (a, b) =>
+        Math.abs(a - offset) - Math.abs(b - offset) || direction * (b - a),
+    )
+    .find(fits);
+  return fallback === undefined ? null : attachAt(fallback);
+}
+
+function polygonInFixtureFrame(
+  polygon: readonly Point[],
+  { back, along, outward }: ReturnType<typeof getFixtureGeometry>,
+): Point[] {
+  return polygon.map(({ x, y }) => ({
+    x: (x - back.x) * along.x + (y - back.y) * along.y,
+    y: (x - back.x) * outward.x + (y - back.y) * outward.y,
+  }));
+}
+
 export function getFixtureConflict(
   fixture: FixtureFootprint,
   wall: Wall,
@@ -298,25 +388,18 @@ export function getFixtureConflict(
     return "width";
 
   if (
-    items.some((item) => {
-      if (item.type !== "door" || item.wallAttach.wallId !== wall.id)
-        return false;
-      const opening = item.wallAttach;
-      return (
-        Math.min(offset + length, opening.offset + opening.length) -
-          Math.max(offset, opening.offset) >
-        CONTACT_EPSILON
-      );
-    })
+    items.some(
+      (item) =>
+        item.type === "door" &&
+        item.wallAttach.wallId === wall.id &&
+        spansOverlap(wallAttach, item.wallAttach),
+    )
   )
     return "door";
 
-  const { back, along, outward } = getFixtureGeometry(fixture, wall);
+  const frame = getFixtureGeometry(fixture, wall);
   for (const polygon of paintedWalls) {
-    const local = polygon.map(({ x, y }) => ({
-      x: (x - back.x) * along.x + (y - back.y) * along.y,
-      y: (x - back.x) * outward.x + (y - back.y) * outward.y,
-    }));
+    const local = polygonInFixtureFrame(polygon, frame);
     // Clip the painted polygon against the basin in its own coordinate
     // system. An edge or point of contact has zero area after clipping.
     const left = clipPolygon(local, "x", -length / 2, 1);

@@ -1020,6 +1020,11 @@ contact is allowed. Width and Depth show the same blue or red footprint as
 placement while the user types. A rejected edit restores the committed
 dimension and leaves plan history untouched.
 
+Duplicate tries the usual offset on either side first. When those are blocked,
+it searches the original face from the edges of door openings, painted wall
+geometry, and existing basins on that face. Checking the edges finds clear
+spans narrower than the grid step.
+
 Selections with basins on separate walls slide along their current faces.
 Parallel faces share a slide direction and preserve the group's spacing.
 Walls at different angles keep the selection in place. When basins share a

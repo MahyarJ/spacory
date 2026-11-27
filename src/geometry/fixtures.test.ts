@@ -1,7 +1,8 @@
-import type { Fixture, Wall } from "@app/schema";
+import type { Fixture, Item, Wall } from "@app/schema";
 import { describe, expect, it } from "vitest";
 import {
   dragFixtureMount,
+  findFixtureDuplicateSpan,
   getFixtureBounds,
   getFixtureConflict,
   getFixtureGeometry,
@@ -107,6 +108,55 @@ describe("wall-backed basin geometry", () => {
     expect(
       getFixtureConflict({ ...sink, depth: 40.01 }, horizontal, [], [corner]),
     ).toBe("wall");
+  });
+
+  it("finds a narrow duplicate span at the edge of a painted wall", () => {
+    const host: Wall = { ...wall, b: { x: 300, y: 0 } };
+    const original: Fixture = {
+      ...sink,
+      wallAttach: { ...sink.wallAttach, offset: 100 },
+    };
+    const door: Item = {
+      id: "door",
+      type: "door",
+      wallAttach: { wallId: host.id, offset: 0, length: 95 },
+      thickness: 10,
+      props: { hingeEdge: "start", swingSide: "inside" },
+    };
+    // The angled edge reaches x=239.5 at the front of the basin (y=45).
+    const obstacle = [
+      { x: 165, y: 5 },
+      { x: 219.5, y: 5 },
+      { x: 259.5, y: 85 },
+      { x: 165, y: 85 },
+    ];
+    const opposite: Fixture = {
+      ...original,
+      id: "opposite",
+      side: -1,
+      wallAttach: { ...original.wallAttach, offset: 240 },
+    };
+    const fixtures = [original, opposite];
+    expect(
+      findFixtureDuplicateSpan(
+        original,
+        host,
+        fixtures,
+        [door],
+        [obstacle],
+        20,
+      ),
+    ).toEqual({ wallId: host.id, offset: 239.5, length: 60 });
+    expect(
+      findFixtureDuplicateSpan(
+        { ...original, depth: 42 },
+        host,
+        fixtures,
+        [door],
+        [obstacle],
+        20,
+      ),
+    ).toBeNull();
   });
 
   it("crosses to the opposite face of the same wall without sliding the basin", () => {
