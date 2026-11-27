@@ -782,6 +782,11 @@ describe("FloorPlan touch gestures", () => {
     const fixture = () => useApp.getState().plan.fixtures?.[0];
     const selection = () => canvas.querySelector("[data-fixture-selection]");
 
+    const icon = button("Sink").querySelector("svg");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
+    expect(
+      Array.from(icon?.children ?? [], (shape) => shape.localName),
+    ).toEqual(["rect", "rect", "circle", "path"]);
     fireEvent.click(button("Sink"));
     down(1, 500, 160, { pointerType: "mouse" });
     up(1, 500, 160, "mouse");

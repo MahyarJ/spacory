@@ -2,12 +2,12 @@ import { useApp } from "@app/store";
 import buttons from "@ui/Button.module.css";
 import { ICON_SIZE } from "@ui/constants";
 import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
+import { SinkIcon } from "@ui/SinkSymbol";
 
 import clsx from "clsx";
 import {
   BrickWall,
   DoorOpen,
-  Droplets,
   Grid2x2,
   Maximize,
   MousePointer2,
@@ -61,7 +61,7 @@ export function Toolbar() {
         <ToolbarButton tool="wall" label="Wall" icon={BrickWall} />
         <ToolbarButton tool="window" label="Window" icon={Grid2x2} />
         <ToolbarButton tool="door" label="Door" icon={DoorOpen} />
-        <ToolbarButton tool="sink" label="Sink" icon={Droplets} />
+        <ToolbarButton tool="sink" label="Sink" icon={SinkIcon} />
         <ToolbarButton tool="label" label="Label" icon={Type} />
         <ToolbarButton tool="pan" label="Pan" icon={Move} />
         <button

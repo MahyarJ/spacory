@@ -5,8 +5,9 @@ import {
   getFixtureGeometry,
   getSinkSymbol,
 } from "@geometry/fixtures";
+import { SinkSymbol } from "@ui/SinkSymbol";
 
-function SinkSymbol({
+function CanvasSinkSymbol({
   footprint,
   filling,
   preview = false,
@@ -17,22 +18,21 @@ function SinkSymbol({
   preview?: boolean;
   selected?: boolean;
 }) {
-  const { rim, basin, drain, tap } = getSinkSymbol(footprint);
+  const symbol = getSinkSymbol(footprint.wallAttach.length, footprint.depth);
   return (
     <>
-      <rect
-        {...rim}
-        fill={filling}
-        fillOpacity={preview ? 0.2 : undefined}
-        strokeWidth={preview ? 2 : undefined}
-        vectorEffect={preview ? "non-scaling-stroke" : undefined}
+      <SinkSymbol
+        symbol={symbol}
+        rimStyle={{
+          fill: filling,
+          fillOpacity: preview ? 0.2 : undefined,
+          strokeWidth: preview ? 2 : undefined,
+          vectorEffect: preview ? "non-scaling-stroke" : undefined,
+        }}
       />
-      <rect {...basin} fill="none" />
-      <circle {...drain} fill="none" />
-      <path d={tap} fill="none" />
       {selected && (
         <rect
-          {...rim}
+          {...symbol.rim}
           data-fixture-selection=""
           fill="none"
           stroke="var(--sp-accent)"
@@ -64,7 +64,7 @@ export function SinkPreview({
       strokeLinejoin="round"
       pointerEvents="none"
     >
-      <SinkSymbol footprint={footprint} filling={color} preview />
+      <CanvasSinkSymbol footprint={footprint} filling={color} preview />
     </g>
   );
 }
@@ -95,7 +95,7 @@ export function FixturesLayer({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <SinkSymbol
+            <CanvasSinkSymbol
               footprint={fixture}
               filling="var(--sp-bg)"
               selected={selectedIds.has(fixture.id)}
