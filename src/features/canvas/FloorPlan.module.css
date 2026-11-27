@@ -18,18 +18,12 @@
   touch-action: none;
 }
 
-.badge {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-
 .select {
   cursor: default;
+}
+
+.pan {
+  cursor: grab;
 }
 
 .moving {
@@ -93,8 +87,9 @@
 
 .textOptions {
   position: absolute;
-  inset: 8px auto auto 8px;
-  max-width: calc(100% - 16px);
+  inset: calc(var(--sp-top-controls-end, 0px) + var(--sp-toolbar-gap)) auto auto
+    var(--sp-toolbar-padding-x);
+  max-width: calc(100% - 2 * var(--sp-toolbar-padding-x));
   z-index: 5;
   display: flex;
   flex-wrap: wrap;

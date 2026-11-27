@@ -66,13 +66,6 @@ export function HintBar() {
           {labelsOnly ? "." : fixturesOnly ? " to remove" : " remove selection"}
         </span>
       );
-    } else {
-      text = (
-        <span>
-          Select a wall, opening, or label to edit it, or choose a room to name
-          it. Shift-click or drag to select multiple objects.
-        </span>
-      );
     }
   } else if (tool === "sink") {
     text = <span>Click or tap near a wall face to place a sink.</span>;

@@ -31,9 +31,7 @@ export type MenuItem = {
 
 type MenuProps = {
   label: string;
-  /** Icon rendered before the trigger's label. */
-  icon?: ReactNode;
-  iconOnly?: boolean;
+  chevronOnly?: boolean;
   items: MenuItem[];
   /** Class for the trigger, so callers keep their own button styling. */
   triggerClassName?: string;
@@ -53,8 +51,7 @@ type MenuProps = {
  */
 export function Menu({
   label,
-  icon,
-  iconOnly = false,
+  chevronOnly = false,
   items,
   triggerClassName,
 }: MenuProps) {
@@ -63,8 +60,6 @@ export function Menu({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const selected = items.find((item) => item.checked);
-  const triggerLabel = selected ? `${label} (${selected.label})` : label;
 
   const close = useCallback((focusTrigger: boolean) => {
     setOpen(false);
@@ -174,16 +169,14 @@ export function Menu({
         ref={triggerRef}
         type="button"
         className={triggerClassName}
-        aria-label={triggerLabel}
+        aria-label={chevronOnly ? label : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
-        data-active={Boolean(selected)}
-        title={iconOnly ? triggerLabel : undefined}
+        title={chevronOnly ? label : undefined}
         onClick={() => (open ? close(false) : openAt("first"))}
         onKeyDown={onTriggerKeyDown}
       >
-        {icon}
-        {!iconOnly && label}
+        {!chevronOnly && label}
         {/* Points at where the panel is: down to open it, up while it's open. */}
         {open ? (
           <ChevronUp size={CHEVRON_SIZE} aria-hidden="true" />

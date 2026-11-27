@@ -2,9 +2,9 @@
    than a toolbar row) so it never reflows the canvas when it toggles. */
 .overlay {
   position: absolute;
-  max-width: calc(100% - 16px);
-  top: 8px;
-  left: 8px;
+  max-width: calc(100% - 2 * var(--sp-toolbar-padding-x));
+  top: calc(var(--sp-top-controls-end, 0px) + var(--sp-toolbar-gap));
+  left: var(--sp-toolbar-padding-x);
   z-index: 5;
 }
 

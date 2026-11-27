@@ -23,6 +23,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FloorPlan } from "./FloorPlan";
+import { ViewControls } from "./ViewControls";
 
 const wall = (
   ax: number,
@@ -51,7 +52,7 @@ const enclosedPlan = (): Plan => {
 };
 
 function openSinkMenu() {
-  fireEvent.click(screen.getByRole("button", { name: /^Fixtures/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Fixtures" }));
   return screen.getByRole("menuitemradio", { name: "Sink" });
 }
 
@@ -781,6 +782,7 @@ describe("FloorPlan touch gestures", () => {
       <>
         <Toolbar />
         <WallOptionsBar />
+        <ViewControls />
       </>,
     );
     const button = (name: string) => screen.getByRole("button", { name });
@@ -801,7 +803,7 @@ describe("FloorPlan touch gestures", () => {
     expect(
       screen.queryByText("Point closer to a wall face to place the sink."),
     ).toBeNull();
-    expect(button("Fixtures (Sink)").getAttribute("data-active")).toBe("true");
+    expect(button("Sink").getAttribute("aria-pressed")).toBe("true");
     const backEdge = "translate(405 160) rotate(270)";
     move(1, 465, 160, { pointerType: "mouse", buttons: 0 });
     expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
@@ -1511,7 +1513,7 @@ describe("FloorPlan touch gestures", () => {
     fireEvent.click(openSinkMenu());
     down(1, 285, 315);
     up(1, 285, 315);
-    fireEvent.click(openSinkMenu());
+    fireEvent.click(screen.getByRole("button", { name: "Sink" }));
     down(1, 315, 285);
     up(1, 315, 285);
 
@@ -1661,7 +1663,7 @@ describe("FloorPlan touch gestures", () => {
       ],
     };
     setup({ plan });
-    render(<Toolbar />);
+    render(<ViewControls />);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
     fireEvent.click(screen.getByRole("button", { name: "Fit plan in view" }));
     const { scale, panX, panY } = view();
@@ -1672,9 +1674,19 @@ describe("FloorPlan touch gestures", () => {
     expect(bounds.maxX * scale + panX).toBeLessThan(800);
     expect(bounds.maxY * scale + panY).toBeLessThan(600);
 
-    fireEvent.wheel(canvas, { deltaY: -250, clientX: 400, clientY: 300 });
+    fireEvent.wheel(canvas, {
+      deltaY: -250,
+      clientX: 400,
+      clientY: 300,
+      ctrlKey: true,
+    });
     expect(view().scale).toBeGreaterThan(scale);
-    fireEvent.wheel(canvas, { deltaY: 250, clientX: 400, clientY: 300 });
+    fireEvent.wheel(canvas, {
+      deltaY: 250,
+      clientX: 400,
+      clientY: 300,
+      metaKey: true,
+    });
     expect(view().scale).toBeCloseTo(scale, 8);
     expect(view().panX).toBeCloseTo(panX);
     expect(view().panY).toBeCloseTo(panY);
@@ -2059,7 +2071,56 @@ describe("FloorPlan touch gestures", () => {
     });
   });
 
-  describe("mouse behavior is unchanged", () => {
+  describe("mouse and trackpad navigation", () => {
+    it("pans with Space and preserves a pending wall endpoint", () => {
+      setup({ tool: "wall" });
+      down(1, 100, 100, { pointerType: "mouse" });
+      up(1, 100, 100, "mouse");
+
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+      down(1, 200, 200, { pointerType: "mouse" });
+      move(1, 250, 220, { pointerType: "mouse" });
+      fireEvent.keyUp(window, { key: " ", code: "Space" });
+      up(1, 250, 220, "mouse");
+
+      expect(view()).toEqual({ scale: 1, panX: 50, panY: 20 });
+      expect(useApp.getState().tool).toBe("wall");
+      expect(walls()).toHaveLength(0);
+      down(1, 310, 120, { pointerType: "mouse" });
+      up(1, 310, 120, "mouse");
+      expect(walls()[0]).toMatchObject({
+        a: { x: 100, y: 100 },
+        b: { x: 260, y: 100 },
+      });
+    });
+
+    it("uses unmodified wheel deltas to pan without changing zoom", () => {
+      setup();
+
+      expect(fireEvent.wheel(canvas, { deltaX: 35, deltaY: -20 })).toBe(false);
+      expect(view()).toEqual({ scale: 1, panX: -35, panY: 20 });
+      expect(walls()).toHaveLength(0);
+    });
+
+    it("zooms about the Safari gesture start point using the absolute scale", () => {
+      setup();
+      const gesture = (type: string, scale = 1) =>
+        fireEvent(
+          canvas,
+          Object.assign(new Event(type, { cancelable: true }), {
+            clientX: 100,
+            clientY: 200,
+            scale,
+          }),
+        );
+
+      gesture("gesturestart");
+      gesture("gesturechange", 1.2);
+      gesture("gesturechange", 1.5);
+      gesture("gestureend");
+      expect(view()).toEqual({ scale: 1.5, panX: -50, panY: -100 });
+    });
+
     it("still pans on a right-drag", () => {
       setup({ tool: "select" });
 

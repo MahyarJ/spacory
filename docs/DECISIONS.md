@@ -820,43 +820,26 @@ toolbar and menu entries size their button boxes to the touch target. Other
 controls can use an invisible overlay where the surrounding spacing gives
 each target room.
 
-## Compact editor toolbar
+## Floating editor controls
 
-Keep the common drawing and edit actions one click away. Door and Window share
-an Openings menu, and Sink lives under Fixtures so additional fixtures do not
-increase the width of the drawing strip. A category trigger highlights and
-names the active tool, and its menu marks the selected entry. File holds plan
-import and both export formats. Settings holds the existing theme and
-measurement controls together in a panel that stays open while changing them.
+The full viewport belongs to the canvas. History, drawing tools, and project
+actions are floating controls. The contextual hint sits below the drawing
+tools, and the wall and room controls follow the measured top controls so
+they clear wrapped tool rows and longer hints. Only the control surfaces
+receive pointer events. Fit frames the plan in the space between the top
+controls and the bottom-left zoom controls.
 
-The drawing tools sit in their own row at phone widths, with Settings and
-editor actions above. Icon buttons keep a 44px target on coarse pointers, and
-all popups are positioned over the editor without reflowing the canvas.
+Door and Window are direct tools. Fixtures uses a split button with an icon
+that activates the last chosen fixture and a separate chevron that lists the
+available fixtures. The picker initially shows Sink. Both parts keep a 44px
+touch target, and tools wrap as needed on phones. Import and Export stay
+visible beside Settings. The settings panel holds theme and measurement
+preferences.
 
-## The canvas pan/zoom tip is a positioned caption, and a pure function decides it
-
-**Decision.** The `Tip: Right-drag to pan, Wheel to zoom` advice moved out of the
-toolbar row into `CanvasHint` (`src/features/canvas/`), absolutely positioned at
-the canvas's bottom-right with `pointer-events: none`. *Which* text to show is
-`canvasHintForPointer` in `src/app/canvasHint.ts` — a pure function of the
-pointer kind, which `usePointerKind` (`src/ui/`) reads from `matchMedia`.
-
-**Why it moved.** It is advice about the canvas, so it reads as a caption there
-rather than as the 14th control in a row of controls — and it was the single
-widest contributor to the row's overflow at tablet widths, so relocating it fixes
-the clipping at the source instead of only below a breakpoint. It floats (rather
-than occupying layout) for the same reason `WallOptionsBar` does: toggling it
-must never reflow the canvas. `pointer-events: none` is not optional — it now
-sits over drawable canvas, and a passive hint that ate the start of a drag would
-be a worse bug than the overflow.
-
-**Why a pure helper for one string.** jsdom has no layout engine, so the layout
-half of responsive work isn't unit-testable; the pointer decision is the part
-that *can* be pinned down, and it carries a real product rule — a coarse pointer
-is shown **nothing**, not a touch equivalent, because right-drag and the wheel
-have no touch counterpart, and whether to advertise the gestures that replaced
-them (below) is a separate call. Encoded in a component that would be a comment;
-encoded in `canvasHint.ts` it is a test.
+Space temporarily enables drag-to-pan. Ordinary wheel events pan the canvas.
+Modified wheel events and trackpad pinch zoom about the pointer. Touchscreen
+pinch retains the existing two-pointer path. The zoom percentage, zoom
+buttons, and Fit provide visible viewport controls.
 
 ## Touch on the canvas: one finger drives the tool, two drive the viewport
 

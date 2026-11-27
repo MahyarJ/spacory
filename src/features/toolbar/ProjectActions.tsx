@@ -17,9 +17,7 @@ import {
   Check,
   Copy,
   Download,
-  File,
   FileJson,
-  FolderOpen,
   Image as ImageIcon,
   LoaderCircle,
 } from "lucide-react";
@@ -366,21 +364,20 @@ export function ProjectActions() {
 
   return (
     <>
+      <button
+        type="button"
+        className={toolbarStyles.textButton}
+        onClick={onImportClick}
+      >
+        Import
+      </button>
       <Menu
-        label="File"
-        icon={<File size={ICON_SIZE} />}
-        iconOnly
-        triggerClassName={toolbarStyles.iconButton}
+        label="Export"
+        triggerClassName={toolbarStyles.textButton}
         items={[
           {
-            key: "import",
-            label: "Import JSON…",
-            icon: <FolderOpen size={ICON_SIZE} />,
-            onSelect: onImportClick,
-          },
-          {
             key: "image",
-            label: "Export image…",
+            label: "Image…",
             icon: <ImageIcon size={ICON_SIZE} />,
             onSelect: () => {
               setExportError("");
@@ -389,7 +386,7 @@ export function ProjectActions() {
           },
           {
             key: "json",
-            label: "Export JSON",
+            label: "JSON",
             icon: <FileJson size={ICON_SIZE} />,
             onSelect: onExport,
           },

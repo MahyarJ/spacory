@@ -34,7 +34,7 @@ export function WallOptionsBar() {
   if (!show) return null;
 
   return (
-    <div className={styles.overlay}>
+    <div className={styles.overlay} data-canvas-top-controls>
       <div className={styles.bar}>
         <WallOptions />
       </div>

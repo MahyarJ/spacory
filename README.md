@@ -63,8 +63,9 @@ connected room structures.
   Show or hide **Wall lengths** and **Room areas** independently, then download
   PNG or SVG, or select **Copy image** to paste a PNG in supported browsers.
   Default export filenames use `floor-plan`.
-- 🧭 **Canvas** — pan (right-drag, two-finger drag, or the Pan tool) and zoom
-  (wheel or pinch); "Fit" frames the whole plan in one click
+- 🧭 **Canvas** — pan with Space+drag, right-drag, scroll, two fingers, or the
+  Pan tool. Zoom with pinch, Cmd/Ctrl+wheel, or the zoom buttons. **Fit** frames
+  the plan between the floating controls.
 - 🎨 **Theming** — dark / light / system, via CSS variables
 - 📱 **Tablet-ready** — the toolbar and app shell adapt to tablet viewport
   widths (the toolbar wraps instead of clipping its controls) and every control
@@ -116,6 +117,7 @@ Then open the printed local URL.
 | `Cmd/Ctrl+Z` | Undo |
 | `Cmd/Ctrl+Shift+Z` / `Cmd/Ctrl+Y` | Redo |
 | `Esc` | Cancel the current draw / drag |
+| `Space` + drag | Pan without switching tools |
 | `Delete` / `Backspace` | Remove the selection |
 | `[` / `]` | Decrease / increase thickness for wall-only selections |
 | `H` / `S` | Toggle selected door hinge / swing |

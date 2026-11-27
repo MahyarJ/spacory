@@ -40,8 +40,8 @@
   /* Toolbar spacing, tightened at tablet width. */
   --sp-toolbar-gap: 8px;
   --sp-toolbar-padding-x: 12px;
-  --sp-toolbar-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
-  --sp-toolbar-areas: "brand tools actions";
+  --sp-toolbar-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  --sp-toolbar-areas: "history tools actions";
 }
 
 /* Tablet and narrower. The literal must match --sp-bp-tablet above; it is
@@ -53,11 +53,11 @@
   }
 }
 
-/* Give the drawing tools a dedicated row on narrow screens. */
-@media (max-width: 640px) {
+/* Give the drawing tools a dedicated row before the side panels crowd them. */
+@media (max-width: 800px) {
   :root {
     --sp-toolbar-columns: minmax(0, 1fr) auto;
-    --sp-toolbar-areas: "brand actions" "tools tools";
+    --sp-toolbar-areas: "history actions" "tools tools";
   }
 }
 

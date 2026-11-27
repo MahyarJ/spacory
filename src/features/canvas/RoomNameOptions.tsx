@@ -20,6 +20,7 @@ export function RoomNameOptions({
   return (
     <form
       className={styles.textOptions}
+      data-canvas-top-controls
       onSubmit={(event) => {
         event.preventDefault();
         if (changed && !tooLong) setSelectedRoomName(draft.value);

@@ -1,49 +1,40 @@
 .toolbar {
   position: relative;
-  z-index: 6;
   display: grid;
+  width: 100%;
   grid-template-columns: var(--sp-toolbar-columns);
   grid-template-areas: var(--sp-toolbar-areas);
-  gap: 4px var(--sp-toolbar-gap);
-  align-items: center;
-  padding: 6px var(--sp-toolbar-padding-x);
-  background: var(--sp-panel);
-  border-bottom: 1px solid var(--sp-grid);
-}
-
-.brandGroup,
-.tools,
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.brandGroup {
-  grid-area: brand;
+  align-items: start;
   gap: var(--sp-toolbar-gap);
 }
 
-.brand {
-  margin: 0;
-  color: var(--sp-accent);
-  font-size: 16px;
-}
-
-.tools,
-.actions {
+.panel {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   min-inline-size: 0;
   margin: 0;
-  padding: 0;
-  border: 0;
+  padding: 3px;
+  color: var(--sp-text);
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-border);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+  pointer-events: auto;
+}
+
+.history {
+  grid-area: history;
+  justify-self: start;
 }
 
 .tools {
   grid-area: tools;
   justify-self: center;
-  padding: 2px;
-  border: 1px solid var(--sp-grid);
-  border-radius: 9px;
+  justify-content: center;
+  flex-wrap: wrap;
+  width: max-content;
+  max-width: 100%;
 }
 
 .actions {
@@ -51,43 +42,78 @@
   justify-self: end;
 }
 
-.divider {
-  width: 1px;
-  height: 18px;
-  margin-inline: 2px;
-  background: var(--sp-grid);
-}
-
-.iconButton {
+.iconButton,
+.textButton {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  width: 34px;
-  height: var(--sp-toolbar-button-height);
-  padding: 0;
+  gap: 8px;
+  min-width: 34px;
+  min-height: var(--sp-toolbar-button-height);
+  padding-inline: 8px;
   color: var(--sp-text);
   background: transparent;
   border: 0;
   border-radius: var(--sp-toolbar-button-radius);
+  font: inherit;
+  font-size: var(--sp-control-font-size);
+  white-space: nowrap;
   cursor: pointer;
 }
 
+.iconButton {
+  padding: 0;
+}
+
 .iconButton:hover,
-.iconButton[aria-expanded="true"] {
+.textButton:hover,
+.iconButton[aria-expanded="true"],
+.textButton[aria-expanded="true"] {
   background: var(--sp-grid);
 }
 
-.iconButton[aria-pressed="true"],
-.iconButton[data-active="true"] {
+.iconButton[aria-pressed="true"] {
   color: var(--sp-accent);
   background: color-mix(in srgb, var(--sp-accent) 16%, var(--sp-panel));
 }
 
-.iconButton:focus-visible {
+.iconButton:focus-visible,
+.textButton:focus-visible {
   outline: 2px solid var(--sp-accent);
   outline-offset: -2px;
+}
+
+.iconButton:disabled {
+  opacity: 0.45;
+  background: transparent;
+  cursor: default;
+}
+
+.insertionTools {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.fixturePicker {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-toolbar-button-radius);
+}
+
+.fixturePicker > button {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.fixtureChevron {
+  min-width: 26px;
+  border-inline-start: 1px solid var(--sp-border);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
 }
 
 .settings {
@@ -99,7 +125,7 @@
   position: absolute;
   z-index: 10;
   inset-block-start: calc(100% + 6px);
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   display: grid;
   gap: 12px;
   min-inline-size: 13rem;
@@ -107,7 +133,7 @@
   overflow: auto;
   padding: 12px;
   background: var(--sp-panel);
-  border: 1px solid var(--sp-grid);
+  border: 1px solid var(--sp-border);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
 }
@@ -126,15 +152,36 @@
   position: absolute;
   z-index: 9;
   inset-block-start: calc(100% + 0.5rem);
-  inset-inline-end: var(--sp-toolbar-padding-x);
-  max-inline-size: calc(100% - 2 * var(--sp-toolbar-padding-x));
+  inset-inline-end: 0;
+  max-inline-size: 100%;
   pointer-events: none;
 }
 
+.viewControls {
+  position: absolute;
+  z-index: 5;
+  inset: auto auto var(--sp-toolbar-padding-x) var(--sp-toolbar-padding-x);
+  font-size: var(--sp-control-font-size);
+}
+
+.zoomLevel {
+  min-width: 5ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewControls .textButton {
+  border-inline-start: 1px solid var(--sp-border);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
 @media (pointer: coarse) {
-  .iconButton {
-    width: var(--sp-touch-target);
-    height: var(--sp-touch-target);
+  .iconButton,
+  .textButton,
+  .fixtureChevron {
+    min-width: var(--sp-touch-target);
+    min-height: var(--sp-touch-target);
   }
 
   .settingsPanel {

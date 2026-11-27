@@ -51,6 +51,19 @@ describe("clampScale", () => {
   });
 });
 
+it("frames content between the floating controls when Fit receives insets", () => {
+  const view = computeFitView(
+    { minX: 0, minY: 0, maxX: 50, maxY: 500 },
+    { width: 320, height: 600 },
+    undefined,
+    undefined,
+    { top: 150, bottom: 80 },
+  );
+
+  expect(view.panY).toBeGreaterThan(150);
+  expect(view.panY + 500 * view.scale).toBeLessThan(520);
+});
+
 describe("computePinchView", () => {
   const at = (x: number, y: number): CanvasPoint => ({ x, y });
 
