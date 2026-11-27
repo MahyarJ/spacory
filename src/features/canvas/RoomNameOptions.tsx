@@ -1,6 +1,6 @@
 import { isRoomNameTooLong, MAX_ROOM_NAME_LENGTH } from "@app/roomName";
 import { useApp } from "@app/store";
-import toolbarStyles from "@features/toolbar/Toolbar.module.css";
+import optionsStyles from "@ui/OptionsPanel.module.css";
 import { type RefObject, useId, useState } from "react";
 import styles from "./FloorPlan.module.css";
 
@@ -20,7 +20,7 @@ export function RoomNameOptions({
 
   return (
     <form
-      className={`${toolbarStyles.optionsSurface} ${styles.textOptions}`}
+      className={`${optionsStyles.panel} ${styles.textOptions}`}
       data-canvas-top-controls
       onSubmit={(event) => {
         event.preventDefault();

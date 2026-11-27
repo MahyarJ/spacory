@@ -1,0 +1,24 @@
+.settings {
+  position: relative;
+  display: flex;
+}
+
+.settingsPanel {
+  position: absolute;
+  z-index: 10;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-end: calc(-1px - var(--sp-bar-padding, 2px));
+  display: grid;
+  gap: 10px;
+  min-inline-size: 13rem;
+  max-block-size: min(20rem, 75dvh);
+  overflow: auto;
+}
+
+.settingsPanel[hidden] {
+  display: none;
+}
+
+.settingsPanel p {
+  margin: 0 0 6px;
+}

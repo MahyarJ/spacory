@@ -1,0 +1,18 @@
+.viewControls {
+  position: absolute;
+  z-index: 5;
+  inset: auto auto var(--sp-toolbar-padding-x) var(--sp-toolbar-padding-x);
+  font-size: var(--sp-control-font-size);
+}
+
+.zoomLevel {
+  min-width: 5ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewControls .fit {
+  border-inline-start: 1px solid var(--sp-border);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}

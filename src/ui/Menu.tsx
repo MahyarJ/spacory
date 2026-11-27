@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Button } from "./Button";
 import styles from "./Menu.module.css";
 import {
   isMenuSwallowedKey,
@@ -167,9 +168,9 @@ export function Menu({
 
   return (
     <div ref={containerRef} className={styles.menu}>
-      <button
+      <Button
         ref={triggerRef}
-        type="button"
+        variant={chevronOnly ? "icon" : "text"}
         className={triggerClassName}
         aria-label={chevronOnly ? label : undefined}
         aria-haspopup="menu"
@@ -186,7 +187,7 @@ export function Menu({
         ) : (
           <ChevronDown size={CHEVRON_SIZE} aria-hidden="true" />
         )}
-      </button>
+      </Button>
       {open && (
         <div
           className={styles.popup}

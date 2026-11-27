@@ -6,7 +6,7 @@ import {
   EXPORT_MARGIN,
   type ExportSvgResult,
 } from "@geometry/exportSvg";
-import buttons from "@ui/Button.module.css";
+import { Button } from "@ui/Button";
 import { ICON_SIZE } from "@ui/constants";
 import { ErrorNotice } from "@ui/ErrorNotice";
 import { Menu } from "@ui/Menu";
@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import imageStyles from "./ExportImageDialog.module.css";
-import toolbarStyles from "./Toolbar.module.css";
+import styles from "./ProjectActions.module.css";
 
 const DEFAULT_EXPORT_FILENAME = "floor-plan";
 const PNG_ERROR_MESSAGE =
@@ -207,9 +207,8 @@ function ExportImageDialog({
         </div>
       </div>
       <div className={imageStyles.actions}>
-        <button
-          type="button"
-          className={`${buttons.button} ${imageStyles.primary}`}
+        <Button
+          className={imageStyles.primary}
           aria-label="Download PNG"
           title="Download PNG"
           disabled={preparingPng}
@@ -221,7 +220,7 @@ function ExportImageDialog({
             aria-hidden="true"
           />
           PNG
-        </button>
+        </Button>
         <span
           className={imageStyles.statusAnnouncement}
           role="status"
@@ -229,9 +228,7 @@ function ExportImageDialog({
         >
           {preparingPng && "Preparing PNG…"}
         </span>
-        <button
-          type="button"
-          className={buttons.button}
+        <Button
           aria-label="Download SVG"
           title="Download SVG"
           onClick={() =>
@@ -240,12 +237,11 @@ function ExportImageDialog({
         >
           <Download size={ICON_SIZE} aria-hidden="true" />
           SVG
-        </button>
+        </Button>
         {canCopyImage && (
           <>
-            <button
-              type="button"
-              className={`${buttons.button} ${imageStyles.statusButton}`}
+            <Button
+              className={imageStyles.statusButton}
               aria-label="Copy image"
               disabled={copyBusy}
               data-copied={copied}
@@ -270,7 +266,7 @@ function ExportImageDialog({
                 <Check size={ICON_SIZE} />
                 Copied
               </span>
-            </button>
+            </Button>
             <span
               className={imageStyles.statusAnnouncement}
               role="status"
@@ -366,18 +362,14 @@ export function ProjectActions() {
 
   return (
     <>
-      <button
-        type="button"
-        className={`${toolbarStyles.textButton} ${toolbarStyles.projectButton}`}
-        onClick={onImportClick}
-      >
+      <Button variant="text" className={styles.trigger} onClick={onImportClick}>
         <FolderOpen size={ICON_SIZE} aria-hidden="true" />
         Import
-      </button>
+      </Button>
       <Menu
         label="Export"
         triggerIcon={<Upload size={ICON_SIZE} aria-hidden="true" />}
-        triggerClassName={`${toolbarStyles.textButton} ${toolbarStyles.projectButton}`}
+        triggerClassName={styles.trigger}
         items={[
           {
             key: "image",
@@ -397,7 +389,7 @@ export function ProjectActions() {
         ]}
       />
       <ErrorNotice
-        className={toolbarStyles.exportError}
+        className={styles.exportError}
         message={imagePlan ? "" : exportError}
       />
       {imagePlan && (

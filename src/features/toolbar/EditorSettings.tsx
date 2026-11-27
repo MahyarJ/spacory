@@ -1,9 +1,11 @@
+import { IconButton } from "@ui/Button";
 import { ICON_SIZE } from "@ui/constants";
+import optionsStyles from "@ui/OptionsPanel.module.css";
 import { Settings } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import styles from "./EditorSettings.module.css";
 import { MeasurementSystemSwitch } from "./MeasurementSystemSwitch";
 import { ThemeSwitch } from "./ThemeSwitch";
-import styles from "./Toolbar.module.css";
 
 export function EditorSettings() {
   const [open, setOpen] = useState(false);
@@ -38,24 +40,21 @@ export function EditorSettings() {
 
   return (
     <div className={styles.settings} ref={containerRef}>
-      <button
+      <IconButton
         ref={triggerRef}
-        type="button"
-        className={styles.iconButton}
-        aria-label="Settings"
+        label="Settings"
         aria-expanded={open}
         aria-controls={panelId}
-        title="Settings"
         onClick={() => {
           if (!open) triggerRef.current?.focus();
           setOpen(!open);
         }}
       >
         <Settings size={ICON_SIZE} aria-hidden="true" />
-      </button>
+      </IconButton>
       <section
         id={panelId}
-        className={`${styles.optionsSurface} ${styles.settingsPanel}`}
+        className={`${optionsStyles.panel} ${styles.settingsPanel}`}
         aria-label="Editor settings"
         hidden={!open}
       >
