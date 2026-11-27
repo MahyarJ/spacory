@@ -1,5 +1,6 @@
 import { selectionCount } from "@app/selection";
 import { useApp } from "@app/store";
+import toolbarStyles from "../Toolbar.module.css";
 import { WallOptions } from "./WallOptions";
 import styles from "./WallOptions.module.css";
 import { WallResizeStatus } from "./WallResizeControls";
@@ -35,7 +36,7 @@ export function WallOptionsBar() {
 
   return (
     <div className={styles.overlay} data-canvas-top-controls>
-      <div className={styles.bar}>
+      <div className={`${toolbarStyles.optionsSurface} ${styles.bar}`}>
         <WallOptions />
       </div>
       <WallResizeStatus />

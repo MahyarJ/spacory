@@ -46,10 +46,8 @@ export function WallResizeControls({
     { value: first, label: lastName },
   ] as const;
   return (
-    <div className={styles.moveControls}>
-      <span className={styles.label} aria-hidden="true">
-        Move
-      </span>
+    <div className={styles.optionGroup}>
+      <span aria-hidden="true">Move</span>
       <SegmentedControl
         label="Move"
         options={options}

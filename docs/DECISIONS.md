@@ -822,10 +822,17 @@ each target room.
 
 ## Floating editor controls
 
-The full viewport belongs to the canvas. History, drawing tools, and project
-actions are floating controls. The contextual hint sits below the drawing
-tools, and the wall and room controls follow the measured top controls so
-they clear wrapped tool rows and longer hints. Only the control surfaces
+The full viewport belongs to the canvas. A small wordmark sits on the left,
+the drawing tools stay centered, and history sits in its own floating bar
+beside the project actions on the right. On narrow phones the wordmark
+gives its space to the top-row controls, which keep the Import and Export
+icons and labels.
+
+The contextual hint sits below the drawing tools. Wall and room controls
+align with the right edge of the project actions and follow the measured
+top controls so they clear wrapped tool rows and longer hints. The
+contextual controls and Settings use the same panel surface and put
+regular-weight labels above their controls. Only the control surfaces
 receive pointer events. Fit frames the plan in the space between the top
 controls and the bottom-left zoom controls.
 

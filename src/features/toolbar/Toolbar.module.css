@@ -23,9 +23,15 @@
   pointer-events: auto;
 }
 
-.history {
-  grid-area: history;
-  justify-self: start;
+.wordmark {
+  grid-area: wordmark;
+  display: var(--sp-toolbar-wordmark-display, block);
+  align-self: center;
+  margin: 0;
+  color: var(--sp-text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-shadow: 0 0 6px var(--sp-bg);
 }
 
 .tools {
@@ -37,9 +43,12 @@
   max-width: 100%;
 }
 
-.actions {
-  grid-area: actions;
-  justify-self: end;
+.commands {
+  grid-area: commands;
+  display: flex;
+  gap: var(--sp-toolbar-gap);
+  justify-self: var(--sp-toolbar-commands-self, end);
+  justify-content: space-between;
 }
 
 .iconButton,
@@ -64,6 +73,17 @@
 
 .iconButton {
   padding: 0;
+}
+
+.projectButton {
+  gap: var(--sp-project-button-gap, 6px);
+  padding-inline: var(--sp-project-button-padding, 8px);
+}
+
+.projectButton svg:first-child {
+  width: var(--sp-project-icon-size, 18px);
+  height: var(--sp-project-icon-size, 18px);
+  flex: none;
 }
 
 .iconButton:hover,
@@ -121,21 +141,26 @@
   display: flex;
 }
 
+.optionsSurface {
+  padding: 12px;
+  color: var(--sp-text);
+  background: var(--sp-panel);
+  border: 1px solid var(--sp-border);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
+  font-size: var(--sp-control-font-size);
+}
+
 .settingsPanel {
   position: absolute;
   z-index: 10;
   inset-block-start: calc(100% + 6px);
-  inset-inline-end: 0;
+  inset-inline-end: -4px;
   display: grid;
   gap: 12px;
   min-inline-size: 13rem;
   max-block-size: min(20rem, 75dvh);
   overflow: auto;
-  padding: 12px;
-  background: var(--sp-panel);
-  border: 1px solid var(--sp-border);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
 }
 
 .settingsPanel[hidden] {
@@ -144,8 +169,6 @@
 
 .settingsPanel p {
   margin: 0 0 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
 }
 
 .exportError {

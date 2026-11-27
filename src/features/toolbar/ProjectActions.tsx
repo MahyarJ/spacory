@@ -18,8 +18,10 @@ import {
   Copy,
   Download,
   FileJson,
+  FolderOpen,
   Image as ImageIcon,
   LoaderCircle,
+  Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import imageStyles from "./ExportImageDialog.module.css";
@@ -366,14 +368,16 @@ export function ProjectActions() {
     <>
       <button
         type="button"
-        className={toolbarStyles.textButton}
+        className={`${toolbarStyles.textButton} ${toolbarStyles.projectButton}`}
         onClick={onImportClick}
       >
+        <FolderOpen size={ICON_SIZE} aria-hidden="true" />
         Import
       </button>
       <Menu
         label="Export"
-        triggerClassName={toolbarStyles.textButton}
+        triggerIcon={<Upload size={ICON_SIZE} aria-hidden="true" />}
+        triggerClassName={`${toolbarStyles.textButton} ${toolbarStyles.projectButton}`}
         items={[
           {
             key: "image",

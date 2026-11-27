@@ -104,7 +104,7 @@ export function LengthField({
     <form
       noValidate
       ref={fieldRef}
-      className={styles.lengthField}
+      className={styles.optionGroup}
       onFocus={renderControls ? () => setActive(true) : undefined}
       onMouseDown={
         renderControls
@@ -160,35 +160,31 @@ export function LengthField({
         commit();
       }}
     >
-      {!hideLabel && (
-        <label className={styles.label} htmlFor={id}>
-          {label}
-        </label>
-      )}
-      <div className={styles.lengthInputFrame}>
-        <input
-          id={id}
-          aria-label={imperial ? `${label} feet` : label}
-          type="number"
-          inputMode={imperial ? "numeric" : "decimal"}
-          min={imperial ? 0 : minCm / lengthToCm(1, singleUnit ?? "cm")}
-          step={imperial ? 1 : "any"}
-          className={styles.lengthInput}
-          value={draft.primary}
-          onPointerDown={renderControls ? () => setActive(true) : undefined}
-          onChange={(event) => {
-            dirty.current = true;
-            setActive(true);
-            setDraft({ ...draft, primary: event.target.value });
-          }}
-        />
-      </div>
-      <span className={styles.unit}>
-        {singleUnit ?? (imperial ? "ft" : "cm")}
-      </span>
-      {imperial && (
-        <>
-          <div className={styles.lengthInputFrame}>
+      {!hideLabel && <label htmlFor={id}>{label}</label>}
+      <div className={styles.measurements}>
+        <div className={styles.measurement}>
+          <input
+            id={id}
+            aria-label={imperial ? `${label} feet` : label}
+            type="number"
+            inputMode={imperial ? "numeric" : "decimal"}
+            min={imperial ? 0 : minCm / lengthToCm(1, singleUnit ?? "cm")}
+            step={imperial ? 1 : "any"}
+            className={styles.lengthInput}
+            value={draft.primary}
+            onPointerDown={renderControls ? () => setActive(true) : undefined}
+            onChange={(event) => {
+              dirty.current = true;
+              setActive(true);
+              setDraft({ ...draft, primary: event.target.value });
+            }}
+          />
+          <span className={styles.unit}>
+            {singleUnit ?? (imperial ? "ft" : "cm")}
+          </span>
+        </div>
+        {imperial && (
+          <div className={styles.measurement}>
             <input
               aria-label={`${label} inches`}
               type="number"
@@ -204,10 +200,10 @@ export function LengthField({
                 setDraft({ ...draft, inches: event.target.value });
               }}
             />
+            <span className={styles.unit}>in</span>
           </div>
-          <span className={styles.unit}>in</span>
-        </>
-      )}
+        )}
+      </div>
       {active && renderControls?.(draftCm)}
       {active && renderDraft?.(draftCm)}
     </form>

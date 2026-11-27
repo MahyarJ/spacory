@@ -55,7 +55,7 @@ export function EditorSettings() {
       </button>
       <section
         id={panelId}
-        className={styles.settingsPanel}
+        className={`${styles.optionsSurface} ${styles.settingsPanel}`}
         aria-label="Editor settings"
         hidden={!open}
       >

@@ -89,29 +89,7 @@ export function Toolbar() {
   return (
     <>
       <div className={styles.toolbar}>
-        <fieldset
-          className={`${styles.panel} ${styles.history}`}
-          aria-label="Edit history"
-        >
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={undo}
-            aria-label="Undo"
-            title="Undo"
-          >
-            <Undo2 size={ICON_SIZE} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className={styles.iconButton}
-            onClick={redo}
-            aria-label="Redo"
-            title="Redo"
-          >
-            <Redo2 size={ICON_SIZE} aria-hidden="true" />
-          </button>
-        </fieldset>
+        <h1 className={styles.wordmark}>Spacory</h1>
         <fieldset
           className={`${styles.panel} ${styles.tools}`}
           aria-label="Drawing tools"
@@ -126,13 +104,32 @@ export function Toolbar() {
             <ToolButton tool="label" label="Label" icon={Type} />
           </div>
         </fieldset>
-        <fieldset
-          className={`${styles.panel} ${styles.actions}`}
-          aria-label="Project actions"
-        >
-          <ProjectActions />
-          <EditorSettings />
-        </fieldset>
+        <div className={styles.commands}>
+          <fieldset className={styles.panel} aria-label="Edit history">
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={undo}
+              aria-label="Undo"
+              title="Undo"
+            >
+              <Undo2 size={ICON_SIZE} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={styles.iconButton}
+              onClick={redo}
+              aria-label="Redo"
+              title="Redo"
+            >
+              <Redo2 size={ICON_SIZE} aria-hidden="true" />
+            </button>
+          </fieldset>
+          <fieldset className={styles.panel} aria-label="Project actions">
+            <ProjectActions />
+            <EditorSettings />
+          </fieldset>
+        </div>
       </div>
       <HintBar />
     </>

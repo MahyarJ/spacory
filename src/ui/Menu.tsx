@@ -31,6 +31,7 @@ export type MenuItem = {
 
 type MenuProps = {
   label: string;
+  triggerIcon?: ReactNode;
   chevronOnly?: boolean;
   items: MenuItem[];
   /** Class for the trigger, so callers keep their own button styling. */
@@ -51,6 +52,7 @@ type MenuProps = {
  */
 export function Menu({
   label,
+  triggerIcon,
   chevronOnly = false,
   items,
   triggerClassName,
@@ -176,6 +178,7 @@ export function Menu({
         onClick={() => (open ? close(false) : openAt("first"))}
         onKeyDown={onTriggerKeyDown}
       >
+        {triggerIcon}
         {!chevronOnly && label}
         {/* Points at where the panel is: down to open it, up while it's open. */}
         {open ? (
