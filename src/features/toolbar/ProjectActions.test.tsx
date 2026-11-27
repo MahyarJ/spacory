@@ -87,15 +87,15 @@ function readBlobText(blob: Blob): Promise<string> {
   });
 }
 
-/** Open the Export menu and return its entries, in rendered order. */
-function openExportMenu(): HTMLElement[] {
-  fireEvent.click(screen.getByRole("button", { name: /Export/ }));
+/** Open the File menu and return its entries, in rendered order. */
+function openFileMenu(): HTMLElement[] {
+  fireEvent.click(screen.getByRole("button", { name: "File" }));
   return screen.getAllByRole("menuitem");
 }
 
 function openImageDialog(): HTMLElement {
-  openExportMenu();
-  fireEvent.click(screen.getByRole("menuitem", { name: "Image…" }));
+  openFileMenu();
+  fireEvent.click(screen.getByRole("menuitem", { name: "Export image…" }));
   const dialog = screen.getByRole("dialog", { name: "Export image" });
   vi.spyOn(dialog, "getBoundingClientRect").mockReturnValue(
     new DOMRect(100, 100, 500, 360),
@@ -167,7 +167,7 @@ HTMLDialogElement.prototype.close = function () {
   this.open = false;
 };
 
-describe("ProjectActions — Export menu", () => {
+describe("ProjectActions — File menu", () => {
   let downloads: Download[];
 
   beforeEach(() => {
@@ -185,12 +185,13 @@ describe("ProjectActions — Export menu", () => {
 
   it("offers one image entry and downloads JSON directly", async () => {
     render(<ProjectActions />);
-    expect(openExportMenu().map((item) => item.textContent)).toEqual([
-      "Image…",
-      "JSON",
+    expect(openFileMenu().map((item) => item.textContent)).toEqual([
+      "Import JSON…",
+      "Export image…",
+      "Export JSON",
     ]);
 
-    fireEvent.click(screen.getByRole("menuitem", { name: "JSON" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Export JSON" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("menu")).toBeNull();
@@ -208,8 +209,8 @@ describe("ProjectActions — Export menu", () => {
     mockPngRasterizer();
     render(<ProjectActions />);
 
-    openExportMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "JSON" }));
+    openFileMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Export JSON" }));
 
     const controls = within(openImageDialog());
     fireEvent.click(controls.getByRole("button", { name: "Download SVG" }));

@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { CANVAS_POINTER_HINT } from "@app/canvasHint";
-import { cleanup, render, screen } from "@testing-library/react";
+import { useApp } from "@app/store";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -27,7 +35,7 @@ function stubCoarsePointer(coarse: boolean) {
  */
 function toolbarRow(): HTMLElement {
   const brand = screen.getByRole("heading", { name: "Spacory" });
-  const row = brand.parentElement as HTMLElement;
+  const row = brand.closest("header")!;
   expect(row.contains(screen.getByRole("button", { name: /Undo/ }))).toBe(true);
   return row;
 }
@@ -64,11 +72,69 @@ describe("App shell — the pan/zoom tip", () => {
     expect(screen.getByRole("button", { name: /Redo/ })).toBeTruthy();
   });
 
-  it("keeps every toolbar control rendered alongside it on a fine pointer", () => {
+  it("keeps common tools and actions directly accessible", () => {
     render(<App />);
 
-    for (const name of [/Select/, /Wall/, /Fit/, /Import/, /Export/, /Undo/]) {
+    for (const name of [/Select/, /Wall/, /Fit/, /File/, /Settings/, /Undo/]) {
       expect(screen.getByRole("button", { name })).toBeTruthy();
     }
+  });
+});
+
+describe("App shell — toolbar menus", () => {
+  afterEach(() => {
+    cleanup();
+    useApp.getState().setTool("select");
+    useApp.getState().setThemeMode("system");
+    localStorage.clear();
+  });
+
+  it("selects an opening by keyboard and keeps its category active", () => {
+    render(<App />);
+
+    const openings = screen.getByRole("button", { name: "Openings" });
+    openings.focus();
+    fireEvent.keyDown(openings, { key: "ArrowDown" });
+    const door = screen.getByRole("menuitemradio", { name: "Door" });
+    const window = screen.getByRole("menuitemradio", { name: "Window" });
+    expect(document.activeElement).toBe(door);
+    fireEvent.keyDown(door, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(window);
+    fireEvent.click(window);
+
+    expect(useApp.getState().tool).toBe("window");
+    expect(document.activeElement).toBe(openings);
+    expect(openings.getAttribute("aria-label")).toBe("Openings (Window)");
+    fireEvent.click(openings);
+    expect(
+      screen.getByRole("menuitemradio", { name: "Window", checked: true }),
+    ).toBeTruthy();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    expect(openings.getAttribute("aria-label")).toBe("Openings");
+  });
+
+  it("exposes preferences through Settings and returns focus on Escape", () => {
+    act(() => useApp.getState().setThemeMode("system"));
+    render(<App />);
+
+    const settings = screen.getByRole("button", { name: "Settings" });
+    expect(screen.queryByRole("group", { name: "Theme" })).toBeNull();
+    fireEvent.click(settings);
+    const panel = screen.getByRole("region", { name: "Editor settings" });
+    const light = within(panel).getByRole("button", { name: "Light" });
+    light.focus();
+    fireEvent.click(light);
+    expect(useApp.getState().themeMode).toBe("light");
+    expect(
+      within(panel).getByRole("group", { name: "Measurement system" }),
+    ).toBeTruthy();
+    fireEvent.keyDown(light, { key: "Escape" });
+    expect(
+      screen.queryByRole("region", { name: "Editor settings" }),
+    ).toBeNull();
+    expect(document.activeElement).toBe(settings);
   });
 });

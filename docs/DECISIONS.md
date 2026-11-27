@@ -713,9 +713,9 @@ there's one consistent set and nothing to hand-maintain.
 
 ## Menus/overlays: hand-rolled behavior in `src/ui/`, no UI library (yet)
 
-**Decision.** The toolbar's Export menu is built in-house: `src/ui/Menu.tsx` owns
+**Decision.** The toolbar's menus are built in-house: `src/ui/Menu.tsx` owns
 the WAI-ARIA menu-button behavior (`aria-haspopup`/`aria-expanded` trigger,
-`role="menu"` popup of `role="menuitem"` buttons, roving keyboard focus,
+`role="menu"` popup of action or radio menu buttons, roving keyboard focus,
 dismissal on select / `Escape` / outside click / focus leave, focus back to the
 trigger on `Escape`). No UI-component dependency was added. The keyboard
 wrapping rules live in the pure, tested `src/ui/menuNavigation.ts`.
@@ -811,51 +811,27 @@ so the later `blur` (when the field survives, e.g. clicking the same element)
 adds no second or empty undo entry. Every path — Enter, blur, click-away —
 shares one `parseDraft` validation, so an invalid draft is rejected identically.
 
-## Responsive breakpoints live as tokens in `theme.css`, touch sizing as a pointer query
+## Responsive breakpoints and touch sizing
 
-**Decision.** The named breakpoint (`--sp-bp-tablet`) and the touch-target floor
-(`--sp-touch-target`) are tokens in `src/theme.css`. Anything that varies **by
-width** is expressed as a token flip inside the single `@media (max-width: 768px)`
-block in that same file, so the pixel literal is spelled out exactly once; CSS
-modules only read `var(--sp-toolbar-gap)` / `var(--sp-toolbar-padding-x)`.
-Anything that varies **by pointer** — the 44px control floors — is a
-`@media (pointer: coarse)` block in the CSS module beside the control it sizes,
-reading the shared token for the value.
+Define width breakpoints in `src/theme.css` and expose the responsive values
+to CSS modules as custom properties. Define pointer queries beside the controls
+they affect and read the shared `--sp-touch-target` value there. The compact
+toolbar and menu entries size their button boxes to the touch target. Other
+controls can use an invisible overlay where the surrounding spacing gives
+each target room.
 
-**Why the split.** CSS cannot interpolate a custom property into a media
-condition (`@media (max-width: var(--sp-bp-tablet))` is invalid), so a breakpoint
-"token" only actually prevents duplication if the width-dependent rules
-themselves are centralized. Pointer queries carry no such literal, so keeping
-them next to the controls costs nothing and keeps a button's sizing readable in
-one place. A phone-width pass adds `--sp-bp-phone` and a second flip block the
-same way.
+## Compact editor toolbar
 
-**Why the touch floor grows the hit area, not the control.** A 44px `min-height`
-on a 28px button is a visible restyle: the toolbar gets taller, buttons that were
-wide-and-short turn square, and the theme switch's `border-radius: 999px`
-segments become circles. None of that is what the floor is *for* — the
-requirement is that a finger can hit the control, not that the control looks
-different on a touch screen. So under `pointer: coarse` each control gets an
-invisible `::after` overlay `--sp-touch-target` tall, centred on its box: the
-tap target is finger-sized while the painted control is pixel-identical to the
-desktop one. Horizontally a plain `min-width` does the job — every toolbar
-button is an icon plus a label and already exceeds the target, so it never
-binds, and a width floor (unlike an overlay) can't reach into the neighbour
-beside it. That last part is a fact about *those* buttons, not a general rule:
-an **icon-only** control is narrower than the target, so a `min-width` there
-would visibly stretch it, and the answer is the same overlay made square plus a
-gap wide enough that two neighbours' hit areas don't meet — which is what the
-selection action buttons in `WallOptions.module.css` do. The one thing the
-overlays do cost is a taller `row-gap` once the row wraps, so two rows' targets
-don't overlap. `Menu`'s entries keep a real
-`min-height` instead: they are stacked full-width rows, where overlapping hit
-areas would mean tapping one entry and triggering the next.
+Keep the common drawing and edit actions one click away. Door and Window share
+an Openings menu, and Sink lives under Fixtures so additional fixtures do not
+increase the width of the drawing strip. A category trigger highlights and
+names the active tool, and its menu marks the selected entry. File holds plan
+import and both export formats. Settings holds the existing theme and
+measurement controls together in a panel that stays open while changing them.
 
-**Why the toolbar wraps rather than scrolls.** At 768px the row is wider than the
-viewport, and a non-wrapping row clipped Undo/Redo off-screen with no way to
-reach them. `flex-wrap: wrap` is invisible at desktop widths (nothing wraps) and
-needs no breakpoint at all, where a horizontal scroller would hide controls
-behind a gesture.
+The drawing tools sit in their own row at phone widths, with Settings and
+editor actions above. Icon buttons keep a 44px target on coarse pointers, and
+all popups are positioned over the editor without reflowing the canvas.
 
 ## The canvas pan/zoom tip is a positioned caption, and a pure function decides it
 

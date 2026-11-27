@@ -50,6 +50,11 @@ const enclosedPlan = (): Plan => {
   };
 };
 
+function openSinkMenu() {
+  fireEvent.click(screen.getByRole("button", { name: /^Fixtures/ }));
+  return screen.getByRole("menuitemradio", { name: "Sink" });
+}
+
 /**
  * jsdom implements neither `PointerEvent` nor pointer capture, so synthesize the
  * parts the canvas actually reads: a bubbling MouseEvent carrying a `pointerId`.
@@ -782,12 +787,13 @@ describe("FloorPlan touch gestures", () => {
     const fixture = () => useApp.getState().plan.fixtures?.[0];
     const selection = () => canvas.querySelector("[data-fixture-selection]");
 
-    const icon = button("Sink").querySelector("svg");
+    const sink = openSinkMenu();
+    const icon = sink.querySelector("svg");
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
     expect(
       Array.from(icon?.children ?? [], (shape) => shape.localName),
     ).toEqual(["rect", "rect", "circle", "path"]);
-    fireEvent.click(button("Sink"));
+    fireEvent.click(sink);
     down(1, 500, 160, { pointerType: "mouse" });
     up(1, 500, 160, "mouse");
     expect(fixture()).toBeUndefined();
@@ -795,7 +801,7 @@ describe("FloorPlan touch gestures", () => {
     expect(
       screen.queryByText("Point closer to a wall face to place the sink."),
     ).toBeNull();
-    expect(button("Sink").getAttribute("aria-pressed")).toBe("true");
+    expect(button("Fixtures (Sink)").getAttribute("data-active")).toBe("true");
     const backEdge = "translate(405 160) rotate(270)";
     move(1, 465, 160, { pointerType: "mouse", buttons: 0 });
     expect(fixturePreview()?.getAttribute("data-fixture-preview")).toBe(
@@ -866,7 +872,7 @@ describe("FloorPlan touch gestures", () => {
       canvas.querySelector('[data-fixture="sink"]')?.getAttribute("transform"),
     ).toBe(backEdge);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
-    fireEvent.click(button("Fit"));
+    fireEvent.click(button("Fit plan in view"));
     const { scale, panX, panY } = view();
     const { maxX, minY, maxY } = getFixtureBounds(
       fixture()!,
@@ -1502,11 +1508,10 @@ describe("FloorPlan touch gestures", () => {
       },
     });
     render(<Toolbar />);
-    const sink = screen.getByRole("button", { name: "Sink" });
-    fireEvent.click(sink);
+    fireEvent.click(openSinkMenu());
     down(1, 285, 315);
     up(1, 285, 315);
-    fireEvent.click(screen.getByRole("button", { name: "Sink" }));
+    fireEvent.click(openSinkMenu());
     down(1, 315, 285);
     up(1, 315, 285);
 
@@ -1580,7 +1585,7 @@ describe("FloorPlan touch gestures", () => {
     );
     const button = (name: string) => screen.getByRole("button", { name });
     const fixtures = () => useApp.getState().plan.fixtures;
-    fireEvent.click(button("Sink"));
+    fireEvent.click(openSinkMenu());
     down(1, 200, 180);
     down(2, 300, 180);
     up(2, 300, 180);
@@ -1658,7 +1663,7 @@ describe("FloorPlan touch gestures", () => {
     setup({ plan });
     render(<Toolbar />);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
-    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fit plan in view" }));
     const { scale, panX, panY } = view();
     const bounds = getPlanBounds(plan)!;
     expect(scale).toBeLessThan(MIN_SCALE);

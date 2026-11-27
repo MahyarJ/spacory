@@ -37,9 +37,11 @@
      are pointer- rather than width-dependent so they live beside the
      controls they size. */
   --sp-touch-target: 44px;
-  /* Toolbar spacing, tightened at tablet width so the row wraps less. */
+  /* Toolbar spacing, tightened at tablet width. */
   --sp-toolbar-gap: 8px;
   --sp-toolbar-padding-x: 12px;
+  --sp-toolbar-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+  --sp-toolbar-areas: "brand tools actions";
 }
 
 /* Tablet and narrower. The literal must match --sp-bp-tablet above; it is
@@ -48,6 +50,14 @@
   :root {
     --sp-toolbar-gap: 6px;
     --sp-toolbar-padding-x: 8px;
+  }
+}
+
+/* Give the drawing tools a dedicated row on narrow screens. */
+@media (max-width: 640px) {
+  :root {
+    --sp-toolbar-columns: minmax(0, 1fr) auto;
+    --sp-toolbar-areas: "brand actions" "tools tools";
   }
 }
 

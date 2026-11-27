@@ -52,7 +52,15 @@ function mount() {
     </>,
   );
 }
+function openSettings() {
+  const settings = screen.getByRole("button", { name: "Settings" });
+  if (settings.getAttribute("aria-expanded") === "false") {
+    fireEvent.pointerDown(settings);
+    fireEvent.click(settings);
+  }
+}
 function switchTo(name: string) {
+  openSettings();
   const button = screen.getByRole("button", { name });
   fireEvent.pointerDown(button);
   fireEvent.click(button);
@@ -71,6 +79,7 @@ it("switches lengths and room areas together, persists the plan, and supports un
   const before = useApp.getState().plan;
   const view = useApp.getState().view;
   const { container } = mount();
+  openSettings();
   expect(
     screen.getByRole("button", { name: "Metric" }).getAttribute("aria-pressed"),
   ).toBe("true");

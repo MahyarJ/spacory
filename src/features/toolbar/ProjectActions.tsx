@@ -17,11 +17,11 @@ import {
   Check,
   Copy,
   Download,
+  File,
   FileJson,
   FolderOpen,
   Image as ImageIcon,
   LoaderCircle,
-  Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import imageStyles from "./ExportImageDialog.module.css";
@@ -366,18 +366,21 @@ export function ProjectActions() {
 
   return (
     <>
-      <button type="button" className={buttons.button} onClick={onImportClick}>
-        <FolderOpen size={ICON_SIZE} aria-hidden="true" />
-        Import
-      </button>
       <Menu
-        label="Export"
-        icon={<Upload size={ICON_SIZE} />}
-        triggerClassName={buttons.button}
+        label="File"
+        icon={<File size={ICON_SIZE} />}
+        iconOnly
+        triggerClassName={toolbarStyles.iconButton}
         items={[
           {
+            key: "import",
+            label: "Import JSON…",
+            icon: <FolderOpen size={ICON_SIZE} />,
+            onSelect: onImportClick,
+          },
+          {
             key: "image",
-            label: "Image…",
+            label: "Export image…",
             icon: <ImageIcon size={ICON_SIZE} />,
             onSelect: () => {
               setExportError("");
@@ -386,7 +389,7 @@ export function ProjectActions() {
           },
           {
             key: "json",
-            label: "JSON",
+            label: "Export JSON",
             icon: <FileJson size={ICON_SIZE} />,
             onSelect: onExport,
           },

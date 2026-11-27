@@ -12,7 +12,9 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 10;
-  min-width: 140px;
+  min-width: 148px;
+  max-height: min(20rem, 65dvh);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -46,6 +48,14 @@
   flex: none;
 }
 
+.item[aria-checked="true"] {
+  color: var(--sp-accent);
+}
+
+.check {
+  margin-inline-start: auto;
+}
+
 .item:hover {
   background: var(--sp-grid);
 }
@@ -55,8 +65,7 @@
   outline-offset: -2px;
 }
 
-/* Touch: entries are the full width of the popup (>= its 140px min-width), so
-   only the height needs a floor to make each one a comfortable target. */
+/* Entries already span the popup, so only the height needs a touch floor. */
 @media (pointer: coarse) {
   .item {
     min-height: var(--sp-touch-target);
