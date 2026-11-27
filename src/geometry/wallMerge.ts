@@ -1,4 +1,4 @@
-import type { Item, Point, Wall } from "@app/schema";
+import type { Point, Wall, WallMountedObject } from "@app/schema";
 import { findConnectedEndpoints, pointsEqual } from "./connectivity";
 import { getWallLength } from "./wall";
 
@@ -30,9 +30,9 @@ const ENDS = ["a", "b"] as const;
  */
 const COLLINEAR_EPS = 1e-6;
 
-export interface WallMergeResult {
+export interface WallMergeResult<T extends WallMountedObject> {
   walls: Wall[];
-  items: Item[];
+  items: T[];
   /**
    * Every seam coordinate the merge removed. Empty when nothing merged, which
    * is the common case on most commits.
@@ -75,11 +75,11 @@ export function findVacatedPoints(before: Wall[], after: Wall[]): Point[] {
  * Pure. Returns the input arrays unchanged (same identity) when nothing
  * qualifies — the common case on most commits.
  */
-export function mergeWallsAtVacatedSeams(
+export function mergeWallsAtVacatedSeams<T extends WallMountedObject>(
   before: Wall[],
   walls: Wall[],
-  items: Item[],
-): WallMergeResult {
+  items: T[],
+): WallMergeResult<T> {
   const vacated = findVacatedPoints(before, walls);
   if (vacated.length === 0) return { walls, items, mergedPoints: [] };
   let result = { walls, items };
@@ -144,11 +144,11 @@ interface Leg {
   reversed: boolean;
 }
 
-function applyMerge(
-  { walls, items }: { walls: Wall[]; items: Item[] },
+function applyMerge<T extends WallMountedObject>(
+  { walls, items }: { walls: Wall[]; items: T[] },
   { keep, drop }: MergePair,
   at: Point,
-): { walls: Wall[]; items: Item[] } {
+): { walls: Wall[]; items: T[] } {
   // `keep` keeps its direction, so the merged wall extends past whichever of its
   // ends the seam is on: `drop` comes before it when the seam is `keep.a`.
   const dropFirst = pointsEqual(keep.a, at);
@@ -192,6 +192,9 @@ function applyMerge(
         : on.base + offset;
       return {
         ...item,
+        ...(on.leg.reversed && "side" in item
+          ? { side: item.side === 1 ? -1 : 1 }
+          : {}),
         wallAttach: {
           ...item.wallAttach,
           wallId: merged.id,

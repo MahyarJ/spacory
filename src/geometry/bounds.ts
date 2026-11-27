@@ -1,4 +1,5 @@
 import { isDoor, type Plan } from "@app/schema";
+import { getFixtureBounds } from "./fixtures";
 import { getDoorGeometry, getDoorSweepPoints } from "./itemGeometry";
 import { type MeasurePlanLabel, planLabelRect } from "./planLabels";
 import { getPointOnWall } from "./wall";
@@ -23,7 +24,8 @@ export interface Bounds {
  * though — its swing arc sweeps perpendicular to the wall with a radius equal to
  * the opening's own length — so a door also contributes the exact extent of that
  * arc and its leaf lines (`getDoorSweepPoints`), which are already-drawn points
- * and so need no further padding. A plan label contributes its full text box.
+ * and so need no further padding. Fixtures contribute their rotated footprint,
+ * and plan labels contribute their full text box.
  * Returns null for an empty plan so callers can fall back to a default view instead of
  * trying to frame nothing.
  */
@@ -75,6 +77,14 @@ export function getPlanBounds(
     const { x, y, w, h } = planLabelRect(label, measureLabel);
     include(x, y, 0);
     include(x + w, y + h, 0);
+  }
+
+  for (const fixture of plan.fixtures ?? []) {
+    const wall = wallsById.get(fixture.wallAttach.wallId);
+    if (!wall) continue;
+    const { minX, minY, maxX, maxY } = getFixtureBounds(fixture, wall);
+    include(minX, minY, 0);
+    include(maxX, maxY, 0);
   }
 
   if (!has) return null;

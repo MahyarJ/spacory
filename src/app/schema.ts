@@ -62,6 +62,22 @@ export interface WindowItem extends ItemBase {
 
 export type Item = DoorItem | WindowItem;
 
+export interface WallBasin {
+  id: string;
+  type: "sink";
+  /** Span of the back edge along the host wall. */
+  wallAttach: WallAttachment;
+  /** Sign of the perpendicular to the wall's a → b direction. */
+  side: 1 | -1;
+  depth: number;
+}
+
+export type Fixture = WallBasin;
+export type FixtureType = Fixture["type"];
+export type WallMountedObject = Item | WallBasin;
+
+export const MIN_FIXTURE_DIMENSION = 1;
+
 export interface Plan {
   version: "1.3.0";
   meta: {
@@ -75,6 +91,7 @@ export interface Plan {
   items: Item[];
   roomNames?: RoomName[];
   labels?: PlanLabel[];
+  fixtures?: Fixture[];
 }
 
 export const DEFAULT_PLAN_NAME = "Untitled";

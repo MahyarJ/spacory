@@ -1,17 +1,20 @@
+import { type Fixture, MIN_FIXTURE_DIMENSION, type Plan } from "@app/schema";
 import {
   type SelectionAction,
   selectionActions,
   selectionCount,
 } from "@app/selection";
-import { useApp } from "@app/store";
+import { previewFixtureResize, useApp } from "@app/store";
 import { MIN_OPENING_WIDTH } from "@geometry/opening";
 import { getWallLength, MIN_WALL_LENGTH } from "@geometry/wall";
 import { ICON_SIZE } from "@ui/constants";
 import {
+  Copy,
   SquareCenterlineDashedHorizontal,
   SquareCenterlineDashedVertical,
   Trash2,
 } from "lucide-react";
+import { useLayoutEffect, useMemo } from "react";
 import { LengthField } from "./LengthField";
 import { ThicknessOptions } from "./ThicknessOptions";
 import styles from "./WallOptions.module.css";
@@ -22,15 +25,23 @@ export function WallOptions() {
   const selectedWalls = useApp((s) => s.selectedWalls);
   const selectedItems = useApp((s) => s.selectedItems);
   const selectedLabels = useApp((s) => s.selectedLabels);
+  const selectedFixtures = useApp((s) => s.selectedFixtures);
   const plan = useApp((s) => s.plan);
   const { walls, items } = plan;
   const system = plan.meta.measurementSystem;
   const setWallLength = useApp((s) => s.setSelectedWallLength);
   const setOpeningWidth = useApp((s) => s.setSelectedOpeningWidth);
+  const updateFixture = useApp((s) => s.updateFixture);
+  const duplicateFixture = useApp((s) => s.duplicateFixture);
 
   const canEditMeasurement =
     tool === "select" &&
-    selectionCount(selectedWalls, selectedItems, selectedLabels) === 1;
+    selectionCount(
+      selectedWalls,
+      selectedItems,
+      selectedLabels,
+      selectedFixtures,
+    ) === 1;
   const selectedWall =
     canEditMeasurement && selectedWalls.size === 1
       ? walls.find((w) => selectedWalls.has(w.id))
@@ -39,10 +50,19 @@ export function WallOptions() {
     canEditMeasurement && selectedItems.size === 1
       ? items.find((i) => selectedItems.has(i.id))
       : undefined;
-
+  const selectedFixture =
+    canEditMeasurement && selectedFixtures.size === 1
+      ? plan.fixtures?.find((fixture) => selectedFixtures.has(fixture.id))
+      : undefined;
   const actions =
     tool === "select"
-      ? selectionActions(plan, selectedWalls, selectedItems, selectedLabels)
+      ? selectionActions(
+          plan,
+          selectedWalls,
+          selectedItems,
+          selectedLabels,
+          selectedFixtures,
+        )
       : [];
 
   return (
@@ -80,17 +100,96 @@ export function WallOptions() {
         />
       )}
 
-      {actions.length > 0 && <SelectionActionButtons actions={actions} />}
+      {selectedFixture && (
+        <div className={styles.wallOptions} key={selectedFixture.id}>
+          <LengthField
+            id="fixture-width-input"
+            label="Width"
+            lengthCm={selectedFixture.wallAttach.length}
+            minCm={MIN_FIXTURE_DIMENSION}
+            system={system}
+            precise
+            onCommit={(width) => updateFixture(selectedFixture.id, { width })}
+            renderDraft={(length) => (
+              <FixtureResizeDraft
+                plan={plan}
+                fixture={selectedFixture}
+                dimension="width"
+                length={length}
+              />
+            )}
+          />
+          <LengthField
+            id="fixture-depth-input"
+            label="Depth"
+            lengthCm={selectedFixture.depth}
+            minCm={MIN_FIXTURE_DIMENSION}
+            system={system}
+            precise
+            onCommit={(depth) => updateFixture(selectedFixture.id, { depth })}
+            renderDraft={(length) => (
+              <FixtureResizeDraft
+                plan={plan}
+                fixture={selectedFixture}
+                dimension="depth"
+                length={length}
+              />
+            )}
+          />
+        </div>
+      )}
+      {actions.length > 0 && (
+        <SelectionActionButtons
+          actions={actions}
+          onDuplicate={
+            selectedFixture && (() => duplicateFixture(selectedFixture.id))
+          }
+        />
+      )}
     </div>
   );
 }
 
+function FixtureResizeDraft({
+  plan,
+  fixture,
+  dimension,
+  length,
+}: {
+  plan: Plan;
+  fixture: Fixture;
+  dimension: "width" | "depth";
+  length: number | null;
+}) {
+  const setPreview = useApp((s) => s.setFixtureResizePreview);
+  const preview = useMemo(
+    () =>
+      length === null
+        ? null
+        : previewFixtureResize(plan, fixture, { [dimension]: length }),
+    [plan, fixture, dimension, length],
+  );
+  useLayoutEffect(() => {
+    if (!preview) return;
+    setPreview(preview);
+    return () => {
+      if (useApp.getState().fixtureResizePreview === preview) setPreview(null);
+    };
+  }, [preview, setPreview]);
+  return null;
+}
+
 /**
- * On-screen equivalents of the selection's keyboard verbs, so a tablet user can
- * edit what they drew. Each button calls the very same store action the key
- * press does, so it commits once and is one undo entry — no second write path.
+ * Selection controls for mouse and touch. Actions with keyboard shortcuts
+ * share the same store commands, so either input creates one undo step.
  */
-function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
+function SelectionActionButtons({
+  actions,
+  onDuplicate,
+}: {
+  actions: SelectionAction[];
+  onDuplicate?: () => void;
+}) {
   const deleteSelected = useApp((s) => s.deleteSelected);
   const toggleHinge = useApp((s) => s.toggleSelectedDoorHingeEdge);
   const toggleSwing = useApp((s) => s.toggleSelectedDoorSwingSide);
@@ -99,7 +198,12 @@ function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
   // accelerator too, so the bar teaches the shortcut instead of replacing it.
   const config: Record<
     SelectionAction,
-    { label: string; title: string; icon: React.ReactNode; onClick: () => void }
+    {
+      label: string;
+      title: string;
+      icon: React.ReactNode;
+      onClick?: () => void;
+    }
   > = {
     remove: {
       label: "Remove",
@@ -125,6 +229,12 @@ function SelectionActionButtons({ actions }: { actions: SelectionAction[] }) {
       title: "Toggle swing (S)",
       icon: <SquareCenterlineDashedVertical size={ICON_SIZE} />,
       onClick: toggleSwing,
+    },
+    duplicate: {
+      label: "Duplicate",
+      title: "Duplicate",
+      icon: <Copy size={ICON_SIZE} />,
+      onClick: onDuplicate,
     },
   };
 

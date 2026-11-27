@@ -368,6 +368,18 @@ describe("ProjectActions — Export menu", () => {
     wallLengths,
     roomAreas,
   }) => {
+    useApp.getState().loadPlan({
+      ...roomPlan(),
+      fixtures: [
+        {
+          id: "sink",
+          type: "sink",
+          wallAttach: { wallId: "w2", offset: 120, length: 80 },
+          side: -1,
+          depth: 50,
+        },
+      ],
+    });
     const drawImage = mockPngRasterizer();
     render(<ProjectActions />);
     const dialog = openImageDialog();
@@ -408,6 +420,11 @@ describe("ProjectActions — Export menu", () => {
       preview.querySelectorAll('[data-layer="walls"] polygon'),
     ).toHaveLength(4);
     expect(preview.querySelector('[data-layer="items"] path')).not.toBeNull();
+    expect(
+      preview
+        .querySelector('[data-layer="fixtures"] [data-fixture="sink"]')
+        ?.getAttribute("transform"),
+    ).toBe("translate(405 160) rotate(270)");
     expect(
       preview.querySelector('[data-layer="plan-labels"] text')?.textContent,
     ).toBe("Terrace & 茶室 <🌿>");

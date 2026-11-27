@@ -7,11 +7,25 @@ import {
   translateWallEndpoint,
   type WallEndpointRef,
 } from "@geometry/connectivity";
+import {
+  type FixtureConflict,
+  type FixtureFootprint,
+  type FixtureMount,
+  type FixtureMoveConflict,
+  findFixtureDuplicateSpan,
+  fitFixtureSpan,
+  fixtureMountEquals,
+  getFixtureConflict,
+  SINK_DEPTH,
+  slideFixtureGroup,
+} from "@geometry/fixtures";
 import { reconcileItemsToWalls } from "@geometry/itemGeometry";
+import { computeWallGeometry, paintedWallPolygons } from "@geometry/junction";
 import { MIN_OPENING_WIDTH, resizeOpeningWidth } from "@geometry/opening";
 import type { MeasurePlanLabel } from "@geometry/planLabels";
 import { detectRooms, findRoomAt, resolveRoomNames } from "@geometry/rooms";
 import {
+  getWallDirection,
   getWallLength,
   MIN_WALL_LENGTH,
   type WallResizeAnchor,
@@ -37,15 +51,24 @@ import { isPlanLabelText } from "./planLabel";
 import { isRoomNameTooLong } from "./roomName";
 import {
   createInitialPlan,
+  type Fixture,
+  type FixtureType,
   type Item,
   isDoor,
   type MeasurementSystem,
+  MIN_FIXTURE_DIMENSION,
   type Plan,
   type PlanLabel,
   type Point,
   type Wall,
+  type WallMountedObject,
 } from "./schema";
-import { isWallOnlySelection } from "./selection";
+import {
+  isWallOnlySelection,
+  type LabelMove,
+  selectionCount,
+  translateLabelSelection,
+} from "./selection";
 import {
   applyThemeAttr,
   initialTheme,
@@ -63,7 +86,17 @@ import {
   type ViewState,
 } from "./viewport";
 
-export type Tool = "select" | "wall" | "window" | "door" | "label" | "pan";
+export type Tool =
+  | "select"
+  | "wall"
+  | "window"
+  | "door"
+  | "label"
+  | "pan"
+  | FixtureType;
+
+type FixtureEdit = { width?: number; depth?: number };
+type FixtureResizePreview = ReturnType<typeof previewFixtureResize>;
 
 type WallLengthEdit = {
   wallId: string;
@@ -83,6 +116,15 @@ interface AppState {
   setMeasurementSystem: (system: MeasurementSystem) => void;
   addWall: (w: Wall) => void;
   addItem: (i: Item) => void;
+  placeFixture: (mount: FixtureMount) => FixtureConflict | undefined;
+  updateFixture: (id: string, edit: FixtureEdit) => FixtureConflict | undefined;
+  fixtureResizePreview: FixtureResizePreview;
+  setFixtureResizePreview: (preview: FixtureResizePreview) => void;
+  duplicateFixture: (id: string) => void;
+  moveFixtureSelection: (
+    moves: Array<FixtureMount & { id: string }>,
+    labels?: LabelMove,
+  ) => FixtureConflict | undefined;
   setView: (fn: (v: ViewState) => ViewState) => void;
   setCanvasSize: (size: { width: number; height: number }) => void;
   /**
@@ -98,6 +140,8 @@ interface AppState {
   selectedWalls: Set<string>;
   selectedItems: Set<string>;
   selectedLabels: Set<string>;
+  selectedFixtures: Set<string>;
+  selectFixture: (id: string, additive?: boolean) => void;
   labelEditor: { id?: string; position: Point } | null;
   selectLabels: (ids: string[], additive?: boolean) => void;
   setLabelEditor: (editor: AppState["labelEditor"]) => void;
@@ -136,7 +180,10 @@ interface AppState {
   setMarquee: (m: AppState["marquee"]) => void;
   /** Replace the whole plan (e.g. on import); resets undo history and selection. */
   loadPlan: (p: Plan) => void;
-  translateSelection: (dx: number, dy: number) => void;
+  translateSelection: (
+    dx: number,
+    dy: number,
+  ) => FixtureMoveConflict | undefined;
   /** Move selected walls and labels together without writing to history. */
   translateSelectionLive: (dx: number, dy: number) => void;
   /**
@@ -202,9 +249,26 @@ function persist() {
   savePersistedHistory(history);
 }
 
-function normalizeWallEdit(
+function mountedObjects(plan: Plan): WallMountedObject[] {
+  return plan.fixtures?.length ? [...plan.items, ...plan.fixtures] : plan.items;
+}
+
+function separateMountedObjects(objects: WallMountedObject[], plan: Plan) {
+  return {
+    items: objects.filter((item): item is Item => item.type !== "sink"),
+    ...(plan.fixtures === undefined
+      ? {}
+      : {
+          fixtures: objects.filter(
+            (item): item is Fixture => item.type === "sink",
+          ),
+        }),
+  };
+}
+
+function normalizeWallEdit<T extends WallMountedObject>(
   before: Wall[],
-  next: Pick<Plan, "walls" | "items">,
+  next: { walls: Wall[]; items: T[] },
   nextWallId: () => string,
   fixedPoints?: Point[],
 ) {
@@ -274,6 +338,7 @@ function commit(
     | "selectedConnectionPointEndpoints"
     | "selectedWalls"
     | "selectedItems"
+    | "selectedFixtures"
   >,
   heldPoint: Point | null = selection.selectedConnectionPoint,
   fixedPoints?: Point[],
@@ -284,9 +349,10 @@ function commit(
   | "selectedConnectionPointEndpoints"
   | "selectedWalls"
   | "selectedItems"
+  | "selectedFixtures"
 > {
-  // Metadata-only changes must not normalize geometry or disturb a live
-  // selection. Their geometry is the exact committed snapshot, not a preview.
+  // Edits that leave walls and openings alone skip wall normalization. This
+  // also lets metadata commits preserve the selection during a live drag.
   if (
     next.walls === history.present.walls &&
     next.items === history.present.items
@@ -300,23 +366,30 @@ function commit(
         selection.selectedConnectionPointEndpoints,
       selectedWalls: selection.selectedWalls,
       selectedItems: selection.selectedItems,
+      selectedFixtures: prunedIds(
+        selection.selectedFixtures,
+        next.fixtures ?? [],
+      ),
     };
   }
   // Merge seams vacated by this edit before splitting any new mid-span joins.
   // Both changes ride in the same history entry as the edit.
   const split = normalizeWallEdit(
     history.present.walls,
-    next,
+    { walls: next.walls, items: mountedObjects(next) },
     () => uid("wall"),
     fixedPoints,
   );
-  // Reconcile door/window openings against their wall's current length here so
+  // Reconcile wall-mounted objects against the host's current length here so
   // every wall-resize path (type-to-length, connection-point drag, auto-follow)
   // is covered without touching each call site individually.
   const reconciled: Plan = {
     ...next,
     walls: split.walls,
-    items: reconcileItemsToWalls(split.walls, split.items),
+    ...separateMountedObjects(
+      reconcileItemsToWalls(split.walls, split.items),
+      next,
+    ),
   };
   history = commitHistory(history, reconciled);
   persist();
@@ -332,6 +405,10 @@ function commit(
     selectedConnectionPointEndpoints: endpoints,
     selectedWalls: prunedIds(selection.selectedWalls, present.walls),
     selectedItems: prunedIds(selection.selectedItems, present.items),
+    selectedFixtures: prunedIds(
+      selection.selectedFixtures,
+      present.fixtures ?? [],
+    ),
   };
 }
 
@@ -358,6 +435,7 @@ function emptySelection() {
     selectedItems: new Set<string>(),
     selectedRoomPoint: null,
     selectedLabels: new Set<string>(),
+    selectedFixtures: new Set<string>(),
     labelEditor: null,
     selectedConnectionPoint: null,
     selectedConnectionPointEndpoints: [],
@@ -374,6 +452,114 @@ function commitLabels(labels: PlanLabel[], state: AppState) {
     },
     state,
   );
+}
+
+function commitFixtures(fixtures: Fixture[], state: AppState) {
+  const plan = history.present;
+  return commit(
+    {
+      ...plan,
+      fixtures,
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
+    },
+    state,
+  );
+}
+
+function fixtureConflict(
+  plan: Plan,
+  fixture: FixtureFootprint,
+  paintedWalls = paintedWallPolygons(computeWallGeometry(plan.walls)),
+) {
+  const wall = plan.walls.find(({ id }) => id === fixture.wallAttach.wallId);
+  if (!wall) return "width";
+  return getFixtureConflict(fixture, wall, plan.items, paintedWalls);
+}
+
+function moveFixtureSelectionInPlan(
+  plan: Plan,
+  moves: Array<FixtureMount & { id: string }>,
+  labels?: LabelMove,
+): { next: Plan; conflict?: FixtureConflict } {
+  if (!plan.fixtures || moves.length === 0) return { next: plan };
+  const byId = new Map(moves.map((move) => [move.id, move]));
+  const paintedWalls = paintedWallPolygons(computeWallGeometry(plan.walls));
+  const fixtures: Fixture[] = [];
+  let changed = false;
+  for (const fixture of plan.fixtures) {
+    const move = byId.get(fixture.id);
+    if (!move) {
+      fixtures.push(fixture);
+      continue;
+    }
+    const candidate = {
+      ...fixture,
+      wallAttach: move.wallAttach,
+      side: move.side,
+    };
+    const conflict = fixtureConflict(plan, candidate, paintedWalls);
+    if (conflict) return { next: plan, conflict };
+    if (fixtureMountEquals(fixture, move)) fixtures.push(fixture);
+    else {
+      changed = true;
+      fixtures.push(candidate);
+    }
+  }
+  const movedLabels = labels
+    ? plan.labels?.map((label) => {
+        if (!labels.ids.has(label.id)) return label;
+        const position = labels.movePoint(label.position);
+        if (position.x === label.position.x && position.y === label.position.y)
+          return label;
+        changed = true;
+        return { ...label, position };
+      })
+    : plan.labels;
+  return {
+    next: changed
+      ? { ...plan, fixtures, ...(movedLabels ? { labels: movedLabels } : {}) }
+      : plan,
+  };
+}
+
+export function previewFixtureResize(
+  plan: Plan,
+  fixture: Fixture,
+  edit: FixtureEdit,
+): { fixture: Fixture; conflict: FixtureConflict | null } | null {
+  const { offset, length, wallId } = fixture.wallAttach;
+  const width = edit.width ?? length;
+  const depth = edit.depth ?? fixture.depth;
+  if (
+    !Number.isFinite(width) ||
+    width < MIN_FIXTURE_DIMENSION ||
+    !Number.isFinite(depth) ||
+    depth < MIN_FIXTURE_DIMENSION ||
+    (width === length && depth === fixture.depth)
+  )
+    return null;
+
+  const wall = plan.walls.find((candidate) => candidate.id === wallId);
+  if (!wall) return null;
+
+  const center = offset + length / 2;
+  const tooWide = width > getWallLength(wall);
+  const wallAttach =
+    width === length
+      ? fixture.wallAttach
+      : tooWide
+        ? { wallId, offset: center - width / 2, length: width }
+        : fitFixtureSpan(wall, width, center);
+  const candidate = { ...fixture, wallAttach, depth };
+  return {
+    fixture: candidate,
+    conflict: tooWide ? "width" : fixtureConflict(plan, candidate),
+  };
+}
+
+function previewMountedFixtures(walls: Wall[]) {
+  const { fixtures } = history.present;
+  return fixtures ? { fixtures: reconcileItemsToWalls(walls, fixtures) } : {};
 }
 
 // Throttle viewport autosave so continuous wheel/drag stays smooth while still
@@ -413,37 +599,96 @@ function translateSelectedWallsFollowing(
 }
 
 function translatePlanSelection(
-  {
-    plan,
-    selectedWalls,
-    selectedLabels,
-  }: Pick<AppState, "plan" | "selectedWalls" | "selectedLabels">,
+  state: Pick<
+    AppState,
+    "plan" | "selectedWalls" | "selectedLabels" | "selectedFixtures"
+  >,
   dx: number,
   dy: number,
-): Plan {
-  if ((dx === 0 && dy === 0) || (!selectedWalls.size && !selectedLabels.size)) {
-    return plan;
+): { next: Plan; conflict?: FixtureMoveConflict } {
+  const { plan, selectedWalls, selectedLabels, selectedFixtures } = state;
+  if (
+    (dx === 0 && dy === 0) ||
+    (!selectedWalls.size && !selectedLabels.size && !selectedFixtures.size)
+  ) {
+    return { next: plan };
   }
+  // Opening offsets stay fixed when nudging, so selected openings do not
+  // affect which sinks and labels move as a group.
+  const fixtureGroup =
+    !selectedWalls.size &&
+    selectedFixtures.size > 0 &&
+    (selectedFixtures.size > 1 || selectedLabels.size > 0)
+      ? plan.fixtures?.filter(({ id }) => selectedFixtures.has(id))
+      : undefined;
+  if (fixtureGroup?.length) {
+    const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
+    const { moved, delta, conflict } = slideFixtureGroup(
+      fixtureGroup,
+      { x: dx, y: dy },
+      walls,
+    );
+    return conflict
+      ? { next: plan, conflict }
+      : moveFixtureSelectionInPlan(
+          plan,
+          moved,
+          selectedLabels.size
+            ? translateLabelSelection(selectedLabels, delta)
+            : undefined,
+        );
+  }
+  let conflict: FixtureConflict | undefined;
+  const fixtures =
+    selectedWalls.size === 0 && selectedFixtures.size
+      ? plan.fixtures?.map((fixture) => {
+          if (!selectedFixtures.has(fixture.id)) return fixture;
+          const { wallId, offset, length } = fixture.wallAttach;
+          const wall = plan.walls.find((candidate) => candidate.id === wallId);
+          if (!wall) return fixture;
+          const along = getWallDirection(wall);
+          const wallAttach = fitFixtureSpan(
+            wall,
+            length,
+            offset + length / 2 + dx * along.x + dy * along.y,
+          );
+          if (wallAttach.offset === offset) return fixture;
+          const candidate = { ...fixture, wallAttach };
+          const reason = fixtureConflict(plan, candidate);
+          if (!reason) return candidate;
+          conflict = reason;
+          return fixture;
+        })
+      : plan.fixtures;
+  const fixturesMoved = fixtures?.some(
+    (fixture, index) => fixture !== plan.fixtures?.[index],
+  );
+  if (!selectedWalls.size && !selectedLabels.size && !fixturesMoved)
+    return { next: plan, conflict };
   return {
-    ...plan,
-    walls: selectedWalls.size
-      ? translateSelectedWallsFollowing(plan.walls, selectedWalls, dx, dy)
-      : plan.walls,
-    ...(selectedLabels.size && plan.labels
-      ? {
-          labels: plan.labels.map((label) =>
-            selectedLabels.has(label.id)
-              ? {
-                  ...label,
-                  position: {
-                    x: label.position.x + dx,
-                    y: label.position.y + dy,
-                  },
-                }
-              : label,
-          ),
-        }
-      : {}),
+    conflict,
+    next: {
+      ...plan,
+      walls: selectedWalls.size
+        ? translateSelectedWallsFollowing(plan.walls, selectedWalls, dx, dy)
+        : plan.walls,
+      ...(selectedLabels.size && plan.labels
+        ? {
+            labels: plan.labels.map((label) =>
+              selectedLabels.has(label.id)
+                ? {
+                    ...label,
+                    position: {
+                      x: label.position.x + dx,
+                      y: label.position.y + dy,
+                    },
+                  }
+                : label,
+            ),
+          }
+        : {}),
+      ...(fixturesMoved ? { fixtures } : {}),
+    },
   };
 }
 
@@ -454,13 +699,14 @@ export const useApp = create<AppState>((set, get) => ({
   canvasSize: { width: 800, height: 600 },
   isPanning: false,
   setTool: (tool) => {
-    if (tool === "label") set({ ...emptySelection(), tool });
+    if (tool === "label" || tool === "sink") set({ ...emptySelection(), tool });
     else if (tool === "select" && get().tool === "select") set({ tool });
     else
       set({
         tool,
         selectedRoomPoint: null,
         selectedLabels: new Set(),
+        selectedFixtures: new Set(),
         labelEditor: null,
       });
   },
@@ -530,6 +776,87 @@ export const useApp = create<AppState>((set, get) => ({
     };
     set(commit(next, get()));
   },
+  placeFixture: (mount) => {
+    const state = get();
+    if (state.liveDragItems) return;
+    const conflict = fixtureConflict(state.plan, {
+      ...mount,
+      depth: SINK_DEPTH,
+    });
+    if (conflict) return conflict;
+    const fixture: Fixture = {
+      ...mount,
+      id: uid("fixture"),
+      type: "sink",
+      depth: SINK_DEPTH,
+    };
+    set({
+      ...commitFixtures([...(history.present.fixtures ?? []), fixture], state),
+      ...emptySelection(),
+      selectedFixtures: new Set([fixture.id]),
+      tool: "select",
+    });
+  },
+  fixtureResizePreview: null,
+  setFixtureResizePreview: (fixtureResizePreview) =>
+    set({ fixtureResizePreview }),
+  updateFixture: (id, edit) => {
+    const state = get();
+    const plan = history.present;
+    const { fixtures } = plan;
+    const fixture = fixtures?.find((item) => item.id === id);
+    if (state.liveDragItems || !fixtures || !fixture) return;
+    const preview = previewFixtureResize(plan, fixture, edit);
+    if (!preview) return;
+    if (preview.conflict) return preview.conflict;
+    set(
+      commitFixtures(
+        fixtures.map((item) => (item === fixture ? preview.fixture : item)),
+        state,
+      ),
+    );
+  },
+  duplicateFixture: (id) => {
+    const state = get();
+    const { fixtures, items, meta, walls } = history.present;
+    const fixture = fixtures?.find((item) => item.id === id);
+    if (state.liveDragItems || !fixtures || !fixture) return;
+    const { wallId } = fixture.wallAttach;
+    const wall = walls.find((candidate) => candidate.id === wallId);
+    if (!wall) return;
+    const wallAttach = findFixtureDuplicateSpan(
+      fixture,
+      wall,
+      fixtures,
+      items,
+      paintedWallPolygons(computeWallGeometry(walls)),
+      meta.gridSize,
+    );
+    if (!wallAttach) return;
+    const copy = { ...fixture, wallAttach, id: uid("fixture") };
+    set({
+      ...commitFixtures([...fixtures, copy], state),
+      ...emptySelection(),
+      selectedFixtures: new Set([copy.id]),
+    });
+  },
+  moveFixtureSelection: (moves, labels) => {
+    const state = get();
+    const plan = history.present;
+    const { next, conflict } = moveFixtureSelectionInPlan(plan, moves, labels);
+    if (next !== plan) {
+      set(
+        commit(
+          {
+            ...next,
+            meta: { ...next.meta, updatedAt: new Date().toISOString() },
+          },
+          state,
+        ),
+      );
+    }
+    return conflict;
+  },
   setView: (fn) =>
     set(({ view }) => {
       const next = fn(view);
@@ -544,7 +871,8 @@ export const useApp = create<AppState>((set, get) => ({
     ),
   fitView: (measureLabel) => {
     const { plan, canvasSize, setView } = get();
-    const minScale = plan.labels?.length ? 0 : MIN_SCALE;
+    const minScale =
+      plan.labels?.length || plan.fixtures?.length ? 0 : MIN_SCALE;
     const next = computeFitView(
       getPlanBounds(plan, measureLabel),
       canvasSize,
@@ -560,6 +888,7 @@ export const useApp = create<AppState>((set, get) => ({
       ...emptySelection(),
       selectedWalls: additive ? state.selectedWalls : new Set(),
       selectedItems: additive ? state.selectedItems : new Set(),
+      selectedFixtures: additive ? state.selectedFixtures : new Set(),
       selectedLabels: new Set(
         additive ? [...state.selectedLabels, ...ids] : ids,
       ),
@@ -650,6 +979,7 @@ export const useApp = create<AppState>((set, get) => ({
         selectedItems: additive ? s.selectedItems : new Set(),
         selectedRoomPoint: null,
         selectedLabels: additive ? s.selectedLabels : new Set(),
+        selectedFixtures: additive ? s.selectedFixtures : new Set(),
         labelEditor: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
@@ -664,11 +994,22 @@ export const useApp = create<AppState>((set, get) => ({
         selectedWalls: additive ? s.selectedWalls : new Set(),
         selectedRoomPoint: null,
         selectedLabels: additive ? s.selectedLabels : new Set(),
+        selectedFixtures: additive ? s.selectedFixtures : new Set(),
         labelEditor: null,
         selectedConnectionPoint: null,
         selectedConnectionPointEndpoints: [],
       };
     }),
+  selectFixture: (id, additive) =>
+    set((state) => ({
+      ...emptySelection(),
+      selectedWalls: additive ? state.selectedWalls : new Set(),
+      selectedItems: additive ? state.selectedItems : new Set(),
+      selectedLabels: additive ? state.selectedLabels : new Set(),
+      selectedFixtures: new Set(
+        additive ? [...state.selectedFixtures, id] : [id],
+      ),
+    })),
   selectConnectionPoint: (point) =>
     set((s) => ({
       ...emptySelection(),
@@ -682,10 +1023,21 @@ export const useApp = create<AppState>((set, get) => ({
     })),
   deleteSelected: () => {
     const state = get();
-    const { selectedWalls, selectedItems, selectedLabels, plan } = state;
+    const {
+      selectedWalls,
+      selectedItems,
+      selectedLabels,
+      selectedFixtures,
+      plan,
+    } = state;
     if (
-      (!selectedWalls.size && !selectedItems.size && !selectedLabels.size) ||
-      (selectedLabels.size && state.liveDragItems)
+      selectionCount(
+        selectedWalls,
+        selectedItems,
+        selectedLabels,
+        selectedFixtures,
+      ) === 0 ||
+      ((selectedLabels.size || selectedFixtures.size) && state.liveDragItems)
     )
       return;
     const next: Plan = {
@@ -696,6 +1048,13 @@ export const useApp = create<AppState>((set, get) => ({
       items: selectedItems.size
         ? plan.items.filter((i) => !selectedItems.has(i.id))
         : plan.items,
+      ...(selectedFixtures.size && plan.fixtures
+        ? {
+            fixtures: plan.fixtures.filter(
+              ({ id }) => !selectedFixtures.has(id),
+            ),
+          }
+        : {}),
       ...(selectedLabels.size && plan.labels
         ? {
             labels: plan.labels.filter(
@@ -712,8 +1071,21 @@ export const useApp = create<AppState>((set, get) => ({
   },
   nudgeSelectedWallThickness: (delta) => {
     const state = get();
-    const { selectedWalls, selectedItems, selectedLabels, plan } = state;
-    if (!isWallOnlySelection(selectedWalls, selectedItems, selectedLabels))
+    const {
+      selectedWalls,
+      selectedItems,
+      selectedLabels,
+      selectedFixtures,
+      plan,
+    } = state;
+    if (
+      !isWallOnlySelection(
+        selectedWalls,
+        selectedItems,
+        selectedLabels,
+        selectedFixtures,
+      )
+    )
       return;
     const next: Plan = {
       ...plan,
@@ -740,7 +1112,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!wall) return;
     const resize = resizeWallInPlan(
       plan.walls,
-      plan.items,
+      mountedObjects(plan),
       wall,
       length,
       () => uid("wall"),
@@ -750,7 +1122,7 @@ export const useApp = create<AppState>((set, get) => ({
     const next: Plan = {
       ...plan,
       walls: resize.walls,
-      items: resize.items,
+      ...separateMountedObjects(resize.items, plan),
       meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     // A nearby wall can split at an exact touch, but snapping to its
@@ -858,6 +1230,10 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       selectedConnectionPoint: null,
       selectedLabels: new Set(),
+      selectedFixtures: prunedIds(
+        get().selectedFixtures,
+        history.present.fixtures ?? [],
+      ),
       labelEditor: null,
       selectedConnectionPointEndpoints: [],
       liveDragItems: null,
@@ -877,6 +1253,10 @@ export const useApp = create<AppState>((set, get) => ({
       ),
       selectedConnectionPoint: null,
       selectedLabels: new Set(),
+      selectedFixtures: prunedIds(
+        get().selectedFixtures,
+        history.present.fixtures ?? [],
+      ),
       labelEditor: null,
       selectedConnectionPointEndpoints: [],
       liveDragItems: null,
@@ -900,6 +1280,7 @@ export const useApp = create<AppState>((set, get) => ({
       selectedItems: new Set(),
       selectedRoomPoint: null,
       selectedLabels: new Set(),
+      selectedFixtures: new Set(),
       labelEditor: null,
       marquee: null,
       // Loading a document ends any in-progress drag; drop its pre-drag snapshot
@@ -917,8 +1298,8 @@ export const useApp = create<AppState>((set, get) => ({
   translateSelection: (dx, dy) => {
     const state = get();
     if (state.liveDragItems) return;
-    const next = translatePlanSelection(state, dx, dy);
-    if (next === state.plan) return;
+    const { next, conflict } = translatePlanSelection(state, dx, dy);
+    if (next === state.plan) return conflict;
     set(
       commit(
         {
@@ -928,11 +1309,12 @@ export const useApp = create<AppState>((set, get) => ({
         state,
       ),
     );
+    return conflict;
   },
   translateSelectionLive: (dx, dy) => {
     const state = get();
     const { plan, liveDragItems } = state;
-    const next = translatePlanSelection(state, dx, dy);
+    const { next } = translatePlanSelection(state, dx, dy);
     if (next === plan) return;
     // Reconcile the pre-drag snapshot (if a gesture is in progress) against the
     // current live walls, so a mid-drag regrow restores removed items and exact
@@ -943,6 +1325,7 @@ export const useApp = create<AppState>((set, get) => ({
           ? next
           : {
               ...next,
+              ...previewMountedFixtures(next.walls),
               items: reconcileItemsToWalls(
                 next.walls,
                 liveDragItems ?? plan.items,
@@ -1000,6 +1383,7 @@ export const useApp = create<AppState>((set, get) => ({
       plan: {
         ...plan,
         walls,
+        ...previewMountedFixtures(walls),
         items: reconcileItemsToWalls(walls, liveDragItems ?? plan.items),
       },
       selectedConnectionPoint: {
@@ -1030,6 +1414,7 @@ export const useApp = create<AppState>((set, get) => ({
       plan: {
         ...plan,
         walls,
+        ...previewMountedFixtures(walls),
         items: reconcileItemsToWalls(walls, liveDragItems ?? plan.items),
       },
     });
@@ -1061,9 +1446,16 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
   commitPlan: () => {
+    const { plan } = get();
+    const committed = history.present;
     const next: Plan = {
-      ...get().plan,
-      meta: { ...get().plan.meta, updatedAt: new Date().toISOString() },
+      ...plan,
+      // Rebase the original basin attachments when dropping a wall drag. A
+      // live clamp must not hide the span from the split or merge that follows.
+      ...(plan.walls !== committed.walls && committed.fixtures
+        ? { fixtures: committed.fixtures }
+        : {}),
+      meta: { ...plan.meta, updatedAt: new Date().toISOString() },
     };
     // The gesture is over: the reconciled live items are now committed, so drop
     // the pre-drag snapshot before the next gesture captures a fresh one.

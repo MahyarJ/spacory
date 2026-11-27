@@ -5,6 +5,7 @@
   --sp-border: #2b2f3a;
   --sp-text: #cbd5e1;
   --sp-accent: #7aa2f7;
+  --sp-preview-blocked: #f87171;
   --sp-text-selection-bg: color-mix(in srgb, var(--sp-accent) 38%, transparent);
   --sp-wall: #cbd5e1;
   --sp-radius: 12px;
@@ -82,6 +83,7 @@ body,
   --sp-border: #e5e7eb;
   --sp-text: #0f172a;
   --sp-accent: #2563eb;
+  --sp-preview-blocked: #b91c1c;
   --sp-wall: #0f172a;
 }
 
@@ -93,6 +95,7 @@ body,
     --sp-border: #e5e7eb;
     --sp-text: #0f172a;
     --sp-accent: #2563eb;
+    --sp-preview-blocked: #b91c1c;
     --sp-wall: #0f172a;
   }
 }

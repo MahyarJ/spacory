@@ -84,6 +84,36 @@ describe("buildExportSvg", () => {
     expect(markup).toContain("<circle");
   });
 
+  it("draws and frames a wall-backed basin beyond the angled wall footprint", () => {
+    const { markup, width, height } = buildExportSvg({
+      ...planOf([wall(0, 0, 100, 100)]),
+      fixtures: [
+        {
+          id: "fixture",
+          type: "sink",
+          wallAttach: { wallId: "w", offset: 20, length: 60 },
+          side: 1,
+          depth: 100,
+        },
+      ],
+    });
+    expect(width).toBeCloseTo(
+      105 + 85 / Math.sqrt(2) + 0.75 + 2 * EXPORT_MARGIN,
+    );
+    expect(height).toBeCloseTo(
+      5 + 185 / Math.sqrt(2) + 0.75 + 2 * EXPORT_MARGIN,
+    );
+    const [, backX, backY] =
+      markup.match(
+        /data-fixture="sink" transform="translate\((\S+) (\S+)\) rotate\(45\)"/,
+      ) ?? [];
+    expect(Number(backX)).toBeCloseTo(45 / Math.sqrt(2));
+    expect(Number(backY)).toBeCloseTo(55 / Math.sqrt(2));
+    expect(markup).toContain('<rect x="-30" y="0" width="60" height="100"');
+    expect(markup).toMatch(/data-fixture="sink".*<rect.*<rect.*<circle.*<path/);
+    expect(markup).not.toContain("data-fixture-selection");
+  });
+
   it("frames a perimeter door's whole swing arc plus the margin", () => {
     // Door on the outermost wall swinging outward: the arc's radius equals the
     // opening's 80cm length, so it reaches y = -80 — 75cm past the wall's own

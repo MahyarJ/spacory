@@ -1,4 +1,4 @@
-import type { Item, Point, Wall } from "@app/schema";
+import type { Point, Wall, WallMountedObject } from "@app/schema";
 import { pointsEqual, type WallEndpointRef } from "./connectivity";
 import { getWallLength, MIN_WALL_LENGTH, projectPointToWall } from "./wall";
 
@@ -42,9 +42,9 @@ export interface PointWeld {
   to: Point;
 }
 
-export interface WallSplitResult {
+export interface WallSplitResult<T extends WallMountedObject> {
   walls: Wall[];
-  items: Item[];
+  items: T[];
   /**
    * Every coordinate the split moved, composed across passes so `from` is
    * always a coordinate as the caller knew it *before* the split. Empty when
@@ -84,9 +84,9 @@ const shareAJunction = (w: Wall, other: Wall) =>
  * to materialize specific contacts without touching the rest of the plan.
  * Returns the input arrays unchanged when nothing qualifies.
  */
-export function splitWallsAtTouchingEndpoints(
+export function splitWallsAtTouchingEndpoints<T extends WallMountedObject>(
   walls: Wall[],
-  items: Item[],
+  items: T[],
   nextWallId: () => string,
   {
     fixedPoints = [],
@@ -95,7 +95,7 @@ export function splitWallsAtTouchingEndpoints(
     fixedPoints?: Point[];
     onlyTouchesAt?: Point[];
   } = {},
-): WallSplitResult {
+): WallSplitResult<T> {
   const isFixed = (point: Point) =>
     fixedPoints.some((fixed) => pointsEqual(fixed, point));
   const findTouches = (walls: Wall[]) => {
@@ -106,7 +106,7 @@ export function splitWallsAtTouchingEndpoints(
         )
       : touches;
   };
-  let result: WallSplitResult = { walls, items, welds: [] };
+  let result: WallSplitResult<T> = { walls, items, welds: [] };
   let touches = findTouches(walls);
   for (let pass = 0; pass < MAX_PASSES && touches.length > 0; pass++) {
     const applied = applyTouches(result, touches, nextWallId, isFixed);
@@ -255,12 +255,12 @@ function detectTouches(
   );
 }
 
-function applyTouches(
-  { walls, items }: WallSplitResult,
+function applyTouches<T extends WallMountedObject>(
+  { walls, items }: WallSplitResult<T>,
   touches: Touch[],
   nextWallId: () => string,
   isFixed: (point: Point) => boolean,
-): WallSplitResult {
+): WallSplitResult<T> {
   const byHost = new Map<string, Touch[]>();
   for (const t of touches) {
     const list = byHost.get(t.hostId);
@@ -380,7 +380,7 @@ function applyTouches(
     nextWalls.push(...segments);
   }
 
-  const nextItems: Item[] = [];
+  const nextItems: T[] = [];
   for (const item of items) {
     const segments = segmentsByHost.get(item.wallAttach.wallId);
     if (!segments) {
@@ -401,7 +401,10 @@ function applyTouches(
  * dropped only if it cannot fit there at all — the same reposition-first,
  * remove-as-a-last-resort rule as `reconcileItemsToWalls`.
  */
-function rebaseItemToSegments(item: Item, segments: Wall[]): Item | null {
+function rebaseItemToSegments<T extends WallMountedObject>(
+  item: T,
+  segments: Wall[],
+): T | null {
   const { offset, length } = item.wallAttach;
   const end = offset + length;
   let best: { segment: Wall; start: number; segLength: number } | null = null;

@@ -1,4 +1,5 @@
 import type { PlanLabel } from "@app/schema";
+import type { LabelMove } from "@app/selection";
 import {
   PLAN_LABEL_FONT_FAMILY,
   PLAN_LABEL_FONT_SIZE,
@@ -37,19 +38,28 @@ export function PlanLabelsLayer({
   frames,
   selectedIds,
   editingId,
+  preview,
 }: {
   frames: { label: PlanLabel; rect: ReturnType<typeof planLabelRect> }[];
   selectedIds: ReadonlySet<string>;
   editingId?: string;
+  preview?: LabelMove & { blocked: boolean };
 }) {
   return (
     <g data-layer="plan-labels" pointerEvents="none">
       {frames.map(({ label, rect }) => {
         if (label.id === editingId) return null;
         const selected = selectedIds.has(label.id);
-        const { x, y } = label.position;
+        const drag = preview?.ids.has(label.id) ? preview : undefined;
+        const { x, y } = drag?.movePoint(label.position) ?? label.position;
         return (
-          <g key={label.id} transform={`translate(${x} ${y})`}>
+          <g
+            key={label.id}
+            transform={`translate(${x} ${y})`}
+            data-label-preview={
+              drag ? (drag.blocked ? "blocked" : "valid") : undefined
+            }
+          >
             {selected && (
               <rect
                 x={rect.x - label.position.x}
@@ -57,7 +67,11 @@ export function PlanLabelsLayer({
                 width={rect.w}
                 height={rect.h}
                 fill="none"
-                stroke="var(--sp-accent)"
+                stroke={
+                  drag?.blocked
+                    ? "var(--sp-preview-blocked)"
+                    : "var(--sp-accent)"
+                }
                 vectorEffect="non-scaling-stroke"
               />
             )}

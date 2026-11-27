@@ -1,0 +1,288 @@
+import type { Fixture, Item, Wall } from "@app/schema";
+import { describe, expect, it } from "vitest";
+import {
+  dragFixtureMount,
+  findFixtureDuplicateSpan,
+  getFixtureBounds,
+  getFixtureConflict,
+  getFixtureGeometry,
+  hitFixture,
+  moveFixtureGroup,
+  pickFixtureMount,
+  slideFixtureGroup,
+} from "./fixtures";
+import { computeWallGeometry, paintedWallPolygons } from "./junction";
+
+const wall: Wall = {
+  id: "divider",
+  a: { x: 0, y: 0 },
+  b: { x: 100, y: 100 },
+  thickness: 10,
+};
+const sink: Fixture = {
+  id: "sink",
+  type: "sink",
+  wallAttach: { wallId: wall.id, offset: 20, length: 60 },
+  depth: 40,
+  side: 1,
+};
+
+describe("wall-backed basin geometry", () => {
+  it("derives the orientation and places the back edge on either angled face", () => {
+    const positive = getFixtureGeometry(sink, wall);
+    const negative = getFixtureGeometry({ ...sink, side: -1 }, wall);
+    expect(positive.transform).toMatch(/rotate\(45\)$/);
+    expect(negative.transform).toMatch(/rotate\(225\)$/);
+    expect(positive.back.x).toBeCloseTo(45 / Math.sqrt(2));
+    expect(positive.back.y).toBeCloseTo(55 / Math.sqrt(2));
+    expect(negative.back.x).toBeCloseTo(positive.back.y);
+    expect(negative.back.y).toBeCloseTo(positive.back.x);
+
+    const deeper = getFixtureGeometry({ ...sink, depth: 80 }, wall);
+    expect(deeper.back).toEqual(positive.back);
+    expect(deeper.center.x).toBeCloseTo(positive.center.x - 20 / Math.sqrt(2));
+    expect(deeper.center.y).toBeCloseTo(positive.center.y + 20 / Math.sqrt(2));
+  });
+
+  it("includes the full oriented footprint and tests hits on the correct side", () => {
+    const { minX, minY, maxX, maxY } = getFixtureBounds(sink, wall);
+    expect(minX).toBeCloseTo(-25 / Math.sqrt(2) - 0.75);
+    expect(maxX).toBeCloseTo(75 / Math.sqrt(2) + 0.75);
+    expect(minY).toBeCloseTo(25 / Math.sqrt(2) - 0.75);
+    expect(maxY).toBeCloseTo(125 / Math.sqrt(2) + 0.75);
+    expect(hitFixture({ x: 18, y: 53 }, sink, wall, 0)).toBe(true);
+    expect(hitFixture({ x: 50, y: 20 }, sink, wall, 0)).toBe(false);
+    expect(hitFixture({ x: 35, y: 33 }, sink, wall, 10)).toBe(false);
+    expect(hitFixture({ x: 35, y: 27 }, { ...sink, side: -1 }, wall, 10)).toBe(
+      true,
+    );
+  });
+
+  it("requires a nearby wall that can fit the full width and clamps at the end", () => {
+    expect(pickFixtureMount({ x: 50, y: 130 }, [wall], 60, 40)).toBeNull();
+    expect(pickFixtureMount({ x: 10, y: 5 }, [wall], 200, 40)).toBeNull();
+    expect(pickFixtureMount({ x: 10, y: 5 }, [wall], 60, 40)).toEqual({
+      wallAttach: { wallId: "divider", offset: 0, length: 60 },
+      side: -1,
+    });
+  });
+
+  it("expands the target at low zoom while keeping the proposed dimensions", () => {
+    const horizontal: Wall = { ...wall, b: { x: 400, y: 0 } };
+    const beyondFront = { x: 200, y: 110 };
+    expect(pickFixtureMount(beyondFront, [horizontal], 60, 60)).toBeNull();
+    const targetAtQuarterScale = 32 / 0.25;
+    expect(
+      pickFixtureMount(beyondFront, [horizontal], 60, 60, targetAtQuarterScale),
+    ).toEqual({
+      wallAttach: { wallId: wall.id, offset: 170, length: 60 },
+      side: 1,
+    });
+    expect(
+      pickFixtureMount(
+        { x: 200, y: 134 },
+        [horizontal],
+        60,
+        60,
+        targetAtQuarterScale,
+      ),
+    ).toBeNull();
+  });
+
+  it("allows flush angled wall contact and a corner that touches only the front edge", () => {
+    expect(
+      getFixtureConflict(
+        sink,
+        wall,
+        [],
+        paintedWallPolygons(computeWallGeometry([wall])),
+      ),
+    ).toBeNull();
+    const horizontal: Wall = { ...wall, b: { x: 140, y: 0 } };
+    const corner = [
+      { x: 25, y: 45 },
+      { x: 65, y: 45 },
+      { x: 45, y: 55 },
+    ];
+    expect(getFixtureConflict(sink, horizontal, [], [corner])).toBeNull();
+    expect(
+      getFixtureConflict({ ...sink, depth: 40.01 }, horizontal, [], [corner]),
+    ).toBe("wall");
+  });
+
+  it("finds a narrow duplicate span at the edge of a painted wall", () => {
+    const host: Wall = { ...wall, b: { x: 300, y: 0 } };
+    const original: Fixture = {
+      ...sink,
+      wallAttach: { ...sink.wallAttach, offset: 100 },
+    };
+    const door: Item = {
+      id: "door",
+      type: "door",
+      wallAttach: { wallId: host.id, offset: 0, length: 95 },
+      thickness: 10,
+      props: { hingeEdge: "start", swingSide: "inside" },
+    };
+    // The angled edge reaches x=239.5 at the front of the basin (y=45).
+    const obstacle = [
+      { x: 165, y: 5 },
+      { x: 219.5, y: 5 },
+      { x: 259.5, y: 85 },
+      { x: 165, y: 85 },
+    ];
+    const opposite: Fixture = {
+      ...original,
+      id: "opposite",
+      side: -1,
+      wallAttach: { ...original.wallAttach, offset: 240 },
+    };
+    const fixtures = [original, opposite];
+    expect(
+      findFixtureDuplicateSpan(
+        original,
+        host,
+        fixtures,
+        [door],
+        [obstacle],
+        20,
+      ),
+    ).toEqual({ wallId: host.id, offset: 239.5, length: 60 });
+    expect(
+      findFixtureDuplicateSpan(
+        { ...original, depth: 42 },
+        host,
+        fixtures,
+        [door],
+        [obstacle],
+        20,
+      ),
+    ).toBeNull();
+  });
+
+  it("crosses to the opposite face of the same wall without sliding the basin", () => {
+    const grab = { x: 25, y: 48 };
+    expect(dragFixtureMount({ x: 36.5, y: 36.5 }, grab, sink, [wall])).toEqual({
+      wallAttach: sink.wallAttach,
+      side: 1,
+    });
+    expect(dragFixtureMount({ x: 48, y: 25 }, grab, sink, [wall])).toEqual({
+      wallAttach: sink.wallAttach,
+      side: -1,
+    });
+    expect(dragFixtureMount({ x: 300, y: 250 }, grab, sink, [wall])).toBeNull();
+  });
+
+  it("preserves spacing when moving sinks from the same wall to a reversed destination", () => {
+    const source = { ...wall, b: { x: 400, y: 0 } };
+    const target = {
+      ...wall,
+      id: "target",
+      a: { x: 500, y: 200 },
+      b: { x: 0, y: 200 },
+    };
+    const neighbor: Fixture = {
+      ...sink,
+      id: "neighbor",
+      side: -1,
+      wallAttach: { ...sink.wallAttach, offset: 140 },
+    };
+    const mount = {
+      wallAttach: { wallId: target.id, offset: 210, length: 60 },
+      side: -1,
+    } as const;
+    const walls = new Map([source, target].map((host) => [host.id, host]));
+    const group = moveFixtureGroup([sink, neighbor], sink, mount, walls);
+    expect(group?.moved).toEqual([
+      { ...sink, ...mount },
+      {
+        ...neighbor,
+        side: 1,
+        wallAttach: { wallId: target.id, offset: 90, length: 60 },
+      },
+    ]);
+    expect(group?.movePoint({ x: 70, y: 50 })).toEqual({ x: 280, y: 250 });
+  });
+
+  it("projects movement along parallel hosts and blocks incompatible wall directions", () => {
+    const parallel: Wall = {
+      ...wall,
+      id: "parallel",
+      a: { x: 0, y: 200 },
+      b: { x: -100, y: 100 },
+    };
+    const other = {
+      ...sink,
+      id: "other",
+      wallAttach: { ...sink.wallAttach, wallId: parallel.id },
+    };
+    const selection = [sink, other];
+    const travel = { x: 20, y: 0 };
+    const translated = slideFixtureGroup(
+      selection,
+      travel,
+      new Map([
+        [wall.id, wall],
+        [parallel.id, parallel],
+      ]),
+    );
+    expect(translated.conflict).toBeUndefined();
+    expect(translated.delta.x).toBeCloseTo(10);
+    expect(translated.delta.y).toBeCloseTo(10);
+    expect(translated.moved[0].wallAttach.offset).toBeCloseTo(
+      20 + 10 * Math.sqrt(2),
+    );
+    expect(translated.moved[1].wallAttach.offset).toBeCloseTo(
+      20 - 10 * Math.sqrt(2),
+    );
+
+    const perpendicular = { ...parallel, b: { x: 100, y: 100 } };
+    expect(
+      slideFixtureGroup(
+        selection,
+        travel,
+        new Map([
+          [wall.id, wall],
+          [parallel.id, perpendicular],
+        ]),
+      ),
+    ).toEqual({
+      moved: selection,
+      delta: { x: 0, y: 0 },
+      conflict: "alignment",
+    });
+  });
+
+  it("limits off-wall travel to the common span, including a reversed host", () => {
+    const forward = { ...wall, b: { x: 180, y: 0 } };
+    const reverse: Wall = {
+      ...wall,
+      id: "reverse",
+      a: { x: 180, y: 180 },
+      b: { x: 0, y: 180 },
+    };
+    const reversed = {
+      ...sink,
+      id: "reverse-sink",
+      wallAttach: { ...sink.wallAttach, wallId: reverse.id, offset: 35 },
+    };
+    const hosts = new Map([
+      [forward.id, forward],
+      [reverse.id, reverse],
+    ]);
+    const selection = [sink, reversed];
+    const right = slideFixtureGroup(selection, { x: 500, y: 200 }, hosts, {
+      clampToWallSpans: true,
+    });
+    expect(right.delta).toEqual({ x: 35, y: 0 });
+    expect(right.moved.map(({ wallAttach }) => wallAttach.offset)).toEqual([
+      55, 0,
+    ]);
+    const left = slideFixtureGroup(selection, { x: -500, y: 200 }, hosts, {
+      clampToWallSpans: true,
+    });
+    expect(left.delta.x).toBe(-20);
+    expect(left.moved.map(({ wallAttach }) => wallAttach.offset)).toEqual([
+      0, 55,
+    ]);
+  });
+});

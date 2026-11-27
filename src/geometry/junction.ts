@@ -80,6 +80,10 @@ export interface WallGeometry {
   junctions: Point[][];
 }
 
+export function paintedWallPolygons({ walls, junctions }: WallGeometry) {
+  return [...walls.values(), ...junctions];
+}
+
 /**
  * Compute wall render geometry, mitered so adjacent walls meet exactly at
  * shared nodes — no gaps, no overlapping cover patches. A wall end that isn't

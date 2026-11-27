@@ -1000,3 +1000,42 @@ the system choice, and releasing records the drag as its own undo step.
 The schema exposes only `MeasurementSystem`; it no longer advertises individually
 selectable display units. Formatting accepts the system directly, while numeric
 editors share a `LengthUnit` type limited to cm/in.
+
+## Wall-backed basin (#120)
+
+Store the basin in `Plan.fixtures` with its wall id, the span of its back edge,
+its side relative to the wall direction, and its depth. The wall face provides
+the orientation and holds the back edge in place when the depth changes. Width
+edits keep the center of the back edge as far as the wall length allows. The
+same geometry drives the canvas, framing, and image exports. Wall splits and
+merges rebase the attachment with the wall spans used by openings, including
+flipping the stored side when a merged segment reverses direction.
+
+The placement preview and release use the same footprint and wall-face
+selection. At low zoom the pointer target expands in screen pixels while
+the drawn basin keeps its dimensions. Placement, drag, and dimensional edits
+reject positive-area overlap with the painted wall and junction polygons.
+Door openings are checked as spans on the host wall, across both faces. Edge
+contact is allowed. Width and Depth show the same blue or red footprint as
+placement while the user types. A rejected edit restores the committed
+dimension and leaves plan history untouched.
+
+Duplicate tries the usual offset on either side first. When those are blocked,
+it searches the original face from the edges of door openings, painted wall
+geometry, and existing basins on that face. Checking the edges finds clear
+spans narrower than the grid step.
+
+Selections with basins on separate walls slide along their current faces.
+Parallel faces share a slide direction and preserve the group's spacing.
+Walls at different angles keep the selection in place. When basins share a
+wall, selected labels keep their position relative to the basins as the
+group slides or moves onto another face. A conflicting footprint turns every
+preview outline red and blocks the whole drop.
+When the pointer leaves wall range, the group slides along its current faces
+within the travel available to all selected basins. The label follows that
+same constrained movement.
+
+The wall anchor applies to this basin. A future countertop sink can use a
+countertop edge for orientation. Earlier draft sinks migrate to a nearby wall
+when there is room, while plans without a suitable wall keep their remaining
+content. Autosave resets undo and redo for timelines containing draft sinks.

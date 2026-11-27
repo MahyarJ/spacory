@@ -12,13 +12,18 @@ export function lengthToCm(value: number, units: LengthUnit): number {
   return value * CM_PER_UNIT[units];
 }
 
-/** Round to tenths of an inch before splitting, carrying 12 inches into feet. */
-export function toFeetAndInches(lengthCm: number): {
+/** Round before splitting, carrying 12 inches into feet. */
+export function toFeetAndInches(
+  lengthCm: number,
+  precision = 1,
+): {
   feet: number;
   inches: number;
 } {
-  const tenths = Math.round((lengthCm / CM_PER_INCH) * 10);
-  return { feet: Math.floor(tenths / 120), inches: (tenths % 120) / 10 };
+  const scale = 10 ** precision;
+  const inches = Math.round((lengthCm / CM_PER_INCH) * scale);
+  const foot = 12 * scale;
+  return { feet: Math.floor(inches / foot), inches: (inches % foot) / scale };
 }
 
 export function feetAndInchesToCm(feet: number, inches: number): number {

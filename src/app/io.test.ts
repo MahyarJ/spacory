@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { PLAN_VERSION, PlanParseError, parsePlan, serializePlan } from "./io";
+import {
+  coercePlan,
+  PLAN_VERSION,
+  PlanParseError,
+  parsePlan,
+  serializePlan,
+} from "./io";
 import {
   createInitialPlan,
   type DoorItem,
+  type Fixture,
   type Plan,
   type WindowItem,
 } from "./schema";
@@ -36,6 +43,69 @@ const plan: Plan = {
   ],
   items: [door, win],
 };
+
+describe("stored fixtures", () => {
+  const sink: Fixture = {
+    id: "fixture-1",
+    type: "sink",
+    wallAttach: { wallId: "wall_1", offset: 110, length: 80 },
+    side: -1,
+    depth: 45,
+  };
+
+  it("round-trips a mounted basin and keeps the field absent on older plans", () => {
+    expect(
+      parsePlan(serializePlan({ ...plan, fixtures: [sink] })).fixtures,
+    ).toEqual([sink]);
+    expect(parsePlan(serializePlan(plan))).not.toHaveProperty("fixtures");
+  });
+
+  it.each([
+    [{ ...sink, id: " " }, /id/],
+    [{ ...sink, type: "toilet" }, /type/],
+    [
+      { ...sink, wallAttach: { ...sink.wallAttach, offset: Infinity } },
+      /offset/,
+    ],
+    [{ ...sink, wallAttach: { ...sink.wallAttach, length: 0 } }, /width/],
+    [{ ...sink, depth: "50" }, /depth/],
+    [{ ...sink, side: 0 }, /side/],
+  ])("rejects invalid stored fixture data %#", (invalid, message) => {
+    expect(() => coercePlan({ ...plan, fixtures: [invalid] })).toThrow(message);
+  });
+
+  it("rejects a non-array and duplicate ids", () => {
+    expect(() => coercePlan({ ...plan, fixtures: {} })).toThrow(/array/);
+    expect(() =>
+      coercePlan({ ...plan, fixtures: [sink, { ...sink }] }),
+    ).toThrow(/unique/);
+  });
+
+  it("drops a missing host and migrates draft sinks that are near a wall", () => {
+    const draft = {
+      id: sink.id,
+      type: "sink",
+      width: 80,
+      depth: 45,
+      rotation: 45,
+    };
+    const parsed = coercePlan({
+      ...plan,
+      fixtures: [
+        { ...draft, position: { x: 150, y: -15 } },
+        { ...draft, id: "far", position: { x: -150, y: -150 } },
+        {
+          ...sink,
+          id: "orphan",
+          wallAttach: { ...sink.wallAttach, wallId: "missing" },
+        },
+      ],
+    });
+    expect(parsed.fixtures).toEqual([sink]);
+    expect(parsed.walls).toEqual(plan.walls);
+    expect(parsed.items).toEqual(plan.items);
+  });
+});
 
 describe("serializePlan / parsePlan round-trip", () => {
   it("preserves walls, items and meta through a round-trip", () => {

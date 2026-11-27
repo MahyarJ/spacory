@@ -1,7 +1,11 @@
+import { pickFixtureMount } from "@geometry/fixtures";
+import { reconcileItemsToWalls } from "@geometry/itemGeometry";
 import { isPlanLabelText } from "./planLabel";
 import {
   createInitialPlan,
+  type Fixture,
   type Item,
+  MIN_FIXTURE_DIMENSION,
   type Plan,
   type PlanLabel,
   type Point,
@@ -63,6 +67,51 @@ function asLabel(v: unknown, i: number): PlanLabel {
     id: v.id,
     position: asPoint(v.position, `${where}.position`),
     text: v.text,
+  };
+}
+
+function asFixture(v: unknown, i: number, walls: Wall[]): Fixture | null {
+  const where = `fixtures[${i}]`;
+  if (!isObject(v)) throw new PlanParseError(`${where} must be an object`);
+  if (typeof v.id !== "string" || !v.id.trim()) {
+    throw new PlanParseError(`${where}.id must be a non-empty string`);
+  }
+  if (v.type !== "sink") {
+    throw new PlanParseError(`${where}.type must be "sink"`);
+  }
+  const { depth, side } = v;
+  if (!isFiniteNumber(depth) || depth < MIN_FIXTURE_DIMENSION) {
+    throw new PlanParseError(
+      `${where}.depth must be at least ${MIN_FIXTURE_DIMENSION} cm`,
+    );
+  }
+  // An earlier draft stored free-standing sinks. Reuse their position wherever
+  // a wall can host the sink, and keep the rest of the plan in either case.
+  if (
+    v.wallAttach === undefined &&
+    isFiniteNumber(v.rotation) &&
+    isFiniteNumber(v.width) &&
+    v.width >= MIN_FIXTURE_DIMENSION
+  ) {
+    const position = asPoint(v.position, `${where}.position`);
+    const mount = pickFixtureMount(position, walls, v.width, 30 + depth / 2);
+    return mount && { id: v.id, type: v.type, depth, ...mount };
+  }
+  const wallAttach = asWallAttachment(v.wallAttach, `${where}.wallAttach`);
+  if (wallAttach.offset < 0 || wallAttach.length < MIN_FIXTURE_DIMENSION) {
+    throw new PlanParseError(
+      `${where} must have a non-negative offset and a width of at least ${MIN_FIXTURE_DIMENSION} cm`,
+    );
+  }
+  if (side !== 1 && side !== -1) {
+    throw new PlanParseError(`${where}.side must be 1 or -1`);
+  }
+  return {
+    id: v.id,
+    type: v.type,
+    wallAttach,
+    side,
+    depth,
   };
 }
 
@@ -176,6 +225,20 @@ export function coercePlan(raw: unknown): Plan {
   ) {
     throw new PlanParseError("Label ids must be unique.");
   }
+  const { fixtures } = raw;
+  if (fixtures !== undefined && !Array.isArray(fixtures)) {
+    throw new PlanParseError('"fixtures" must be an array.');
+  }
+  const planFixtures = fixtures?.flatMap((fixture, index) => {
+    const parsed = asFixture(fixture, index, walls);
+    return parsed ? [parsed] : [];
+  });
+  if (
+    planFixtures &&
+    new Set(planFixtures.map(({ id }) => id)).size !== planFixtures.length
+  ) {
+    throw new PlanParseError("Fixture ids must be unique.");
+  }
 
   // Drop items whose wall no longer exists to keep the renderer safe.
   const wallIds = new Set(walls.map((w) => w.id));
@@ -208,5 +271,8 @@ export function coercePlan(raw: unknown): Plan {
       ? {}
       : { roomNames: roomNames.map(asRoomName) }),
     ...(planLabels === undefined ? {} : { labels: planLabels }),
+    ...(planFixtures === undefined
+      ? {}
+      : { fixtures: reconcileItemsToWalls(walls, planFixtures) }),
   };
 }

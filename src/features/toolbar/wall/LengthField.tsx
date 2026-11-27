@@ -13,6 +13,7 @@ import styles from "./WallOptions.module.css";
 function displayValues(
   lengthCm: number,
   system: MeasurementSystem,
+  precise: boolean,
   singleUnit?: LengthUnit,
 ) {
   if (singleUnit)
@@ -22,9 +23,12 @@ function displayValues(
       ),
       inches: "0",
     };
-  const { feet, inches } = toFeetAndInches(lengthCm);
+  const { feet, inches } = toFeetAndInches(lengthCm, precise ? 4 : 1);
   return system === "metric"
-    ? { primary: String(Math.round(lengthCm)), inches: "0" }
+    ? {
+        primary: String(precise ? lengthCm : Math.round(lengthCm)),
+        inches: "0",
+      }
     : { primary: String(feet), inches: String(inches) };
 }
 
@@ -37,8 +41,10 @@ export function LengthField({
   system,
   onCommit,
   singleUnit,
+  precise = false,
   hideLabel = false,
   renderControls,
+  renderDraft,
 }: {
   id: string;
   label: string;
@@ -47,20 +53,22 @@ export function LengthField({
   system: MeasurementSystem;
   onCommit: (cm: number) => void;
   singleUnit?: LengthUnit;
+  precise?: boolean;
   hideLabel?: boolean;
   renderControls?: (draftCm: number | null) => ReactNode;
+  renderDraft?: (draftCm: number | null) => ReactNode;
 }) {
   const [draft, setDraft] = useState(() =>
-    displayValues(lengthCm, system, singleUnit),
+    displayValues(lengthCm, system, precise, singleUnit),
   );
   const dirty = useRef(false);
   const [active, setActive] = useState(false);
   useEffect(() => {
-    setDraft(displayValues(lengthCm, system, singleUnit));
+    setDraft(displayValues(lengthCm, system, precise, singleUnit));
     dirty.current = false;
-  }, [lengthCm, system, singleUnit]);
+  }, [lengthCm, system, precise, singleUnit]);
 
-  const current = displayValues(lengthCm, system, singleUnit);
+  const current = displayValues(lengthCm, system, precise, singleUnit);
   const draftLength = () => {
     // Rounded display text is never an edit.
     if (draft.primary === current.primary && draft.inches === current.inches)
@@ -90,6 +98,7 @@ export function LengthField({
   };
   const fieldRef = useCommitOnClickAway(commit);
   const imperial = system === "imperial" && !singleUnit;
+  const draftCm = active ? draftLength() : null;
 
   return (
     <form
@@ -123,7 +132,11 @@ export function LengthField({
           event.preventDefault();
           commit();
         }
-        if (event.key === "Escape" && active && renderControls) {
+        if (
+          event.key === "Escape" &&
+          active &&
+          (renderControls || renderDraft)
+        ) {
           event.preventDefault();
           event.stopPropagation();
           finishEdit();
@@ -195,7 +208,8 @@ export function LengthField({
           <span className={styles.unit}>in</span>
         </>
       )}
-      {active && renderControls?.(draftLength())}
+      {active && renderControls?.(draftCm)}
+      {active && renderDraft?.(draftCm)}
     </form>
   );
 }

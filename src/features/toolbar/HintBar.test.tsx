@@ -49,3 +49,43 @@ it("shows thickness for wall-only selections and Delete for label selections", (
   expect(container.textContent).not.toContain("Click or tap again to edit");
   expect(screen.getByText("Delete", { selector: "kbd" })).toBeTruthy();
 });
+
+it("keeps the toolbar row in place for sink placement and selection", () => {
+  const state = useApp.getState;
+  state().loadPlan({
+    ...createInitialPlan(),
+    walls: [
+      {
+        id: "host",
+        a: { x: 0, y: 0 },
+        b: { x: 250, y: 0 },
+        thickness: 10,
+      },
+    ],
+    fixtures: [
+      {
+        id: "sink",
+        type: "sink",
+        side: 1,
+        depth: 60,
+        wallAttach: { wallId: "host", offset: 30, length: 60 },
+      },
+    ],
+  });
+  state().setTool("wall");
+  const { container } = render(<HintBar />);
+  const row = container.firstElementChild;
+  expect(row).not.toBeNull();
+
+  act(() => state().setTool("sink"));
+  expect(container.firstElementChild).toBe(row);
+  expect(row?.textContent).toContain("near a wall face to place a sink");
+
+  act(() => {
+    state().setTool("select");
+    state().selectFixture("sink");
+  });
+  expect(container.firstElementChild).toBe(row);
+  expect(screen.getByText("Arrows", { selector: "kbd" })).toBeTruthy();
+  expect(screen.getByText("Delete", { selector: "kbd" })).toBeTruthy();
+});

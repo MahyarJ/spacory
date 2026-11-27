@@ -4,6 +4,7 @@ import {
   isDoor,
   type Point,
   type Wall,
+  type WallMountedObject,
   type WindowItem,
 } from "@app/schema";
 import {
@@ -232,19 +233,21 @@ export function getDoorArcPath(geometry: DoorGeometry): string {
 
 /**
  * Reconcile every item's `wallAttach` against its wall's current `length`:
- * clamp the opening back within the wall's bounds if it still fits, or drop
- * the item if the wall has shrunk shorter than the opening itself. Items
- * whose wall is missing (already handled at the io.ts import boundary) or
- * whose opening already fits are returned unchanged. Call this once from the
- * `commit()` chokepoint so every wall-resize path is covered uniformly.
+ * clamp the span within the wall's bounds if it still fits, or drop the object
+ * if the wall has shrunk shorter than its span. Removing a wall also removes
+ * its basins. Call this from the `commit()` chokepoint so wall-resize paths
+ * share the same policy.
  */
-export function reconcileItemsToWalls(walls: Wall[], items: Item[]): Item[] {
+export function reconcileItemsToWalls<T extends WallMountedObject>(
+  walls: Wall[],
+  items: T[],
+): T[] {
   const wallsById = new Map(walls.map((w) => [w.id, w]));
-  const result: Item[] = [];
+  const result: T[] = [];
   for (const item of items) {
     const wall = wallsById.get(item.wallAttach.wallId);
     if (!wall) {
-      result.push(item);
+      if (item.type !== "sink") result.push(item);
       continue;
     }
     const wallLength = getWallLength(wall);

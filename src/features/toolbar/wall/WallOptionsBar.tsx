@@ -18,7 +18,12 @@ export function WallOptionsBar() {
   const tool = useApp((s) => s.tool);
   const hasSelection = useApp(
     (s) =>
-      selectionCount(s.selectedWalls, s.selectedItems, s.selectedLabels) > 0,
+      selectionCount(
+        s.selectedWalls,
+        s.selectedItems,
+        s.selectedLabels,
+        s.selectedFixtures,
+      ) > 0,
   );
   const isEditingLabel = useApp((s) => s.labelEditor !== null);
 
