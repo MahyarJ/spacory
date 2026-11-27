@@ -6,7 +6,7 @@ import {
   getFixtureSymbol,
 } from "@geometry/fixtures";
 
-function FixtureSymbol({
+function SinkSymbol({
   footprint,
   filling,
   preview = false,
@@ -53,7 +53,7 @@ export function SinkPreview({
   wall: Wall;
   blocked: boolean;
 }) {
-  const color = blocked ? "var(--sp-sink-blocked)" : "var(--sp-accent)";
+  const color = blocked ? "var(--sp-preview-blocked)" : "var(--sp-accent)";
   return (
     <g
       data-fixture-preview={blocked ? "blocked" : "valid"}
@@ -64,7 +64,7 @@ export function SinkPreview({
       strokeLinejoin="round"
       pointerEvents="none"
     >
-      <FixtureSymbol footprint={footprint} filling={color} preview />
+      <SinkSymbol footprint={footprint} filling={color} preview />
     </g>
   );
 }
@@ -95,7 +95,7 @@ export function FixturesLayer({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <FixtureSymbol
+            <SinkSymbol
               footprint={fixture}
               filling="var(--sp-bg)"
               selected={selectedIds.has(fixture.id)}

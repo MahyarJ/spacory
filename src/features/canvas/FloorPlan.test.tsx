@@ -1333,7 +1333,7 @@ describe("FloorPlan touch gestures", () => {
     const blockedLabel = canvas.querySelector('[data-label-preview="blocked"]');
     expect(blockedLabel?.getAttribute("transform")).toBe("translate(350 255)");
     expect(blockedLabel?.querySelector("rect")?.getAttribute("stroke")).toBe(
-      "var(--sp-sink-blocked)",
+      "var(--sp-preview-blocked)",
     );
     expect(
       screen.queryByText("The sink extends beyond the wall face."),

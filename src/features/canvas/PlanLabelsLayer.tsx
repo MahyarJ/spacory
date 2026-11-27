@@ -68,7 +68,9 @@ export function PlanLabelsLayer({
                 height={rect.h}
                 fill="none"
                 stroke={
-                  drag?.blocked ? "var(--sp-sink-blocked)" : "var(--sp-accent)"
+                  drag?.blocked
+                    ? "var(--sp-preview-blocked)"
+                    : "var(--sp-accent)"
                 }
                 vectorEffect="non-scaling-stroke"
               />
