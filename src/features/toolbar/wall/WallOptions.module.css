@@ -1,16 +1,11 @@
 .overlay {
-  position: absolute;
-  z-index: 5;
-  inset-block-start: calc(
-    var(--sp-top-controls-end, 0px) +
-    var(--sp-toolbar-gap)
-  );
-  inset-inline-end: var(--sp-toolbar-padding-x);
-  max-inline-size: min(18rem, calc(100% - 2 * var(--sp-toolbar-padding-x)));
+  position: relative;
+  max-inline-size: min(18rem, 100%);
 }
 
 .bar {
   display: flex;
+  pointer-events: auto;
 }
 
 .wallOptions,

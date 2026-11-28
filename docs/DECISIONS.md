@@ -828,13 +828,13 @@ group when the bars need more room. Import and Export keep their icons and
 labels. Undo and Redo have a separate floating bar beside the zoom controls
 at the bottom left.
 
-The contextual hint sits below the drawing tools. Wall and room controls
-align with the right edge of the project actions and follow the measured
-top controls so they clear wrapped tool rows and longer hints. The
-contextual controls and Settings use the same panel surface and put
-regular-weight labels above their controls. Only the control surfaces
-receive pointer events. Fit frames the plan in the space between the top
-and bottom controls.
+The contextual hint sits below the drawing tools. Wall and room properties
+sit directly below the project actions and follow them when the bars wrap.
+An open project menu or Settings temporarily covers that space and hides
+the properties. The contextual controls and Settings use the same panel
+surface and put regular-weight labels above their controls. Only the control
+surfaces receive pointer events. Fit frames the plan in the space between
+the top and bottom controls.
 
 Door and Window are direct tools. Fixtures uses a split button with an icon
 that activates the last chosen fixture and a separate chevron that lists the

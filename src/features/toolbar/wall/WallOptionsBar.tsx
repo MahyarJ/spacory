@@ -10,10 +10,7 @@ import { WallResizeStatus } from "./WallResizeControls";
  * for the select tool, the length/width editor plus the actions that apply to
  * the current selection.
  *
- * Rendered as an absolutely-positioned overlay inside the canvas rather than as
- * a row in the toolbar's flex column: a row there would reflow everything below
- * it, so selecting a wall used to shove the canvas downwards. As an overlay it
- * appears and disappears without moving the canvas at all.
+ * The floating toolbar places these controls below the project actions.
  */
 export function WallOptionsBar() {
   const tool = useApp((s) => s.tool);

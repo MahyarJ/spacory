@@ -102,6 +102,33 @@ describe("App shell", () => {
     expect(sink.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("focuses the room name field beneath the project actions", () => {
+    const corners = [
+      { x: 0, y: 0 },
+      { x: 400, y: 0 },
+      { x: 400, y: 300 },
+      { x: 0, y: 300 },
+    ];
+    useApp.getState().loadPlan({
+      ...createInitialPlan(),
+      walls: corners.map((a, index) => ({
+        id: `w${index}`,
+        a,
+        b: corners[(index + 1) % corners.length],
+        thickness: 10,
+      })),
+    });
+    render(<App />);
+
+    const room = screen.getByRole("button", { name: "Room, 12 m²" });
+    fireEvent.keyDown(room, { key: "Enter" });
+
+    const project = screen.getByRole("group", { name: "Project actions" });
+    const input = screen.getByRole("textbox", { name: "Room name" });
+    expect(project.parentElement?.contains(input)).toBe(true);
+    expect(document.activeElement).toBe(input);
+  });
+
   it("exposes preferences through Settings and returns focus on Escape", () => {
     render(<App />);
 

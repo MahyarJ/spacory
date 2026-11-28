@@ -54,7 +54,21 @@
   display: none;
 }
 
-.projectActions {
-  flex: none;
+.project {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-toolbar-gap);
+  max-inline-size: 100%;
   margin-inline-start: auto;
+}
+
+.project > :empty {
+  display: none;
+}
+
+/* Keep the properties in place while a File-bar popover occupies their space. */
+.project:has(.projectActions button[aria-expanded="true"])
+> :not(.projectActions) {
+  visibility: hidden;
 }

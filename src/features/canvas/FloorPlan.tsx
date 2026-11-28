@@ -120,7 +120,11 @@ type FixtureProposal = {
 
 const TAP_THRESHOLD = 5; // CSS pixels, regardless of zoom
 
-export function FloorPlan() {
+export function FloorPlan({
+  roomOptionsContainer,
+}: {
+  roomOptionsContainer?: HTMLDivElement | null;
+} = {}) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const labelDraftLayer = useRef<SVGGElement>(null);
   const addWall = useApp((s) => s.addWall);
@@ -1446,6 +1450,7 @@ export function FloorPlan() {
           key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}
           name={roomNames.get(selectedRoom)?.name ?? ""}
           inputRef={roomNameInput}
+          container={roomOptionsContainer}
         />
       )}
       {labelEditor && (

@@ -1,11 +1,12 @@
 import { FloatingBar } from "@ui/FloatingBar";
+import type { ReactNode } from "react";
 import { DrawingTools } from "./DrawingTools";
 import { EditorSettings } from "./EditorSettings";
 import { HintBar } from "./HintBar";
 import { ProjectActions } from "./ProjectActions";
 import styles from "./Toolbar.module.css";
 
-export function Toolbar() {
+export function Toolbar({ children }: { children?: ReactNode }) {
   return (
     <div className={styles.toolbar}>
       <div className={styles.editorTools}>
@@ -19,13 +20,16 @@ export function Toolbar() {
           </div>
         </div>
       </div>
-      <FloatingBar
-        aria-label="Project actions"
-        className={styles.projectActions}
-      >
-        <ProjectActions />
-        <EditorSettings />
-      </FloatingBar>
+      <div className={styles.project}>
+        <FloatingBar
+          aria-label="Project actions"
+          className={styles.projectActions}
+        >
+          <ProjectActions />
+          <EditorSettings />
+        </FloatingBar>
+        {children}
+      </div>
     </div>
   );
 }

@@ -85,19 +85,20 @@
   }
 }
 
-.textOptions {
+.standaloneTextOptions {
   position: absolute;
   z-index: 5;
-  inset-block-start: calc(
-    var(--sp-top-controls-end, 0px) +
-    var(--sp-toolbar-gap)
-  );
+  inset-block-start: var(--sp-toolbar-gap);
   inset-inline-end: var(--sp-toolbar-padding-x);
-  max-inline-size: calc(100% - 2 * var(--sp-toolbar-padding-x));
+}
+
+.textOptions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: flex-end;
+  max-inline-size: calc(100vw - 2 * var(--sp-toolbar-padding-x));
+  pointer-events: auto;
 
   label {
     display: grid;
