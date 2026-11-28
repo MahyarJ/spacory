@@ -8,10 +8,16 @@
 .fixturePicker {
   display: inline-flex;
   flex: none;
-  border: 1px solid var(--sp-border);
-  border-radius: var(--sp-toolbar-button-radius);
+  gap: 1px;
 }
 
-.fixturePicker > :last-child {
-  border-inline-start: 1px solid var(--sp-border);
+button.fixtureChevron {
+  inline-size: auto;
+  margin-inline: 0;
+  padding-inline: 5px;
+}
+
+/* Keep the menu target clear of the fixture and the next tool. */
+button.fixtureChevron::after {
+  inset-inline: 0;
 }

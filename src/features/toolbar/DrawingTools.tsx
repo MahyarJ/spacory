@@ -56,6 +56,7 @@ function FixturePicker() {
       <Menu
         label="Fixtures"
         chevronOnly
+        triggerClassName={styles.fixtureChevron}
         items={fixtures.map((fixture) => {
           const Icon = fixture.icon;
           return {

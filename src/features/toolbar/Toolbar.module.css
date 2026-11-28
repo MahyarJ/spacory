@@ -24,7 +24,8 @@
   justify-self: center;
   justify-content: center;
   flex-wrap: wrap;
-  row-gap: calc(var(--sp-touch-target) - var(--sp-toolbar-button-height));
+  /* Leave a pixel between the extended hit areas of wrapped rows. */
+  row-gap: calc(var(--sp-touch-target) - var(--sp-toolbar-button-height) + 1px);
   width: max-content;
   max-width: 100%;
 }

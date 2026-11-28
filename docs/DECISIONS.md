@@ -838,10 +838,11 @@ controls and the bottom-left zoom controls.
 
 Door and Window are direct tools. Fixtures uses a split button with an icon
 that activates the last chosen fixture and a separate chevron that lists the
-available fixtures. The picker initially shows Sink. Both parts keep a 44px
-touch target, and tools wrap as needed on phones. Import and Export stay
-visible beside Settings. The settings panel holds theme and measurement
-preferences.
+available fixtures. The picker initially shows Sink. The fixture icon keeps
+its 44px square hit area. The adjacent chevron uses its glyph width plus
+padding and keeps a 44px hit height. Tools wrap as needed on phones. Import
+and Export stay visible beside Settings. The settings panel holds theme and
+measurement preferences.
 
 Space temporarily enables drag-to-pan. Ordinary wheel events pan the canvas.
 Modified wheel events and trackpad pinch zoom about the pointer. Touchscreen
