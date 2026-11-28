@@ -825,9 +825,9 @@ to extend above and below each button.
 The full viewport belongs to the canvas. The blue Spacory mark and drawing
 tools sit together on the left, and history sits in its own floating bar
 beside the project actions on the right. When the controls need two rows,
-the drawing tools center on their own row. On narrow phones the mark gives
-its space to the top-row controls, which keep the Import and Export icons
-and labels.
+the drawing tools stay along the left edge of their own row. On narrow
+phones the mark gives its space to the top-row controls, which keep the
+Import and Export icons and labels.
 
 The contextual hint sits below the drawing tools. Wall and room controls
 align with the right edge of the project actions and follow the measured

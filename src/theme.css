@@ -19,19 +19,6 @@
   --sp-toolbar-button-height: 32px;
   --sp-toolbar-button-radius: 6px;
 
-  /* --- Responsive primitives -------------------------------------------
-     Breakpoints are named here, and the rules that vary by width are the
-     token flips in the `max-width` block below — CSS cannot interpolate a
-     custom property into a media condition, so keeping the width-dependent
-     rules in this one file is what stops the pixel literal from being
-     re-derived across CSS modules. A phone pass adds --sp-bp-phone and a
-     second block the same way.
-
-     Tablet: iPad portrait is 768 CSS px, the width the chrome has to fit.
-     This token is documentation, not a constraint: no rule can read it (a
-     custom property is invalid in a media condition), so the `max-width`
-     block below re-spells the literal and the two must be kept in sync. */
-  --sp-bp-tablet: 768px;
   /* Minimum hit area for editor controls. */
   --sp-touch-target: 44px;
   --sp-toolbar-gap: 6px;
@@ -40,19 +27,11 @@
   --sp-toolbar-areas: "wordmark tools commands";
 }
 
-/* Tablet and narrower. The literal must match --sp-bp-tablet above; it is
-   spelled out only here. */
-@media (max-width: 768px) {
-  :root {
-    --sp-toolbar-padding-x: 8px;
-  }
-}
-
 /* Give the drawing tools a dedicated row before the side panels crowd them. */
 @media (max-width: 780px) {
   :root {
+    --sp-toolbar-padding-x: 8px;
     --sp-toolbar-columns: minmax(0, 1fr) auto;
-    --sp-drawing-tools-justify: center;
     --sp-toolbar-areas: "wordmark commands" "tools tools";
   }
 }
@@ -63,7 +42,6 @@
     --sp-toolbar-columns: minmax(0, 1fr);
     --sp-toolbar-areas: "commands" "tools";
     --sp-toolbar-wordmark-display: none;
-    --sp-toolbar-commands-self: stretch;
   }
 }
 
