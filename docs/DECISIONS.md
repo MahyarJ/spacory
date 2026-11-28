@@ -814,13 +814,11 @@ shares one `parseDraft` validation, so an invalid draft is rejected identically.
 ## Responsive breakpoints and touch sizing
 
 Define width breakpoints in `src/theme.css` and expose the responsive values
-to CSS modules as custom properties. Define pointer queries beside the controls
-they affect and read the shared `--sp-touch-target` value there. The shared
-`Button` and `FloatingBar` components keep the button height, padding, and
-spacing consistent across input devices. Icon buttons stay visually square
-on touch. Their surroundings reserve space for a larger invisible hit
-area, including between wrapped rows. Menu entries size their button
-boxes to the touch target.
+to CSS modules as custom properties. Floating bars use the same layout and
+button footprint at a given width across input devices. The shared `Button`
+and segmented controls reserve room for a 44px hit area. Icon buttons keep
+their square 32px appearance, and wrapped rows leave room for the hit area
+to extend above and below each button.
 
 ## Floating editor controls
 

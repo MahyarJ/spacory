@@ -1,4 +1,5 @@
 .button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   color: var(--sp-text);
@@ -15,6 +16,7 @@
 }
 
 .filled {
+  min-width: var(--sp-touch-target);
   gap: 6px;
   padding: 6px 10px;
   background: var(--sp-grid);
@@ -29,13 +31,18 @@
 }
 
 .icon {
+  --hit-area-outset: calc(
+    (var(--sp-touch-target) - var(--sp-toolbar-button-height)) /
+    2
+  );
   width: var(--sp-toolbar-button-height);
   height: var(--sp-toolbar-button-height);
+  margin-inline: var(--hit-area-outset);
   padding: 0;
 }
 
 .text {
-  min-width: 34px;
+  min-width: var(--sp-touch-target);
   gap: var(--button-gap, 8px);
   padding-inline: var(--button-padding-inline, 8px);
 }
@@ -64,36 +71,16 @@
   cursor: default;
 }
 
-/* Reserve horizontal room for each icon's touch target. The background and
-   focus ring follow the square button, and the transparent area can be tapped. */
-@media (pointer: coarse) {
-  .button {
-    --touch-overhang: calc(
-      (var(--sp-touch-target) - var(--sp-toolbar-button-height)) /
-      2
-    );
-    position: relative;
-  }
+/* The hit area extends into the spacing reserved around the visible button. */
+.button::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 50%;
+  height: var(--sp-touch-target);
+  transform: translateY(-50%);
+}
 
-  .filled,
-  .text {
-    min-width: var(--sp-touch-target);
-  }
-
-  .button::after {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    inset-block-start: 50%;
-    height: var(--sp-touch-target);
-    transform: translateY(-50%);
-  }
-
-  .icon {
-    margin-inline: var(--touch-overhang);
-  }
-
-  .icon::after {
-    inset-inline: calc(-1 * var(--touch-overhang));
-  }
+.icon::after {
+  inset-inline: calc(-1 * var(--hit-area-outset));
 }
