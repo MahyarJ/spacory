@@ -1,61 +1,44 @@
-/* Floating overlay anchored to the top-left of the canvas. Positioned (rather
-   than a toolbar row) so it never reflows the canvas when it toggles. */
 .overlay {
-  position: absolute;
-  max-width: calc(100% - 16px);
-  top: 8px;
-  left: 8px;
-  z-index: 5;
+  position: relative;
+  max-inline-size: min(18rem, 100%);
 }
 
 .bar {
-  --wall-toolbar-padding-inline: 10px;
   display: flex;
-  align-items: center;
-  padding: 6px var(--wall-toolbar-padding-inline);
-  background: var(--sp-panel);
-  border: 1px solid var(--sp-grid);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
 }
 
-.wallOptions {
+.wallOptions,
+.optionGroup {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-inline-size: 0;
+  gap: 8px;
+}
+
+.optionGroup {
+  gap: 6px;
+}
+
+.measurements,
+.measurement {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.measurements {
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.label {
-  font-size: 12px;
-  opacity: 0.8;
-  margin-right: 2px;
-}
-
-.lengthField {
-  --length-field-gap: 6px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--length-field-gap);
-}
-
-.lengthInputFrame {
-  --length-input-width: 72px;
-  display: contents;
-}
-
-.lengthInput,
-.lengthInputFrame::before {
-  border-radius: var(--sp-toolbar-button-radius);
-  border: 1px solid var(--sp-text);
-  background: var(--sp-panel);
 }
 
 .lengthInput {
-  width: var(--length-input-width);
+  width: 72px;
   min-height: var(--sp-toolbar-button-height);
   padding: 4px 8px;
+  border: 1px solid var(--sp-text);
+  border-radius: var(--sp-toolbar-button-radius);
+  background: var(--sp-panel);
   color: var(--sp-text);
 }
 
@@ -64,24 +47,12 @@
   opacity: 0.8;
 }
 
-.moveControls {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--length-field-gap);
-  margin-inline-start: calc(
-    var(--wall-toolbar-padding-inline) -
-    var(--length-field-gap)
-  );
-  padding-inline-start: var(--wall-toolbar-padding-inline);
-  border-inline-start: 1px solid var(--sp-grid);
-}
-
 .resizeSummary {
   position: absolute;
   inset-block-start: calc(100% + 6px);
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   width: max-content;
-  max-width: calc(100vw - 16px);
+  max-width: calc(100vw - 2 * var(--sp-toolbar-padding-x));
   font-size: 12px;
   pointer-events: none;
 }
@@ -93,25 +64,19 @@
   border-radius: 6px;
 }
 
-/* On-screen Remove / Hinge / Swing. Shown for every pointer kind: these verbs
-   are otherwise keyboard-only and undiscoverable, and gating on
-   `pointer: coarse` would leave a hybrid device that mis-reports itself with no
-   way to delete at all. */
+/* On-screen Remove, Duplicate, Hinge and Swing also work with touch. */
 .actions {
   display: flex;
   gap: 6px;
 }
 
-/* 7px around an 18px icon is a 32px square (`box-sizing: border-box` is
-   global), which is what keeps the coarse-pointer overlay below inside the
-   bar — see the note there before changing either number. */
 .actionButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: var(--sp-toolbar-button-height);
   padding: 7px;
   border: none;
-  min-height: var(--sp-toolbar-button-height);
   border-radius: var(--sp-toolbar-button-radius);
   background: var(--sp-grid);
   color: var(--sp-text);
@@ -127,65 +92,12 @@
 }
 
 @media (pointer: coarse) {
-  /* A wrapped row needs room for the overhang from both adjacent rows. */
-  .wallOptions,
-  .lengthField {
-    row-gap: calc(var(--sp-touch-target) - var(--sp-toolbar-button-height));
-  }
-
-  /* The frame keeps the compact painted box. The native input receives taps
-     across its full height, so the browser handles focus and text entry. */
-  .lengthInputFrame {
-    display: block;
-    position: relative;
-    flex: none;
-    width: var(--length-input-width);
-    height: var(--sp-toolbar-button-height);
-  }
-
-  .lengthInputFrame::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  .lengthInputFrame:focus-within {
-    outline: auto;
-    border-radius: var(--sp-toolbar-button-radius);
-  }
-
-  .lengthInput {
-    position: absolute;
-    inset-inline-start: 0;
-    inset-block-start: 50%;
-    width: 100%;
-    height: var(--sp-touch-target);
-    transform: translateY(-50%);
-    background: transparent;
-    border-color: transparent;
-    border-radius: 0;
-    outline: none;
-  }
-
-  /* The 44px action overlays reach 6px past each edge of the 32px buttons.
-     The bar padding and field gap clear the overhang. The 12px gap keeps
-     neighboring action targets distinct. */
-  .actions {
-    gap: 12px;
+  .lengthInput,
+  .actionButton {
+    min-height: var(--sp-touch-target);
   }
 
   .actionButton {
-    position: relative;
-  }
-
-  .actionButton::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: var(--sp-touch-target);
-    height: var(--sp-touch-target);
-    transform: translate(-50%, -50%);
+    min-width: var(--sp-touch-target);
   }
 }

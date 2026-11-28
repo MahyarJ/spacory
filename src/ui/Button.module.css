@@ -1,13 +1,11 @@
 .button {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--sp-grid);
   color: var(--sp-text);
-  border: none;
-  padding: 6px 10px;
-  min-height: var(--sp-toolbar-button-height);
+  border: 0;
   border-radius: var(--sp-toolbar-button-radius);
+  min-height: var(--sp-toolbar-button-height);
   font-family: inherit;
   font-size: var(--sp-control-font-size);
   cursor: pointer;
@@ -17,20 +15,72 @@
   flex: none;
 }
 
-/* Enlarge touch hit areas without changing the visual button height. */
-@media (pointer: coarse) {
-  .button {
-    position: relative;
-    min-width: var(--sp-touch-target);
-  }
+.filled {
+  min-width: var(--sp-touch-target);
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--sp-grid);
+}
 
-  .button::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: var(--sp-touch-target);
-    transform: translateY(-50%);
-  }
+.icon,
+.text {
+  justify-content: center;
+  flex: none;
+  white-space: nowrap;
+  background: transparent;
+}
+
+.icon {
+  --hit-area-outset: calc(
+    (var(--sp-touch-target) - var(--sp-toolbar-button-height)) /
+    2
+  );
+  width: var(--sp-toolbar-button-height);
+  height: var(--sp-toolbar-button-height);
+  margin-inline: var(--hit-area-outset);
+  padding: 0;
+}
+
+.text {
+  min-width: var(--sp-touch-target);
+  gap: var(--button-gap, 8px);
+  padding-inline: var(--button-padding-inline, 8px);
+}
+
+.icon:hover,
+.text:hover,
+.icon[aria-expanded="true"],
+.text[aria-expanded="true"] {
+  background: var(--sp-grid);
+}
+
+.icon[aria-pressed="true"] {
+  color: var(--sp-accent);
+  background: color-mix(in srgb, var(--sp-accent) 16%, var(--sp-panel));
+}
+
+.icon:focus-visible,
+.text:focus-visible {
+  outline: 2px solid var(--sp-accent);
+  outline-offset: -2px;
+}
+
+.icon:disabled {
+  opacity: 0.45;
+  background: transparent;
+  cursor: default;
+}
+
+/* The hit area extends into the spacing reserved around the visible button. */
+.button::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 50%;
+  height: var(--sp-touch-target);
+  transform: translateY(-50%);
+}
+
+.icon::after {
+  inset-inline: calc(-1 * var(--hit-area-outset));
 }

@@ -13,7 +13,6 @@ import {
 import { useApp } from "@app/store";
 import {
   type CanvasPoint,
-  clampScale,
   computePinchView,
   type PinchAnchor,
 } from "@app/viewport";
@@ -89,6 +88,7 @@ import { RoomFocusLayer } from "./RoomFocusLayer";
 import { RoomNameOptions } from "./RoomNameOptions";
 import { RoomsLayer } from "./RoomsLayer";
 import { SelectionLayer } from "./SelectionLayer";
+import { useCanvasWheel } from "./useCanvasWheel";
 import { WallEndpointsLayer } from "./WallEndpointsLayer";
 import { WallResizePreview } from "./WallResizePreview";
 import { WallsLayer } from "./WallsLayer";
@@ -120,7 +120,11 @@ type FixtureProposal = {
 
 const TAP_THRESHOLD = 5; // CSS pixels, regardless of zoom
 
-export function FloorPlan() {
+export function FloorPlan({
+  roomOptionsContainer,
+}: {
+  roomOptionsContainer?: HTMLDivElement | null;
+} = {}) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const labelDraftLayer = useRef<SVGGElement>(null);
   const addWall = useApp((s) => s.addWall);
@@ -135,6 +139,7 @@ export function FloorPlan() {
   const setView = useApp((s) => s.setView);
   const isPanning = useApp((s) => s.isPanning);
   const setIsPanning = useApp((s) => s.setIsPanning);
+  const [spacePressed, setSpacePressed] = useState(false);
   const selectedWalls = useApp((s) => s.selectedWalls);
   const selectedItems = useApp((s) => s.selectedItems);
   const selectWall = useApp((s) => s.selectWall);
@@ -281,6 +286,8 @@ export function FloorPlan() {
   // a single pointer. Refs, not state: the pointer handlers read and write these
   // on every move and must never be a render behind.
   const pointers = useRef(new Map<number, CanvasPoint>());
+  const panPointer = useRef<number | null>(null);
+  useCanvasWheel(svgRef, pointers);
   // The live two-finger gesture: which contacts drive it, and the anchor its
   // pan/zoom is derived from.
   const pinch = useRef<{ ids: [number, number]; anchor: PinchAnchor } | null>(
@@ -360,6 +367,21 @@ export function FloorPlan() {
         return;
       }
 
+      if (e.code === "Space" || e.key === " ") {
+        // Preserve native Space activation when a control has keyboard focus.
+        if (
+          e.altKey ||
+          (target instanceof Element &&
+            target.matches(
+              'button:focus-visible, a[href]:focus-visible, [role="button"]:focus-visible',
+            ))
+        )
+          return;
+        e.preventDefault();
+        setSpacePressed(true);
+        return;
+      }
+
       // Read grid size lazily so it stays current if the plan changes.
       const grid = useApp.getState().plan.meta.gridSize;
       const base = e.shiftKey ? 10 : 1;
@@ -422,8 +444,18 @@ export function FloorPlan() {
       }
       e.preventDefault();
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space" || e.key === " ") setSpacePressed(false);
+    };
+    const onBlur = () => setSpacePressed(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp, true);
+      window.removeEventListener("blur", onBlur);
+    };
   }, []);
 
   const toWorld = (clientX: number, clientY: number) => {
@@ -479,6 +511,7 @@ export function FloorPlan() {
     setOpening(null);
     setDragging(false);
     setMarquee(null);
+    panPointer.current = null;
     setIsPanning(false);
   };
 
@@ -663,8 +696,12 @@ export function FloorPlan() {
       return;
     }
 
-    if (e.button === 2 || tool === "pan") {
+    if (
+      e.button === 2 ||
+      (e.button === 0 && (tool === "pan" || spacePressed))
+    ) {
       setFixturePointer(null);
+      panPointer.current = e.pointerId;
       setIsPanning(true);
       return;
     }
@@ -927,6 +964,13 @@ export function FloorPlan() {
     // A finger left over from a multi-touch gesture must not start drawing.
     if (multiTouch.current) return;
 
+    if (panPointer.current === e.pointerId && previous) {
+      const dx = local.x - previous.x;
+      const dy = local.y - previous.y;
+      setView((v) => ({ ...v, panX: v.panX + dx, panY: v.panY + dy }));
+      return;
+    }
+
     const world = toWorld(e.clientX, e.clientY);
     setCursor(world);
     const basinPress = fixturePress.current;
@@ -936,7 +980,6 @@ export function FloorPlan() {
     }
     if (
       tool === "sink" &&
-      !isPanning &&
       (e.pointerType !== "touch" || basinPress?.pointerId === e.pointerId)
     ) {
       setFixturePointer(local);
@@ -955,14 +998,6 @@ export function FloorPlan() {
       setMarquee({ ...marquee, x1: world.x, y1: world.y });
       return;
     }
-    if (isPanning && previous) {
-      // Pan by the contact's own delta rather than `movementX/movementY`, which
-      // browsers only populate for mouse pointers — a finger reports zero.
-      const dx = local.x - previous.x;
-      const dy = local.y - previous.y;
-      setView((v) => ({ ...v, panX: v.panX + dx, panY: v.panY + dy }));
-    }
-
     // start dragging (wall creation, or opening creation along a wall)
     if (
       e.buttons === 1 &&
@@ -1047,13 +1082,19 @@ export function FloorPlan() {
     return wasMultiTouch;
   };
 
+  const finishPan = (pointerId: number): boolean => {
+    if (panPointer.current !== pointerId) return false;
+    panPointer.current = null;
+    setIsPanning(false);
+    return true;
+  };
+
   const onPointerUp: React.PointerEventHandler<SVGSVGElement> = (e) => {
     if (!svgRef.current) return;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    if (releasePointer(e.pointerId)) return;
-    if (isPanning) setIsPanning(false);
+    if (releasePointer(e.pointerId) || finishPan(e.pointerId)) return;
     const basinPress = fixturePress.current;
     if (basinPress?.pointerId === e.pointerId) {
       const world = toWorld(e.clientX, e.clientY);
@@ -1233,25 +1274,8 @@ export function FloorPlan() {
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
-    if (releasePointer(e.pointerId)) return;
+    if (releasePointer(e.pointerId) || finishPan(e.pointerId)) return;
     abortGesture();
-  };
-
-  const onWheel: React.WheelEventHandler<SVGSVGElement> = (e) => {
-    const delta = -e.deltaY;
-    const factor = Math.exp(delta * 0.001);
-    const worldBefore = toWorld(e.clientX, e.clientY);
-    setView((v) => {
-      const newScale = clampScale(v.scale * factor, v.minScale);
-      const rect = svgRef.current!.getBoundingClientRect();
-      const sx = e.clientX - rect.left;
-      const sy = e.clientY - rect.top;
-      const worldAfterX = (sx - v.panX) / newScale;
-      const worldAfterY = (sy - v.panY) / newScale;
-      const dx = (worldAfterX - worldBefore.x) * newScale;
-      const dy = (worldAfterY - worldBefore.y) * newScale;
-      return { ...v, scale: newScale, panX: v.panX + dx, panY: v.panY + dy };
-    });
   };
 
   const viewTransform = `translate(${view.panX} ${view.panY}) scale(${view.scale})`;
@@ -1346,6 +1370,8 @@ export function FloorPlan() {
             (selectionDrag.current || fixturePress.current?.drag)
               ? styles.moving
               : styles.select),
+          (spacePressed || tool === "pan") && styles.pan,
+          isPanning && styles.moving,
         )}
         ref={svgRef}
         onContextMenu={(e) => e.preventDefault()}
@@ -1356,7 +1382,9 @@ export function FloorPlan() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        onWheel={onWheel}
+        onLostPointerCapture={(e) => {
+          if (pointers.current.has(e.pointerId)) onPointerCancel(e);
+        }}
       >
         <title>Floor plan canvas</title>
         <g transform={viewTransform}>
@@ -1422,6 +1450,7 @@ export function FloorPlan() {
           key={`${selectedRoom.labelPoint.x},${selectedRoom.labelPoint.y}`}
           name={roomNames.get(selectedRoom)?.name ?? ""}
           inputRef={roomNameInput}
+          container={roomOptionsContainer}
         />
       )}
       {labelEditor && (
@@ -1434,10 +1463,6 @@ export function FloorPlan() {
           previewLayer={labelDraftLayer.current}
         />
       )}
-      <div className={styles.badge}>
-        Tool: {tool} • Scale: {view.scale.toFixed(2)} • Pan: (
-        {view.panX.toFixed(0)}, {view.panY.toFixed(0)})
-      </div>
     </>
   );
 }

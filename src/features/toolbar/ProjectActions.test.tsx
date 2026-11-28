@@ -89,7 +89,7 @@ function readBlobText(blob: Blob): Promise<string> {
 
 /** Open the Export menu and return its entries, in rendered order. */
 function openExportMenu(): HTMLElement[] {
-  fireEvent.click(screen.getByRole("button", { name: /Export/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Export" }));
   return screen.getAllByRole("menuitem");
 }
 

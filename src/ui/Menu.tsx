@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Button } from "./Button";
 import styles from "./Menu.module.css";
 import {
   isMenuSwallowedKey,
@@ -25,14 +26,14 @@ export type MenuItem = {
   key: string;
   label: string;
   icon?: ReactNode;
+  checked?: boolean;
   onSelect: () => void;
 };
 
 type MenuProps = {
-  /** Visible label on the trigger button. */
   label: string;
-  /** Icon rendered before the trigger's label. */
-  icon?: ReactNode;
+  triggerIcon?: ReactNode;
+  chevronOnly?: boolean;
   items: MenuItem[];
   /** Class for the trigger, so callers keep their own button styling. */
   triggerClassName?: string;
@@ -50,7 +51,13 @@ type MenuProps = {
  * The popup is absolutely positioned so opening it never reflows the layout
  * underneath — the same reason `WallOptionsBar` floats over the canvas.
  */
-export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
+export function Menu({
+  label,
+  triggerIcon,
+  chevronOnly = false,
+  items,
+  triggerClassName,
+}: MenuProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -161,24 +168,26 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
 
   return (
     <div ref={containerRef} className={styles.menu}>
-      <button
+      <Button
         ref={triggerRef}
-        type="button"
+        variant={chevronOnly ? "icon" : "text"}
         className={triggerClassName}
+        aria-label={chevronOnly ? label : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
+        title={chevronOnly ? label : undefined}
         onClick={() => (open ? close(false) : openAt("first"))}
         onKeyDown={onTriggerKeyDown}
       >
-        {icon}
-        {label}
+        {triggerIcon}
+        {!chevronOnly && label}
         {/* Points at where the panel is: down to open it, up while it's open. */}
         {open ? (
           <ChevronUp size={CHEVRON_SIZE} aria-hidden="true" />
         ) : (
           <ChevronDown size={CHEVRON_SIZE} aria-hidden="true" />
         )}
-      </button>
+      </Button>
       {open && (
         <div
           className={styles.popup}
@@ -198,7 +207,9 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
                 itemRefs.current[index] = el;
               }}
               type="button"
-              role="menuitem"
+              {...(item.checked === undefined
+                ? { role: "menuitem" }
+                : { role: "menuitemradio", "aria-checked": item.checked })}
               className={styles.item}
               tabIndex={index === activeIndex ? 0 : -1}
               // Hover moves the roving index (WAI-ARIA menu pattern), so the
@@ -212,6 +223,13 @@ export function Menu({ label, icon, items, triggerClassName }: MenuProps) {
             >
               {item.icon}
               {item.label}
+              {item.checked && (
+                <Check
+                  className={styles.check}
+                  size={CHEVRON_SIZE}
+                  aria-hidden="true"
+                />
+              )}
             </button>
           ))}
         </div>

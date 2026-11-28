@@ -1,0 +1,18 @@
+.trigger {
+  --button-gap: 4px;
+  --button-padding-inline: 4px;
+}
+
+.trigger svg:first-child {
+  width: 16px;
+  height: 16px;
+}
+
+.exportError {
+  position: absolute;
+  z-index: 9;
+  inset-block-start: calc(100% + 0.5rem);
+  inset-inline-end: 0;
+  max-inline-size: 100%;
+  pointer-events: none;
+}

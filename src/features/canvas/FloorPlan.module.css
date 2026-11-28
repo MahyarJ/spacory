@@ -18,18 +18,12 @@
   touch-action: none;
 }
 
-.badge {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-}
-
 .select {
   cursor: default;
+}
+
+.pan {
+  cursor: grab;
 }
 
 .moving {
@@ -91,26 +85,24 @@
   }
 }
 
-.textOptions {
+.standaloneTextOptions {
   position: absolute;
-  inset: 8px auto auto 8px;
-  max-width: calc(100% - 16px);
   z-index: 5;
+  inset-block-start: var(--sp-toolbar-gap);
+  inset-inline-end: var(--sp-toolbar-padding-x);
+}
+
+.textOptions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  align-items: center;
-  padding: 6px 10px;
-  background: var(--sp-panel);
-  border: 1px solid var(--sp-grid);
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  font-size: var(--sp-control-font-size);
+  align-items: flex-end;
+  max-inline-size: calc(100vw - 2 * var(--sp-toolbar-padding-x));
+  pointer-events: auto;
 
   label {
-    display: flex;
-    gap: 8px;
-    align-items: center;
+    display: grid;
+    gap: 6px;
   }
 
   input,

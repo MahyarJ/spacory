@@ -22,6 +22,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { BottomControls } from "./BottomControls";
 import { FloorPlan } from "./FloorPlan";
 
 const wall = (
@@ -49,6 +50,11 @@ const enclosedPlan = (): Plan => {
     ],
   };
 };
+
+function openSinkMenu() {
+  fireEvent.click(screen.getByRole("button", { name: "Fixtures" }));
+  return screen.getByRole("menuitemradio", { name: "Sink" });
+}
 
 /**
  * jsdom implements neither `PointerEvent` nor pointer capture, so synthesize the
@@ -179,7 +185,12 @@ describe("FloorPlan touch gestures", () => {
 
   it("uses the toolbar to label three areas of one room and the terrace independently", () => {
     setup({ plan: enclosedPlan() });
-    render(<Toolbar />);
+    render(
+      <>
+        <Toolbar />
+        <BottomControls />
+      </>,
+    );
     const rooms = detectRooms(walls());
     expect(rooms.map((room) => room.area)).toEqual([120000]);
     const labels = () => useApp.getState().plan.labels;
@@ -512,9 +523,9 @@ describe("FloorPlan touch gestures", () => {
     expect(useApp.getState().plan.labels).toEqual(original);
   });
 
-  it("discards an endpoint drag when the toolbar redoes a plan change", () => {
+  it("discards an endpoint drag when Redo reapplies a plan change", () => {
     setup({ tool: "select", plan: cornerPlan() });
-    render(<Toolbar />);
+    render(<BottomControls />);
     const original = walls();
     const added = wall(0, 350, 400, 350, "w3");
     act(() => useApp.getState().addWall(added));
@@ -776,18 +787,20 @@ describe("FloorPlan touch gestures", () => {
       <>
         <Toolbar />
         <WallOptionsBar />
+        <BottomControls />
       </>,
     );
     const button = (name: string) => screen.getByRole("button", { name });
     const fixture = () => useApp.getState().plan.fixtures?.[0];
     const selection = () => canvas.querySelector("[data-fixture-selection]");
 
-    const icon = button("Sink").querySelector("svg");
+    const sink = openSinkMenu();
+    const icon = sink.querySelector("svg");
     expect(icon?.getAttribute("aria-hidden")).toBe("true");
     expect(
       Array.from(icon?.children ?? [], (shape) => shape.localName),
     ).toEqual(["rect", "rect", "circle", "path"]);
-    fireEvent.click(button("Sink"));
+    fireEvent.click(sink);
     down(1, 500, 160, { pointerType: "mouse" });
     up(1, 500, 160, "mouse");
     expect(fixture()).toBeUndefined();
@@ -866,7 +879,7 @@ describe("FloorPlan touch gestures", () => {
       canvas.querySelector('[data-fixture="sink"]')?.getAttribute("transform"),
     ).toBe(backEdge);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
-    fireEvent.click(button("Fit"));
+    fireEvent.click(button("Fit plan in view"));
     const { scale, panX, panY } = view();
     const { maxX, minY, maxY } = getFixtureBounds(
       fixture()!,
@@ -1502,8 +1515,7 @@ describe("FloorPlan touch gestures", () => {
       },
     });
     render(<Toolbar />);
-    const sink = screen.getByRole("button", { name: "Sink" });
-    fireEvent.click(sink);
+    fireEvent.click(openSinkMenu());
     down(1, 285, 315);
     up(1, 285, 315);
     fireEvent.click(screen.getByRole("button", { name: "Sink" }));
@@ -1576,11 +1588,12 @@ describe("FloorPlan touch gestures", () => {
       <>
         <Toolbar />
         <WallOptionsBar />
+        <BottomControls />
       </>,
     );
     const button = (name: string) => screen.getByRole("button", { name });
     const fixtures = () => useApp.getState().plan.fixtures;
-    fireEvent.click(button("Sink"));
+    fireEvent.click(openSinkMenu());
     down(1, 200, 180);
     down(2, 300, 180);
     up(2, 300, 180);
@@ -1656,9 +1669,9 @@ describe("FloorPlan touch gestures", () => {
       ],
     };
     setup({ plan });
-    render(<Toolbar />);
+    render(<BottomControls />);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
-    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fit plan in view" }));
     const { scale, panX, panY } = view();
     const bounds = getPlanBounds(plan)!;
     expect(scale).toBeLessThan(MIN_SCALE);
@@ -1667,9 +1680,19 @@ describe("FloorPlan touch gestures", () => {
     expect(bounds.maxX * scale + panX).toBeLessThan(800);
     expect(bounds.maxY * scale + panY).toBeLessThan(600);
 
-    fireEvent.wheel(canvas, { deltaY: -250, clientX: 400, clientY: 300 });
+    fireEvent.wheel(canvas, {
+      deltaY: -250,
+      clientX: 400,
+      clientY: 300,
+      ctrlKey: true,
+    });
     expect(view().scale).toBeGreaterThan(scale);
-    fireEvent.wheel(canvas, { deltaY: 250, clientX: 400, clientY: 300 });
+    fireEvent.wheel(canvas, {
+      deltaY: 250,
+      clientX: 400,
+      clientY: 300,
+      metaKey: true,
+    });
     expect(view().scale).toBeCloseTo(scale, 8);
     expect(view().panX).toBeCloseTo(panX);
     expect(view().panY).toBeCloseTo(panY);
@@ -2054,7 +2077,56 @@ describe("FloorPlan touch gestures", () => {
     });
   });
 
-  describe("mouse behavior is unchanged", () => {
+  describe("mouse and trackpad navigation", () => {
+    it("pans with Space and preserves a pending wall endpoint", () => {
+      setup({ tool: "wall" });
+      down(1, 100, 100, { pointerType: "mouse" });
+      up(1, 100, 100, "mouse");
+
+      fireEvent.keyDown(window, { key: " ", code: "Space" });
+      down(1, 200, 200, { pointerType: "mouse" });
+      move(1, 250, 220, { pointerType: "mouse" });
+      fireEvent.keyUp(window, { key: " ", code: "Space" });
+      up(1, 250, 220, "mouse");
+
+      expect(view()).toEqual({ scale: 1, panX: 50, panY: 20 });
+      expect(useApp.getState().tool).toBe("wall");
+      expect(walls()).toHaveLength(0);
+      down(1, 310, 120, { pointerType: "mouse" });
+      up(1, 310, 120, "mouse");
+      expect(walls()[0]).toMatchObject({
+        a: { x: 100, y: 100 },
+        b: { x: 260, y: 100 },
+      });
+    });
+
+    it("uses unmodified wheel deltas to pan without changing zoom", () => {
+      setup();
+
+      expect(fireEvent.wheel(canvas, { deltaX: 35, deltaY: -20 })).toBe(false);
+      expect(view()).toEqual({ scale: 1, panX: -35, panY: 20 });
+      expect(walls()).toHaveLength(0);
+    });
+
+    it("zooms about the Safari gesture start point using the absolute scale", () => {
+      setup();
+      const gesture = (type: string, scale = 1) =>
+        fireEvent(
+          canvas,
+          Object.assign(new Event(type, { cancelable: true }), {
+            clientX: 100,
+            clientY: 200,
+            scale,
+          }),
+        );
+
+      gesture("gesturestart");
+      gesture("gesturechange", 1.2);
+      gesture("gesturechange", 1.5);
+      gesture("gestureend");
+      expect(view()).toEqual({ scale: 1.5, panX: -50, panY: -100 });
+    });
+
     it("still pans on a right-drag", () => {
       setup({ tool: "select" });
 

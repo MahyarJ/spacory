@@ -1,92 +1,35 @@
-import { useApp } from "@app/store";
-import buttons from "@ui/Button.module.css";
-import { ICON_SIZE } from "@ui/constants";
-import { createPlanLabelMeasurer } from "@ui/planLabelMeasurer";
-import { SinkIcon } from "@ui/SinkSymbol";
-
-import clsx from "clsx";
-import {
-  BrickWall,
-  DoorOpen,
-  Grid2x2,
-  Maximize,
-  MousePointer2,
-  Move,
-  Redo2,
-  Type,
-  Undo2,
-} from "lucide-react";
-import type { ComponentType } from "react";
+import { FloatingBar } from "@ui/FloatingBar";
+import type { ReactNode } from "react";
+import { DrawingTools } from "./DrawingTools";
+import { EditorSettings } from "./EditorSettings";
 import { HintBar } from "./HintBar";
-import { MeasurementSystemSwitch } from "./MeasurementSystemSwitch";
 import { ProjectActions } from "./ProjectActions";
-import { ThemeSwitch } from "./ThemeSwitch";
 import styles from "./Toolbar.module.css";
 
-type IconComponent = ComponentType<{ size?: string | number }>;
-
-export function Toolbar() {
-  const tool = useApp((s) => s.tool);
-  const setTool = useApp((s) => s.setTool);
-  const undo = useApp((s) => s.undo);
-  const redo = useApp((s) => s.redo);
-  const fitView = useApp((s) => s.fitView);
-
-  const ToolbarButton = (props: {
-    tool: Parameters<typeof setTool>[0];
-    label: string;
-    icon: IconComponent;
-  }) => {
-    const Icon = props.icon;
-    return (
-      <button
-        type="button"
-        className={clsx(buttons.button, {
-          [styles.active]: tool === props.tool,
-        })}
-        onClick={() => setTool(props.tool)}
-        aria-pressed={tool === props.tool}
-      >
-        <Icon size={ICON_SIZE} />
-        {props.label}
-      </button>
-    );
-  };
-
+export function Toolbar({ children }: { children?: ReactNode }) {
   return (
-    <>
-      <div className={styles.toolbar}>
-        <h1 className={styles.brand}>Spacory</h1>
-        <ToolbarButton tool="select" label="Select" icon={MousePointer2} />
-        <ToolbarButton tool="wall" label="Wall" icon={BrickWall} />
-        <ToolbarButton tool="window" label="Window" icon={Grid2x2} />
-        <ToolbarButton tool="door" label="Door" icon={DoorOpen} />
-        <ToolbarButton tool="sink" label="Sink" icon={SinkIcon} />
-        <ToolbarButton tool="label" label="Label" icon={Type} />
-        <ToolbarButton tool="pan" label="Pan" icon={Move} />
-        <button
-          type="button"
-          className={buttons.button}
-          onClick={() => fitView(createPlanLabelMeasurer())}
-          title="Frame the whole plan in view"
-        >
-          <Maximize size={ICON_SIZE} />
-          Fit
-        </button>
-        <div className={styles.spacer} />
-        <MeasurementSystemSwitch />
-        <ProjectActions />
-        <ThemeSwitch />
-        <button type="button" className={buttons.button} onClick={undo}>
-          <Undo2 size={ICON_SIZE} />
-          Undo
-        </button>
-        <button type="button" className={buttons.button} onClick={redo}>
-          <Redo2 size={ICON_SIZE} />
-          Redo
-        </button>
+    <div className={styles.toolbar}>
+      <div className={styles.editorTools}>
+        <h1 className={styles.wordmark} aria-label="Spacory">
+          S
+        </h1>
+        <div className={styles.drawing}>
+          <DrawingTools className={styles.tools} />
+          <div className={styles.hint}>
+            <HintBar />
+          </div>
+        </div>
       </div>
-      <HintBar />
-    </>
+      <div className={styles.project}>
+        <FloatingBar
+          aria-label="Project actions"
+          className={styles.projectActions}
+        >
+          <ProjectActions />
+          <EditorSettings />
+        </FloatingBar>
+        {children}
+      </div>
+    </div>
   );
 }

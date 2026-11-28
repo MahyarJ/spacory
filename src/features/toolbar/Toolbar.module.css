@@ -1,42 +1,74 @@
 .toolbar {
   position: relative;
   display: flex;
-  /* Wrap rather than overflow: at tablet widths the row is wider than the
-     viewport, and a non-wrapping row clips its rightmost controls (Undo /
-     Redo) off-screen with no way to reach them. */
   flex-wrap: wrap;
-  gap: var(--sp-toolbar-gap);
-  align-items: center;
-  padding: 8px var(--sp-toolbar-padding-x);
-  background: var(--sp-panel);
-  border-bottom: 1px solid var(--sp-grid);
-
-  .brand {
-    font-weight: bold;
-    font-size: 16px;
-    color: var(--sp-accent);
-    padding: 0 8px;
-  }
-
-  .active {
-    outline: 2px solid var(--sp-accent);
-  }
-
-  .spacer {
-    flex: 1;
-  }
-
-  @media (pointer: coarse) {
-    /* Leave room for the button hit areas when the toolbar wraps. */
-    row-gap: 16px;
-  }
+  align-items: flex-start;
+  gap: calc(var(--sp-toolbar-gap) + 1px) var(--sp-toolbar-gap);
 }
 
-.exportError {
-  position: absolute;
-  z-index: 9;
-  inset-block-start: calc(100% + 0.5rem);
-  inset-inline-end: var(--sp-toolbar-padding-x);
-  max-inline-size: calc(100% - 2 * var(--sp-toolbar-padding-x));
-  pointer-events: none;
+.editorTools {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-toolbar-gap);
+  max-width: 100%;
+}
+
+.wordmark {
+  flex: none;
+  margin: 0;
+  padding-inline: 12px;
+  color: var(--sp-accent);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: calc(var(--sp-toolbar-button-height) + 6px);
+  text-shadow: 0 0 6px var(--sp-bg);
+}
+
+.drawing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-toolbar-gap);
+  width: max-content;
+  min-width: 0;
+}
+
+.tools {
+  justify-content: center;
+  flex-wrap: wrap;
+  /* Leave a pixel between the extended hit areas of wrapped rows. */
+  row-gap: calc(var(--sp-touch-target) - var(--sp-toolbar-button-height) + 1px);
+  width: max-content;
+  max-width: 100%;
+}
+
+.hint {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  /* The palette determines the column width, even when the hint wraps. */
+  contain: inline-size;
+}
+
+.hint:empty {
+  display: none;
+}
+
+.project {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-toolbar-gap);
+  max-inline-size: 100%;
+  margin-inline-start: auto;
+}
+
+.project > :empty {
+  display: none;
+}
+
+/* Keep the properties in place while a File-bar popover occupies their space. */
+.project:has(.projectActions button[aria-expanded="true"])
+> :not(.projectActions) {
+  visibility: hidden;
 }

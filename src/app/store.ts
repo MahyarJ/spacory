@@ -80,6 +80,7 @@ import {
   computeFitView,
   DEFAULT_VIEW,
   FIT_PADDING,
+  type FitInsets,
   loadPersistedView,
   MIN_SCALE,
   savePersistedView,
@@ -131,7 +132,7 @@ interface AppState {
    * Frame the whole plan in the canvas with a small margin, or reset to
    * DEFAULT_VIEW when empty. Routed through `setView` so the result autosaves.
    */
-  fitView: (measureLabel?: MeasurePlanLabel) => void;
+  fitView: (measureLabel?: MeasurePlanLabel, insets?: FitInsets) => void;
   setIsPanning: (p: boolean) => void;
   currentWallThickness: number;
   wallThicknessPreset: ThicknessPreset | null;
@@ -869,7 +870,7 @@ export const useApp = create<AppState>((set, get) => ({
         ? {}
         : { canvasSize: size },
     ),
-  fitView: (measureLabel) => {
+  fitView: (measureLabel, insets) => {
     const { plan, canvasSize, setView } = get();
     const minScale =
       plan.labels?.length || plan.fixtures?.length ? 0 : MIN_SCALE;
@@ -878,6 +879,7 @@ export const useApp = create<AppState>((set, get) => ({
       canvasSize,
       FIT_PADDING,
       minScale,
+      insets,
     );
     setView(() => next);
   },

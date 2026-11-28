@@ -1,0 +1,26 @@
+.bottomControls {
+  position: absolute;
+  z-index: 5;
+  inset: auto var(--sp-toolbar-padding-x) var(--sp-toolbar-padding-x);
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--sp-toolbar-gap) + 1px) var(--sp-toolbar-gap);
+  font-size: var(--sp-control-font-size);
+  pointer-events: none;
+}
+
+.bottomControls > * {
+  flex: none;
+}
+
+.zoomLevel {
+  min-width: 5ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewControls .fit {
+  border-inline-start: 1px solid var(--sp-border);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}

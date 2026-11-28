@@ -713,9 +713,9 @@ there's one consistent set and nothing to hand-maintain.
 
 ## Menus/overlays: hand-rolled behavior in `src/ui/`, no UI library (yet)
 
-**Decision.** The toolbar's Export menu is built in-house: `src/ui/Menu.tsx` owns
+**Decision.** The toolbar's menus are built in-house: `src/ui/Menu.tsx` owns
 the WAI-ARIA menu-button behavior (`aria-haspopup`/`aria-expanded` trigger,
-`role="menu"` popup of `role="menuitem"` buttons, roving keyboard focus,
+`role="menu"` popup of action or radio menu buttons, roving keyboard focus,
 dismissal on select / `Escape` / outside click / focus leave, focus back to the
 trigger on `Escape`). No UI-component dependency was added. The keyboard
 wrapping rules live in the pure, tested `src/ui/menuNavigation.ts`.
@@ -811,76 +811,44 @@ so the later `blur` (when the field survives, e.g. clicking the same element)
 adds no second or empty undo entry. Every path — Enter, blur, click-away —
 shares one `parseDraft` validation, so an invalid draft is rejected identically.
 
-## Responsive breakpoints live as tokens in `theme.css`, touch sizing as a pointer query
+## Responsive breakpoints and touch sizing
 
-**Decision.** The named breakpoint (`--sp-bp-tablet`) and the touch-target floor
-(`--sp-touch-target`) are tokens in `src/theme.css`. Anything that varies **by
-width** is expressed as a token flip inside the single `@media (max-width: 768px)`
-block in that same file, so the pixel literal is spelled out exactly once; CSS
-modules only read `var(--sp-toolbar-gap)` / `var(--sp-toolbar-padding-x)`.
-Anything that varies **by pointer** — the 44px control floors — is a
-`@media (pointer: coarse)` block in the CSS module beside the control it sizes,
-reading the shared token for the value.
+Define width breakpoints in `src/theme.css` and expose the responsive values
+to CSS modules as custom properties. Floating bars use the same layout and
+button footprint at a given width across input devices. The shared `Button`
+and segmented controls reserve room for a 44px hit area. Icon buttons keep
+their square 32px appearance, and wrapped rows leave room for the hit area
+to extend above and below each button.
 
-**Why the split.** CSS cannot interpolate a custom property into a media
-condition (`@media (max-width: var(--sp-bp-tablet))` is invalid), so a breakpoint
-"token" only actually prevents duplication if the width-dependent rules
-themselves are centralized. Pointer queries carry no such literal, so keeping
-them next to the controls costs nothing and keeps a button's sizing readable in
-one place. A phone-width pass adds `--sp-bp-phone` and a second flip block the
-same way.
+## Floating editor controls
 
-**Why the touch floor grows the hit area, not the control.** A 44px `min-height`
-on a 28px button is a visible restyle: the toolbar gets taller, buttons that were
-wide-and-short turn square, and the theme switch's `border-radius: 999px`
-segments become circles. None of that is what the floor is *for* — the
-requirement is that a finger can hit the control, not that the control looks
-different on a touch screen. So under `pointer: coarse` each control gets an
-invisible `::after` overlay `--sp-touch-target` tall, centred on its box: the
-tap target is finger-sized while the painted control is pixel-identical to the
-desktop one. Horizontally a plain `min-width` does the job — every toolbar
-button is an icon plus a label and already exceeds the target, so it never
-binds, and a width floor (unlike an overlay) can't reach into the neighbour
-beside it. That last part is a fact about *those* buttons, not a general rule:
-an **icon-only** control is narrower than the target, so a `min-width` there
-would visibly stretch it, and the answer is the same overlay made square plus a
-gap wide enough that two neighbours' hit areas don't meet — which is what the
-selection action buttons in `WallOptions.module.css` do. The one thing the
-overlays do cost is a taller `row-gap` once the row wraps, so two rows' targets
-don't overlap. `Menu`'s entries keep a real
-`min-height` instead: they are stacked full-width rows, where overlapping hit
-areas would mean tapping one entry and triggering the next.
+The full viewport belongs to the canvas. The drawing tools sit beside the
+blue Spacory mark. Project actions align to the right and wrap below that
+group when the bars need more room. Import and Export keep their icons and
+labels. Undo and Redo have a separate floating bar beside the zoom controls
+at the bottom left.
 
-**Why the toolbar wraps rather than scrolls.** At 768px the row is wider than the
-viewport, and a non-wrapping row clipped Undo/Redo off-screen with no way to
-reach them. `flex-wrap: wrap` is invisible at desktop widths (nothing wraps) and
-needs no breakpoint at all, where a horizontal scroller would hide controls
-behind a gesture.
+The contextual hint sits below the drawing tools. Wall and room properties
+sit directly below the project actions and follow them when the bars wrap.
+An open project menu or Settings temporarily covers that space and hides
+the properties. The contextual controls and Settings use the same panel
+surface and put regular-weight labels above their controls. Only the control
+surfaces receive pointer events. Fit frames the plan in the space between
+the top and bottom controls.
 
-## The canvas pan/zoom tip is a positioned caption, and a pure function decides it
+Door and Window are direct tools. Fixtures uses a split button with an icon
+that activates the last chosen fixture and a separate chevron that lists the
+available fixtures. The picker initially shows Sink. The 32px fixture button
+sits 2px from the 16px chevron. The 44px square fixture target and the 24 by
+44px chevron target extend toward the outside edges of the pair, leaving a
+gap between the two hit areas. Tools wrap as needed on phones. Import and
+Export stay visible beside Settings. The settings panel holds theme and
+measurement preferences.
 
-**Decision.** The `Tip: Right-drag to pan, Wheel to zoom` advice moved out of the
-toolbar row into `CanvasHint` (`src/features/canvas/`), absolutely positioned at
-the canvas's bottom-right with `pointer-events: none`. *Which* text to show is
-`canvasHintForPointer` in `src/app/canvasHint.ts` — a pure function of the
-pointer kind, which `usePointerKind` (`src/ui/`) reads from `matchMedia`.
-
-**Why it moved.** It is advice about the canvas, so it reads as a caption there
-rather than as the 14th control in a row of controls — and it was the single
-widest contributor to the row's overflow at tablet widths, so relocating it fixes
-the clipping at the source instead of only below a breakpoint. It floats (rather
-than occupying layout) for the same reason `WallOptionsBar` does: toggling it
-must never reflow the canvas. `pointer-events: none` is not optional — it now
-sits over drawable canvas, and a passive hint that ate the start of a drag would
-be a worse bug than the overflow.
-
-**Why a pure helper for one string.** jsdom has no layout engine, so the layout
-half of responsive work isn't unit-testable; the pointer decision is the part
-that *can* be pinned down, and it carries a real product rule — a coarse pointer
-is shown **nothing**, not a touch equivalent, because right-drag and the wheel
-have no touch counterpart, and whether to advertise the gestures that replaced
-them (below) is a separate call. Encoded in a component that would be a comment;
-encoded in `canvasHint.ts` it is a test.
+Space temporarily enables drag-to-pan. Ordinary wheel events pan the canvas.
+Modified wheel events and trackpad pinch zoom about the pointer. Touchscreen
+pinch retains the existing two-pointer path. The zoom percentage, zoom
+buttons, and Fit provide visible viewport controls.
 
 ## Touch on the canvas: one finger drives the tool, two drive the viewport
 

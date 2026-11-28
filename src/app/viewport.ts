@@ -36,6 +36,8 @@ export function clampScale(scale: number, minScale = MIN_SCALE): number {
 export const FIT_PADDING = 0.05;
 const LABEL_DRAFT_INSET = 16;
 
+export type FitInsets = { top: number; bottom: number };
+
 /**
  * Compute the viewport that frames a content bounding box within a canvas of the
  * given pixel size: zoom so the box (plus a small margin) fits, then center it
@@ -50,6 +52,7 @@ export function computeFitView(
   viewport: { width: number; height: number },
   padding = FIT_PADDING,
   minScale = MIN_SCALE,
+  { top, bottom }: FitInsets = { top: 0, bottom: 0 },
 ): ViewState {
   if (!bounds || !(viewport.width > 0) || !(viewport.height > 0)) {
     return DEFAULT_VIEW;
@@ -57,8 +60,10 @@ export function computeFitView(
 
   const contentW = bounds.maxX - bounds.minX;
   const contentH = bounds.maxY - bounds.minY;
+  const unobstructed = viewport.height - top - bottom;
+  const height = unobstructed > 0 ? unobstructed : viewport.height;
   const usableW = viewport.width * (1 - 2 * padding);
-  const usableH = viewport.height * (1 - 2 * padding);
+  const usableH = height * (1 - 2 * padding);
 
   // A zero-width or zero-height extent (e.g. a single point) puts no constraint
   // on that axis. If both extents are zero there is nothing to scale to, so we
@@ -76,7 +81,7 @@ export function computeFitView(
   return {
     scale,
     panX: viewport.width / 2 - centerX * scale,
-    panY: viewport.height / 2 - centerY * scale,
+    panY: (unobstructed > 0 ? top : 0) + height / 2 - centerY * scale,
     ...(scale < MIN_SCALE ? { minScale: scale } : {}),
   };
 }
@@ -131,6 +136,22 @@ export function revealLabelDraft(
 export interface CanvasPoint {
   x: number;
   y: number;
+}
+
+/** Keep the world point under the zoom anchor fixed, including at the limits. */
+export function zoomView(
+  view: ViewState,
+  factor: number,
+  anchor: CanvasPoint,
+): ViewState {
+  const scale = clampScale(view.scale * factor, view.minScale);
+  const ratio = scale / view.scale;
+  return {
+    ...view,
+    scale,
+    panX: anchor.x - (anchor.x - view.panX) * ratio,
+    panY: anchor.y - (anchor.y - view.panY) * ratio,
+  };
 }
 
 /**

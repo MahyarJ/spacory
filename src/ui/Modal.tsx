@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef } from "react";
-import buttons from "./Button.module.css";
+import { Button } from "./Button";
 import { ICON_SIZE } from "./constants";
 import styles from "./Modal.module.css";
 
@@ -83,15 +83,14 @@ export function Modal({
         <h2 id={titleId} className={styles.title}>
           {title}
         </h2>
-        <button
-          type="button"
-          className={`${buttons.button} ${styles.close}`}
+        <Button
+          className={styles.close}
           aria-label={closeLabel}
           title="Close"
           onClick={close}
         >
           <X size={ICON_SIZE} aria-hidden="true" />
-        </button>
+        </Button>
       </header>
       {children}
     </dialog>

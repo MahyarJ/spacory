@@ -1,14 +1,19 @@
 import { isRoomNameTooLong, MAX_ROOM_NAME_LENGTH } from "@app/roomName";
 import { useApp } from "@app/store";
+import optionsStyles from "@ui/OptionsPanel.module.css";
+import clsx from "clsx";
 import { type RefObject, useId, useState } from "react";
+import { createPortal } from "react-dom";
 import styles from "./FloorPlan.module.css";
 
 export function RoomNameOptions({
   name,
   inputRef,
+  container,
 }: {
   name: string;
   inputRef: RefObject<HTMLInputElement>;
+  container?: HTMLDivElement | null;
 }) {
   const setSelectedRoomName = useApp((s) => s.setSelectedRoomName);
   const [draft, setDraft] = useState({ saved: name, value: name });
@@ -17,9 +22,14 @@ export function RoomNameOptions({
   const changed = draft.value !== name;
   const tooLong = changed && isRoomNameTooLong(draft.value);
 
-  return (
+  const form = (
     <form
-      className={styles.textOptions}
+      className={clsx(
+        optionsStyles.panel,
+        styles.textOptions,
+        !container && styles.standaloneTextOptions,
+      )}
+      data-canvas-top-controls
       onSubmit={(event) => {
         event.preventDefault();
         if (changed && !tooLong) setSelectedRoomName(draft.value);
@@ -59,4 +69,5 @@ export function RoomNameOptions({
       )}
     </form>
   );
+  return container ? createPortal(form, container) : form;
 }

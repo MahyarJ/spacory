@@ -1,6 +1,7 @@
 import { useApp } from "@app/store";
 import { THICKNESS_PRESETS } from "@app/thickness";
 import clsx from "clsx";
+import { useId } from "react";
 import segments from "../ThemeSwitch.module.css";
 import { LengthField } from "./LengthField";
 import styles from "./WallOptions.module.css";
@@ -13,13 +14,14 @@ export function ThicknessOptions() {
   const setPreset = useApp((s) => s.setWallThicknessPreset);
   const presets = THICKNESS_PRESETS[system];
   const custom = selectedPreset === null;
+  const labelId = useId();
 
   return (
-    <>
-      <span className={styles.label} title="Overall wall thickness">
+    <div className={styles.optionGroup}>
+      <span id={labelId} title="Overall wall thickness">
         Thickness
       </span>
-      <div className={segments.group}>
+      <fieldset className={segments.group} aria-labelledby={labelId}>
         {presets.map(({ id, label }) => (
           <button
             key={label}
@@ -44,7 +46,7 @@ export function ThicknessOptions() {
         >
           Custom
         </button>
-      </div>
+      </fieldset>
       {custom && (
         <LengthField
           id="wall-thickness-input"
@@ -57,6 +59,6 @@ export function ThicknessOptions() {
           onCommit={setThickness}
         />
       )}
-    </>
+    </div>
   );
 }

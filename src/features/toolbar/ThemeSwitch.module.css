@@ -13,9 +13,11 @@
 }
 
 .segment {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: var(--sp-touch-target);
   min-height: calc(
     var(--sp-toolbar-button-height) -
     2 *
@@ -39,26 +41,16 @@
 }
 
 .segment:focus-visible {
-  position: relative;
   z-index: 1;
   outline: 2px solid var(--sp-text);
   outline-offset: 1px;
 }
 
-/* Match the toolbar's touch hit area while keeping the visible buttons compact. */
-@media (pointer: coarse) {
-  .segment {
-    position: relative;
-    min-width: var(--sp-touch-target);
-  }
-
-  .segment::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: var(--sp-touch-target);
-    transform: translateY(-50%);
-  }
+.segment::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 50%;
+  height: var(--sp-touch-target);
+  transform: translateY(-50%);
 }

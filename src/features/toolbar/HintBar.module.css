@@ -1,19 +1,19 @@
 .hintbar {
+  max-width: min(32rem, 100%);
+  padding: 4px 10px;
+  border: 1px solid var(--sp-border);
+  border-radius: 6px;
   background: var(--sp-panel);
-  border-top: 1px solid var(--sp-bg);
-  font-size: 12px;
-  line-height: 1.4;
   color: var(--sp-text);
-  opacity: 0.9;
-  padding: 4px var(--sp-toolbar-padding-x);
+  font-size: var(--sp-control-font-size);
+  line-height: 1.4;
+  text-align: center;
 
   kbd {
-    background: var(--sp-accent);
+    background: var(--sp-grid);
     border-radius: 4px;
-    color: var(--sp-panel);
     padding: 1px 4px;
     font-family: monospace;
-    font-size: 11px;
-    box-shadow: inset 0 -1px 0 var(--sp-border);
+    font-size: 0.85em;
   }
 }
