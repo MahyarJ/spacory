@@ -49,7 +49,9 @@ describe("App shell", () => {
     const history = within(screen.getByRole("group", { name: "Edit history" }));
     expect(history.getByRole("button", { name: "Undo" })).toBeTruthy();
     expect(history.getByRole("button", { name: "Redo" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Spacory" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Spacory" }).textContent).toBe(
+      "S",
+    );
   });
 
   it("shows the zoom percentage and only displays the current drawing hint", () => {

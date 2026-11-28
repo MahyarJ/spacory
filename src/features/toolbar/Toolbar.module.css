@@ -11,17 +11,27 @@
 .wordmark {
   grid-area: wordmark;
   display: var(--sp-toolbar-wordmark-display, block);
-  align-self: center;
   margin: 0;
+  padding-inline: 12px;
   color: var(--sp-accent);
-  font-size: 0.9375rem;
+  font-size: 2rem;
   font-weight: 700;
+  line-height: calc(var(--sp-toolbar-button-height) + 6px);
   text-shadow: 0 0 6px var(--sp-bg);
 }
 
-.tools {
+.drawing {
   grid-area: tools;
-  justify-self: center;
+  justify-self: var(--sp-drawing-tools-justify, start);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-toolbar-gap);
+  width: max-content;
+  max-width: 100%;
+}
+
+.tools {
   justify-content: center;
   flex-wrap: wrap;
   /* Leave a pixel between the extended hit areas of wrapped rows. */
@@ -30,10 +40,31 @@
   max-width: 100%;
 }
 
+.hint {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  /* The palette determines the column width, even when the hint wraps. */
+  contain: inline-size;
+}
+
+.hint:empty {
+  display: none;
+}
+
 .commands {
   grid-area: commands;
   display: flex;
-  gap: var(--sp-toolbar-gap);
+  flex-wrap: wrap;
+  gap: calc(var(--sp-toolbar-gap) + 1px) var(--sp-toolbar-gap);
   justify-self: var(--sp-toolbar-commands-self, end);
   justify-content: space-between;
+}
+
+.commands > * {
+  flex: none;
+}
+
+.projectActions {
+  margin-inline-start: auto;
 }

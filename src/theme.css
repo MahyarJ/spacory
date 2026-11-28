@@ -36,7 +36,7 @@
   --sp-touch-target: 44px;
   --sp-toolbar-gap: 6px;
   --sp-toolbar-padding-x: 12px;
-  --sp-toolbar-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
+  --sp-toolbar-columns: auto minmax(0, 1fr) auto;
   --sp-toolbar-areas: "wordmark tools commands";
 }
 
@@ -49,9 +49,10 @@
 }
 
 /* Give the drawing tools a dedicated row before the side panels crowd them. */
-@media (max-width: 1100px) {
+@media (max-width: 780px) {
   :root {
     --sp-toolbar-columns: minmax(0, 1fr) auto;
+    --sp-drawing-tools-justify: center;
     --sp-toolbar-areas: "wordmark commands" "tools tools";
   }
 }

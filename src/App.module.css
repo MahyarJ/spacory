@@ -11,8 +11,5 @@
   position: absolute;
   z-index: 6;
   inset: var(--sp-toolbar-padding-x) var(--sp-toolbar-padding-x) auto;
-  display: grid;
-  justify-items: center;
-  gap: var(--sp-toolbar-gap);
   pointer-events: none;
 }
