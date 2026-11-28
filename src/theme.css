@@ -22,27 +22,7 @@
   /* Minimum hit area for editor controls. */
   --sp-touch-target: 44px;
   --sp-toolbar-gap: 6px;
-  --sp-toolbar-padding-x: 12px;
-  --sp-toolbar-columns: auto minmax(0, 1fr) auto;
-  --sp-toolbar-areas: "wordmark tools project";
-}
-
-/* Give the drawing tools a dedicated row before the side panels crowd them. */
-@media (max-width: 780px) {
-  :root {
-    --sp-toolbar-padding-x: 8px;
-    --sp-toolbar-columns: minmax(0, 1fr) auto;
-    --sp-toolbar-areas: "wordmark project" "tools tools";
-  }
-}
-
-@media (max-width: 440px) {
-  :root {
-    --sp-toolbar-padding-x: 6px;
-    --sp-toolbar-columns: minmax(0, 1fr);
-    --sp-toolbar-areas: "project" "tools";
-    --sp-toolbar-wordmark-display: none;
-  }
+  --sp-toolbar-padding-x: 8px;
 }
 
 * {

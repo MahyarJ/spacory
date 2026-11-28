@@ -822,12 +822,11 @@ to extend above and below each button.
 
 ## Floating editor controls
 
-The full viewport belongs to the canvas. The blue Spacory mark and drawing
-tools sit together on the left, with project actions on the right. In the
-two-row layout, the drawing tools stay along the left edge of their own
-row. On narrow phones the mark gives its space to the project actions,
-which keep the Import and Export icons and labels. Undo and Redo have a
-separate floating bar beside the zoom controls at the bottom left.
+The full viewport belongs to the canvas. The drawing tools sit beside the
+blue Spacory mark. Project actions align to the right and wrap below that
+group when the bars need more room. Import and Export keep their icons and
+labels. Undo and Redo have a separate floating bar beside the zoom controls
+at the bottom left.
 
 The contextual hint sits below the drawing tools. Wall and room controls
 align with the right edge of the project actions and follow the measured

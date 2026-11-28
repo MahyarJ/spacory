@@ -1,16 +1,20 @@
 .toolbar {
   position: relative;
-  display: grid;
-  width: 100%;
-  grid-template-columns: var(--sp-toolbar-columns);
-  grid-template-areas: var(--sp-toolbar-areas);
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: calc(var(--sp-toolbar-gap) + 1px) var(--sp-toolbar-gap);
+}
+
+.editorTools {
+  display: flex;
+  align-items: flex-start;
   gap: var(--sp-toolbar-gap);
+  max-width: 100%;
 }
 
 .wordmark {
-  grid-area: wordmark;
-  display: var(--sp-toolbar-wordmark-display, block);
+  flex: none;
   margin: 0;
   padding-inline: 12px;
   color: var(--sp-accent);
@@ -21,14 +25,12 @@
 }
 
 .drawing {
-  grid-area: tools;
-  justify-self: start;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--sp-toolbar-gap);
   width: max-content;
-  max-width: 100%;
+  min-width: 0;
 }
 
 .tools {
@@ -41,8 +43,8 @@
 }
 
 .hint {
-  display: grid;
-  justify-items: center;
+  display: flex;
+  justify-content: center;
   width: 100%;
   /* The palette determines the column width, even when the hint wraps. */
   contain: inline-size;
@@ -53,6 +55,6 @@
 }
 
 .projectActions {
-  grid-area: project;
-  justify-self: end;
+  flex: none;
+  margin-inline-start: auto;
 }

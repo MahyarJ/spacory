@@ -8,13 +8,15 @@ import styles from "./Toolbar.module.css";
 export function Toolbar() {
   return (
     <div className={styles.toolbar}>
-      <h1 className={styles.wordmark} aria-label="Spacory">
-        S
-      </h1>
-      <div className={styles.drawing}>
-        <DrawingTools className={styles.tools} />
-        <div className={styles.hint}>
-          <HintBar />
+      <div className={styles.editorTools}>
+        <h1 className={styles.wordmark} aria-label="Spacory">
+          S
+        </h1>
+        <div className={styles.drawing}>
+          <DrawingTools className={styles.tools} />
+          <div className={styles.hint}>
+            <HintBar />
+          </div>
         </div>
       </div>
       <FloatingBar
