@@ -8,16 +8,28 @@
 .fixturePicker {
   display: inline-flex;
   flex: none;
-  gap: 1px;
+  gap: 2px;
+}
+
+/* Reserve the extra hit space on the outside edges of the split button. */
+button.fixtureTool {
+  --fixture-tool-outset: calc(
+    var(--sp-touch-target) -
+    var(--sp-toolbar-button-height)
+  );
+  margin-inline: var(--fixture-tool-outset) 0;
+}
+
+button.fixtureTool::after {
+  inset-inline: calc(-1 * var(--fixture-tool-outset)) 0;
 }
 
 button.fixtureChevron {
-  inline-size: auto;
-  margin-inline: 0;
-  padding-inline: 5px;
+  --fixture-chevron-outset: 8px;
+  inline-size: 16px;
+  margin-inline: 0 var(--fixture-chevron-outset);
 }
 
-/* Keep the menu target clear of the fixture and the next tool. */
 button.fixtureChevron::after {
-  inset-inline: 0;
+  inset-inline: 0 calc(-1 * var(--fixture-chevron-outset));
 }

@@ -28,12 +28,18 @@ const fixtures: [FixtureTool, ...FixtureTool[]] = [
   { tool: "sink", label: "Sink", icon: SinkIcon },
 ];
 
-function ToolButton({ tool, label, icon: Icon }: DrawingTool) {
+function ToolButton({
+  tool,
+  label,
+  icon: Icon,
+  className,
+}: DrawingTool & { className?: string }) {
   const active = useApp((s) => s.tool === tool);
   const setTool = useApp((s) => s.setTool);
 
   return (
     <IconButton
+      className={className}
       label={label}
       aria-pressed={active}
       onClick={() => setTool(tool)}
@@ -52,7 +58,7 @@ function FixturePicker() {
 
   return (
     <div className={styles.fixturePicker}>
-      <ToolButton {...current} />
+      <ToolButton {...current} className={styles.fixtureTool} />
       <Menu
         label="Fixtures"
         chevronOnly
