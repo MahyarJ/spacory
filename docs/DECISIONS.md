@@ -823,11 +823,11 @@ to extend above and below each button.
 ## Floating editor controls
 
 The full viewport belongs to the canvas. The blue Spacory mark and drawing
-tools sit together on the left, and history sits in its own floating bar
-beside the project actions on the right. When the controls need two rows,
-the drawing tools stay along the left edge of their own row. On narrow
-phones the mark gives its space to the top-row controls, which keep the
-Import and Export icons and labels.
+tools sit together on the left, with project actions on the right. In the
+two-row layout, the drawing tools stay along the left edge of their own
+row. On narrow phones the mark gives its space to the project actions,
+which keep the Import and Export icons and labels. Undo and Redo have a
+separate floating bar beside the zoom controls at the bottom left.
 
 The contextual hint sits below the drawing tools. Wall and room controls
 align with the right edge of the project actions and follow the measured
@@ -835,7 +835,7 @@ top controls so they clear wrapped tool rows and longer hints. The
 contextual controls and Settings use the same panel surface and put
 regular-weight labels above their controls. Only the control surfaces
 receive pointer events. Fit frames the plan in the space between the top
-controls and the bottom-left zoom controls.
+and bottom controls.
 
 Door and Window are direct tools. Fixtures uses a split button with an icon
 that activates the last chosen fixture and a separate chevron that lists the

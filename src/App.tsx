@@ -1,5 +1,5 @@
+import { BottomControls } from "@features/canvas/BottomControls";
 import { FloorPlan } from "@features/canvas/FloorPlan";
-import { ViewControls } from "@features/canvas/ViewControls";
 import { Toolbar } from "@features/toolbar/Toolbar";
 import { WallOptionsBar } from "@features/toolbar/wall/WallOptionsBar";
 import { useLayoutEffect, useRef } from "react";
@@ -36,7 +36,7 @@ export default function App() {
       </div>
       <FloorPlan />
       <WallOptionsBar />
-      <ViewControls />
+      <BottomControls />
     </div>
   );
 }

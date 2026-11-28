@@ -22,8 +22,8 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { BottomControls } from "./BottomControls";
 import { FloorPlan } from "./FloorPlan";
-import { ViewControls } from "./ViewControls";
 
 const wall = (
   ax: number,
@@ -185,7 +185,12 @@ describe("FloorPlan touch gestures", () => {
 
   it("uses the toolbar to label three areas of one room and the terrace independently", () => {
     setup({ plan: enclosedPlan() });
-    render(<Toolbar />);
+    render(
+      <>
+        <Toolbar />
+        <BottomControls />
+      </>,
+    );
     const rooms = detectRooms(walls());
     expect(rooms.map((room) => room.area)).toEqual([120000]);
     const labels = () => useApp.getState().plan.labels;
@@ -518,9 +523,9 @@ describe("FloorPlan touch gestures", () => {
     expect(useApp.getState().plan.labels).toEqual(original);
   });
 
-  it("discards an endpoint drag when the toolbar redoes a plan change", () => {
+  it("discards an endpoint drag when Redo reapplies a plan change", () => {
     setup({ tool: "select", plan: cornerPlan() });
-    render(<Toolbar />);
+    render(<BottomControls />);
     const original = walls();
     const added = wall(0, 350, 400, 350, "w3");
     act(() => useApp.getState().addWall(added));
@@ -782,7 +787,7 @@ describe("FloorPlan touch gestures", () => {
       <>
         <Toolbar />
         <WallOptionsBar />
-        <ViewControls />
+        <BottomControls />
       </>,
     );
     const button = (name: string) => screen.getByRole("button", { name });
@@ -1583,6 +1588,7 @@ describe("FloorPlan touch gestures", () => {
       <>
         <Toolbar />
         <WallOptionsBar />
+        <BottomControls />
       </>,
     );
     const button = (name: string) => screen.getByRole("button", { name });
@@ -1663,7 +1669,7 @@ describe("FloorPlan touch gestures", () => {
       ],
     };
     setup({ plan });
-    render(<ViewControls />);
+    render(<BottomControls />);
     act(() => useApp.getState().setCanvasSize({ width: 800, height: 600 }));
     fireEvent.click(screen.getByRole("button", { name: "Fit plan in view" }));
     const { scale, panX, panY } = view();

@@ -52,18 +52,7 @@
   display: none;
 }
 
-.commands {
-  grid-area: commands;
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(var(--sp-toolbar-gap) + 1px) var(--sp-toolbar-gap);
-  justify-content: space-between;
-}
-
-.commands > * {
-  flex: none;
-}
-
 .projectActions {
-  margin-inline-start: auto;
+  grid-area: project;
+  justify-self: end;
 }

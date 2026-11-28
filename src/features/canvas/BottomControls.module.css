@@ -1,8 +1,16 @@
-.viewControls {
+.bottomControls {
   position: absolute;
   z-index: 5;
-  inset: auto auto var(--sp-toolbar-padding-x) var(--sp-toolbar-padding-x);
+  inset: auto var(--sp-toolbar-padding-x) var(--sp-toolbar-padding-x);
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--sp-toolbar-gap) + 1px) var(--sp-toolbar-gap);
   font-size: var(--sp-control-font-size);
+  pointer-events: none;
+}
+
+.bottomControls > * {
+  flex: none;
 }
 
 .zoomLevel {
